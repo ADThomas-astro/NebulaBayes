@@ -98,7 +98,7 @@
     """
 
 
-from .src.bigelm_main import bigelm
+from .src.bigelm_main import run_bigelm
 from ._version import __version__
 
 # N.B. The docstring at the top may be accessed interactively in ipython3 with:

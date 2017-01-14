@@ -1,10 +1,10 @@
 from __future__ import print_function, division
 import numpy as np  # Core numerical library
-import astropy.io.ascii as ascii  # For reading in tables
 # For interpolating an n-dimensional regular grid:
-from scipy.interpolate import RegularGridInterpolator as siRGI
 import itertools # For finding Cartesian product and combinatorial combinations
 from . import bigelm_plotting
+from . import bigelm_grid_interpolation
+from .bigelm_classes import Bigelm_container
 
 
 """
@@ -13,239 +13,9 @@ Adam D. Thomas 2015 - 2016
 """
 
 
-#============================================================================
-class Grid_parameters(object):
-    """
-    Simple class to hold grid parameter names and lists derived from the names.
-    Only one instance of this class is used by bigelm, to hold the parameter
-    names for both the raw and interpolated model grids.
-    """
-    def __init__(self, param_names):
-        """
-        Initialise some quantities that will be useful later:
-        """
-        self.names = param_names
-        self.n_params = len(param_names)
-
-    # The attributes "display_names", "double_names" and 
-    # "double_indices" will be added to the instance of this
-    # class used in bigelm.
-
-
 
 #============================================================================
-class Bigelm_grid(object):
-    """
-        Simple class to hold n_dimensional grid arrays,
-        along with corresponding lists of values of the grid parameters.
-        Two instances of this class are created by bigelm, one 
-        for each of the raw and interpolated grids.
-    """
-    def __init__(self, val_arrs):
-        """
-            Initialise the list of arrays listing the grid
-            parameters, as well as some other useful quantities
-            including the dictionary to hold the actual grids.
-        """
-        self.val_arrs = val_arrs
-        # Calculate shape of each grid (length of each dimension):
-        self.shape = tuple( [len(val_arr) for val_arr in self.val_arrs ] )
-        # Calculate the number of gridpoints (assuming a rectangular grid):
-        self.n_gridpoints = np.product( self.shape )
-        # Initialise a dictionary to hold the n-dimensional
-        # model grid for each emission line:
-        self.grids = {}
-
-    # The attribute "spacing" will be added to the instance of
-    # this class used for the interpolated grid.
-
-
-
-#============================================================================
-class Bigelm_container(object):
-    """
-        Simple class to hold bigelm inputs and outputs.
-        An instance of this class is returned by both the initialise_grids
-        function and by the bigelm function.
-    """
-
-    # XXXXX - fix this text:
-    # Several attributes will be added to the instance of
-    # this class, including the full posterior array and
-    # arrays for marginalised posteriors, as well as...
-
-
-
-
-#============================================================================
-def initialise_grids(grid_file, grid_params, lines_list,
-                                             interpd_grid_shape=None):
-    """
-    Initialise grids and return a Bigelm_container object, which will have
-    attributes Params, Raw_grids and Interpd_grids.  The returned object 
-    contains all necessary grid information for bigelm, and may be used as an 
-    input to repeated bigelm runs to avoid recalculation of grid data in each run.
-    The Raw_grids and Interpd_grids attributes are instances of the Bigelm_grid
-    class defined in this module.  The Params attribute is an instance of the
-    Grid_parameters class defined in this module.
-    grid_file:  the filename of an ASCII csv table containing photoionisation model
-                grid data in the form of a database table.
-                Each gridpoint (point in parameter space) is a row in this table.
-                The values of the grid parameters for each row are defined in a column
-                for each parameter.
-                No assumptions are made about the order of the gridpoints (rows) in the table.
-                Spacing of grid values along an axis may be uneven, 
-                but the full grid is required to a be a regular, n-dimensional rectangular grid.
-                There is a column of fluxes for each modelled emission line, and model fluxes
-                are assumed to be normalised to Hbeta
-                Any non-finite fluxes (e.g. nans) will be set to zero.
-    grid_params: List of the unique names of the grid parameters as strings.
-                 The order is the order of the grid dimensions, i.e. the order
-                 in which arrays in bigelm will be indexed.
-    interpd_grid_shape: A tuple of integers, giving the size of each dimension
-                        of the interpolated grid.  The order of the integers
-                        corresponds to the order of parameters in grid_params.
-                        The default is 30 gridpoints along each dimension.  Note
-                        that the number of interpolated gridpoints entered in
-                        interpd_grid_shape may have a major impact on the speed
-                        of the program.
-    """
-
-    container1 = Bigelm_container()  # Initialise container object
-
-    # Load ASCII database csv table containing the model grid output:
-    D_table = ascii.read( grid_file, data_start=1,
-                          header_start=0, delimiter="," )
-    # Note that D_table unexpectedly has an empty column at the start and end...
-    # D_table is loaded as a masked table, but the nans don't seem to be masked.
-    # Let's just remove the mask, so that D_table is no longer a masked table:
-    D_table = D_table.filled(fill_value=0)
-
-    # Clean and check the model data:
-    for line in lines_list:
-        # Check that all emission lines in input are also in the model data:
-        if not line in D_table.colnames:
-            raise ValueError("Measured emission line " + line +
-                             " was not found in the model data.")
-        # Set any non-finite model fluxes to zero:
-        D_table[line].data[ np.logical_not(
-                                     np.isfinite( D_table[line].data ) ) ] = 0
-        # Check that all model flux values are non-negative:
-        if np.sum( D_table[line].data < 0 ) != 0:
-            raise ValueError("A flux value for modelled emission line " +
-                             line + " is negative.")
-
-    # Initialise a custom class instance to hold parameter names and related
-    # lists for both the raw and interpolated grids:
-    Params = Grid_parameters( grid_params )
-
-    # Number of points for each parameter in interpolated grid, in order:
-    if interpd_grid_shape == None: # If not specified by user:
-        interpd_grid_shape = tuple( [30]*Params.n_params ) # Default
-    else: # If specified by user, check that it's the right length:
-        if len(interpd_grid_shape) != Params.n_params:
-            raise ValueError("interpd_grid_shape should contain" + 
-                             "exactly one integer for each parameter" )
-
-    #--------------------------------------------------------------------------
-    # Set up raw and interpolated grids...
-
-    # Determine the list of parameter values for the raw grid:
-    # Initialise list of arrays, with each array being the list of values for a parameter:
-    param_val_arrs_raw = []
-    for p in Params.names:
-        # Ensure we have a sorted list of unique values for each parameter:
-        param_val_arrs_raw.append( np.sort( np.unique( D_table[p].data ) ) )
-    # Initialise a grid object to hold the raw grids, arrays of parameter values, etc.:
-    Raw_grids = Bigelm_grid( param_val_arrs_raw )
-
-    # Check that the input database table is the right length:
-    # (This is equivalent to checking that we have a regular grid, e.g. without missing values)
-    if Raw_grids.n_gridpoints != D_table.columns[0].size:
-        raise ValueError("The input model grid table does not" + 
-                         "have a consistent length.")
-
-    # Determine the parameter values for the interpolated grid,
-    # and then initialise a grid object for the interpolated grid:
-    # Create a list of arrays, where each array contains a list of constantly-spaced values for
-    # the corresponding parameter in the interpolated grid:
-    param_val_arrs_interp = []
-    for p_arr, n in zip(Raw_grids.val_arrs, interpd_grid_shape):
-        param_val_arrs_interp.append( np.linspace( np.min(p_arr),
-                                                   np.max(p_arr), n ) )
-    # Initialise Bigelm_grid object to hold the interpolated grids, arrays of parameter values, etc.:
-    Interpd_grids = Bigelm_grid( param_val_arrs_interp )
-    # List of interpolated grid spacing for each parameter
-    # (needed for integration and plotting later):
-    Interpd_grids.spacing = [ (val_arr[1] - val_arr[0]) for val_arr in Interpd_grids.val_arrs ]
-
-    #--------------------------------------------------------------------------
-    # Construct the raw model grids as multidimensional arrays...
-
-    print("Building flux arrays for the model grids...")
-    # Loop over ~60 emission lines, ~2600 pts per line, takes ~20 seconds.
-    # I could probably speeding it up by relying less on accessing an astropy table,
-    # and by looping over emission lines inside the loop over table rows...
-    for emission_line in lines_list:
-        # Initialise new (emission_line, flux_array) item in dictionary, as an array of nans:
-        Raw_grids.grids[emission_line] = np.zeros( Raw_grids.shape ) + np.nan
-        # Populate the model flux array for this emission line:
-        for row, flux in enumerate( D_table[emission_line].data, start=0 ):
-            # Generate a list of the value of each grid parameter, e.g. [-0.5, 1.8, 0.2, 0.5]
-            param_vals_i    = [ D_table[p][row] for p in Params.names ]
-            # Find the index of each parameter value in the
-            # corresponding list of values of that parameter:
-            param_indices_i = [ np.argmax( (arr == v) ) for arr, v in zip(Raw_grids.val_arrs,
-                                                                          param_vals_i)      ]
-            # Write the flux value for this emission line and
-            # gridpoint into the correct entry in the array:
-            Raw_grids.grids[emission_line][tuple(param_indices_i)] = flux
-
-    print( "A raw grid flux array for a single emission line is " + 
-           str(Raw_grids.grids[lines_list[0]].nbytes) + " bytes" )
-
-    #--------------------------------------------------------------------------
-    # Interpolate model grids to a higher resolution and even spacing...
-
-    print("Interpolating flux arrays for the model grids...")
-    # A list of all parameter value combinations in the
-    # interpolated grid in the form of a numpy array:
-    param_combos = np.array( list(
-            itertools.product( *param_val_arrs_interp ) ) )
-    # A list of all index combinations for the
-    # interpolated grid, corresponding to param_combos:
-    param_index_combos = np.array( list(
-            itertools.product( *[np.arange(n) for n in Interpd_grids.shape] ) ) )
-    # Generate a tuple containing an index array for each grid dimension,
-    # with each combination of indices (e.g. from the 7th entry in each
-    # index array) correspond to a param_combos row (e.g. the 7th):
-    param_fancy_index = tuple(
-            [ param_index_combos[:,i] for i in np.arange(Params.n_params) ] )
-    # This will be used to take advantage of numpy's fancy indexing capability.
-
-    for emission_line in lines_list:
-        # Create new (emission_line, flux_array) item in dictionary of interpolated grid arrays:
-        Interpd_grids.grids[emission_line] = np.zeros( Interpd_grids.shape )
-        # Create function for carrying out the interpolation:
-        interp_fn = siRGI(tuple(Raw_grids.val_arrs),
-                          Raw_grids.grids[emission_line], method="linear")
-        # Fill the interpolated fluxes into the final grid structure, using "fancy indexing":
-        Interpd_grids.grids[emission_line][param_fancy_index] = interp_fn( param_combos )
-    print( "An interpolated grid flux array for a single emission line is " + 
-           str(Interpd_grids.grids[lines_list[0]].nbytes) + " bytes" )
-
-    #--------------------------------------------------------------------------
-    # Combine and return results...
-
-    container1.Params        = Params
-    container1.Raw_grids     = Raw_grids
-    container1.Interpd_grids = Interpd_grids
-    return container1
-
-
-
-#============================================================================
-def bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
+def run_bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
     """
     BIGELM: Bayesian comparison of photoIonisation model Grids to Emission Line
             Measurements
@@ -311,13 +81,13 @@ def bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
                           contain the raw grids ("Raw_grids") and interpolated grids ("Interpd_grids") objects
                           as attributes.  Note that the interpolated grids object may be large (e.g. 6 Mb * 50 lines)
                           The Raw_grids and Interpd_grids objects are instances of the Bigelm_grid class defined in this module.
-    interpd_grid_shape:   A tuple of integers, giving the size of each dimension of the interpolated
-                          grid.  The order of the integers corresponds to the order of parameters in grid_params.
-                          The default is 30 gridpoints along each dimension.  Note that the number of
-                          interpolated gridpoints entered in interpd_grid_shape
-                          may have a major impact on the speed of the program.
-                          This keyword may only be supplied if the "Grid_container" keyword is not used.
-                          Will be passed to function initialise_grids.
+    # interpd_grid_shape:   A tuple of integers, giving the size of each dimension of the interpolated
+    #                       grid.  The order of the integers corresponds to the order of parameters in grid_params.
+    #                       The default is 30 gridpoints along each dimension.  Note that the number of
+    #                       interpolated gridpoints entered in interpd_grid_shape
+    #                       may have a major impact on the speed of the program.
+    #                       This keyword may only be supplied if the "Grid_container" keyword is not used.
+    #                       Will be passed to function initialise_grids.
     param_display_names:  A dictionary of display names for grid parameters, for plotting purposes.
                           A dictionary key is the parameter name in the grid file, and the corresponding
                           value its display name.
@@ -409,15 +179,15 @@ def bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
             raise ValueError("grid_params must be provided if " + 
                              "Grid_container is not provided"   )
 
-        interpd_grid_shape = None # Default to pass into XXX function
-        # Determine if a custom interpolated grid shape was specified:
-        if "interpd_grid_shape" in kwargs:
-            interpd_grid_shape = kwargs.pop("interpd_grid_shape")
+        # interpd_grid_shape = None # Default to pass into XXX function
+        # # Determine if a custom interpolated grid shape was specified:
+        # if "interpd_grid_shape" in kwargs:
+        #     interpd_grid_shape = kwargs.pop("interpd_grid_shape")
 
 
         # Call grid initialisation:
-        Grid_init = initialise_grids(grid_file, grid_params,
-                                     lines_list, interpd_grid_shape)
+        Grid_init = bigelm_grid_interpolation.initialise_grids(grid_file,
+                                                  grid_params, lines_list)
         # Unpack:
         Params        = Grid_init.Params
         Raw_grids     = Grid_init.Raw_grids
