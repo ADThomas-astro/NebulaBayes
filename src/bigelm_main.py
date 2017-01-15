@@ -186,8 +186,10 @@ def run_bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
 
 
         # Call grid initialisation:
-        Grid_init = bigelm_grid_interpolation.initialise_grids(grid_file,
+        Grid_container = bigelm_grid_interpolation.initialise_grids(grid_file,
                                                   grid_params, lines_list)
+        
+        #Grid_container.lines_list = lines_list
         # Unpack:
         Params        = Grid_init.Params
         Raw_grids     = Grid_init.Raw_grids
@@ -228,7 +230,7 @@ def run_bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
     # for one of the emission lines
 
     # Use systematic uncertainty in modelled fluxes, as in Blanc et al.
-    epsilon  = 0.15 # dex.  Default is 0.15 dex systematic uncertainty
+    epsilon = 0.15 # dex.  Default is 0.15 dex systematic uncertainty
     # Convert from dex to a scaling factor:
     epsilon_2 = 10**epsilon - 1  # This gives a factor of 0.41 for epsilon=0.15 dex
     # epsilon_2 is a scaling factor to go from a linear modelled flux to an
