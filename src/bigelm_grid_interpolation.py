@@ -51,11 +51,9 @@ def initialise_grids(grid_file, grid_params, lines_list):
     # The python engine is slower than the C engine, but it works!
     # Remove any whitespace from column names
     D_table.rename(inplace=True, columns={c:c.strip() for c in D_table.columns})
-    # Ensure all numeric columns are float dtype:
-    # #  (not sure if intermediate string conversion is necessary)
-    for line in lines_list:
-        # D_table[line] = D_table[line].astype(str).astype("float")
-        D_table[line] = D_table[line].to_numeric()
+    for line in lines_list: # Ensure line columns have float dtype
+        D_table[line] = pd.to_numeric(D_table[line], errors="coerce")
+        # We "coerce" errors to NaNs, which will be set to zero
 
     # Clean and check the model data:
     for line in lines_list:
@@ -120,6 +118,10 @@ def initialise_grids(grid_file, grid_params, lines_list):
 
     print("Building flux arrays for the model grids...")
     # How long does this take?
+    # We use an inefficient method for building the model grids because we're
+    # not assuming anything about the order of the rows in the input table.
+    # First reduce D_table to include only the required columns:
+    D_table2 = D_table[ (Params.names + lines_list) ]
     for emission_line in lines_list:
         # Initialise new (emission_line, flux_array) item in dictionary, as an array of nans:
         Raw_grids.grids[emission_line] = np.zeros( Raw_grids.shape ) + np.nan
@@ -133,10 +135,14 @@ def initialise_grids(grid_file, grid_params, lines_list):
             # in the grid array for this emission line:
             Raw_grids.grids[emission_line][tuple(p_indices)] = flux
 
-    print( "A raw grid flux array for a single emission line is " + 
-           str(Raw_grids.grids[lines_list[0]].nbytes) + " bytes" )
+    arr_n_bytes = Raw_grids.grids[lines_list[0]].nbytes
+    n_lines = len(lines_list)
+    print( """Number of bytes in raw grid flux arrays: {0} for 1 emission line, 
+    {1} total for all {2} lines""".format( arr_n_bytes, arr_n_bytes*n_lines,
+                                                                    n_lines ) )
 
-    raise Exception
+    import sys
+    sys.exit()
 
     #--------------------------------------------------------------------------
     # Interpolate model grids to a higher resolution and even spacing...
