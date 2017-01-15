@@ -1,5 +1,6 @@
 from __future__ import print_function, division
 import numpy as np  # Core numerical library
+import numpy.random as rand
 import emcee
 
 
@@ -54,6 +55,7 @@ def calculate_posterior(p_list, Grid_container, Obs_Container, ln_prior):
         # Use a log version of equation 3 on pg 4 of Blanc et al. 2015
         # N.B. var is the sum of variances due to both the measured and modelled fluxes
         pred_flux = Grid_container.flux_interpolators[emission_line][p_list]
+        pred_flux = max(0, pred_flux) # Ensure nonnegative - inteprolation may be weird...
         var = obs_flux_errors[i]**2 + (epsilon_2 * pred_flux)**2
         log_likelihood += ( - (( obs_fluxes[i] - pred_flux )**2 / 
                                  ( 2.0 * var ))  -  0.5*np.log( var ) )
@@ -81,19 +83,43 @@ def uniform_prior(Grid_container):
 
 def fit_MCMC(Grid_container, Obs_Container, nwalkers, nburn, niter):
     """
-    """
-    # Note: used starmodel.py in isochrones by TDMorton for inspiration
+    Run MCMC fitting
+    Grid_container: Contain details of the input model grid
+    Obs_Container: Has attributes lines_list, obs_fluxes, and obs_flux_errors,
+                   and is passed through to the function "calculate_posterior"
+    nwalkers: number of "walkers" to use in exploring the parameter space
+    nburn: number of burn-in iterations to discard at the start
+    niter: number of iterations to perform after completing "burn-in"
 
-    # Calculate uniform prior:
-    ln_prior = uniform_prior(Grid_container)
+    Returns the emcee.EnsembleSampler object.
+    """
+    # Note: used starmodel.py in "isochrones" by Tim D Morton for inspiration
+
+    # Initialise the sampler:
+    ln_prior = uniform_prior(Grid_container) # Calculate uniform prior
     ndim = len(Grid_container.shape) # Dimension of parameter space
-    # kwargs to be passed through to "calculate_posterior"
+    # kwargs to be passed through to "calculate_posterior":
     kwargs = {"Grid_container":Grid_container, "Obs_Container":Obs_Container,
               "ln_prior":ln_prior}
-    # Initialise the sample:
     sampler = emcee.EnsembleSampler(nwalkers=nwalkers, dim=ndim, 
                                     lnpostfn=calculate_posterior, kwargs=kwargs)
 
+    # Determine the starting distribution:
+    centre = [(a.max() - a.min())/2.0 for a in Grid_container.val_arrs]
+    # centre is a vector in the middle of the parameter space
+    ranges = [(a.max() - a.min()) for a in Grid_container.val_arrs]
+    # ranges is the range of each parameter
+    p0_lists = []
+    for i in range(ndim):  # Iterate over parameters
+        p0_list_i = rand.normal(size=nwalkers, scale=ranges[i]/5.) + centre[i]
+        p0_lists.append( p0_list_i.tolist() )
+    p0 = np.array(p0_lists).T # shape (nwalkers, ndim)
+    # Now each row of p0 contains the starting coordinates for a walker,
+    # and each column corresponds to a parameter.
+    # We've set an N-D normal distribution in the middle of the parameter
+    # space for p0.  Is this any good?
+    
+    # Run the sampler!
     # Burn in:
     pos, lnprob, rstate = sampler.run_mcmc(p0, nburn)
     sampler.reset()
@@ -102,34 +128,6 @@ def fit_MCMC(Grid_container, Obs_Container, nwalkers, nburn, niter):
 
     return sampler
     
-
-    # npars = self.n_params
-
-    # if p0 is None:
-    #     p0 = self.emcee_p0(nwalkers)
-    #     if initial_burn:
-    #         sampler = emcee.EnsembleSampler(nwalkers,npars,self.lnpost,
-    #                                         **kwargs)
-    #         pos, prob, state = sampler.run_mcmc(p0, ninitial)
-
-    #         # Choose walker with highest final lnprob to seed new one
-    #         i,j = np.unravel_index(sampler.lnprobability.argmax(),
-    #                                 sampler.shape)
-    #         p0_best = sampler.chain[i,j,:]
-    #         print("After initial burn, p0={}".format(p0_best))
-    #         p0 = p0_best * (1 + rand.normal(size=p0.shape)*0.001)
-    #         print(p0)
-    # else:
-    #     p0 = np.array(p0)
-    #     p0 = rand.normal(size=(nwalkers,npars))*0.01 + p0.T[None,:]
-
-    sampler = emcee.EnsembleSampler(nwalkers,npars,self.lnpost)
-    pos, prob, state = sampler.run_mcmc(p0, nburn)
-    sampler.reset()
-    sampler.run_mcmc(pos, niter, rstate0=state)
-
-    self._sampler = sampler
-    return sampler
 
 
 

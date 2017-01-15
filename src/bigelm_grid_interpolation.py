@@ -201,7 +201,8 @@ def setup_interpolators(Raw_grids):
 
     p_index_interpolators = []
     for a in Raw_grids.val_arrs: # Setup linear interpolator for each param
-        interpolator = interp1d(x=a, y=np.arange(len(a)), bounds_error=True)
+        interpolator = interp1d(x=a, y=np.arange(len(a)), bounds_error=False,
+                                fill_value=(0,len(a)-1))
         p_index_interpolators.append(interpolator)
     # So p_index_interpolators[j][f] will give the interpolated "index"
     # corresponding to the value f along the j axis (i.e. to parameter j having
@@ -226,8 +227,8 @@ def setup_interpolators(Raw_grids):
             # In the coords array, each column is a point to be interpolated/
             # Here we have only one column.
             # We use 3rd-order (cubic) spline interpolation.
-            # We don't need to worry about interpolating outside the grid,
-            # since the p_index_interpolators would have thrown an error
+            # Interpolating outside the grid will just give "nearest" grid
+            # edge values
 
             # Lingering questions:
             # - Could there be an issue with the spline interpolation
