@@ -2,7 +2,8 @@ from __future__ import print_function, division
 import numpy as np
 import pandas as pd
 from scipy import ndimage
-import matplotlib.pyplot as plt
+from scipy.interpolate import interp1d
+# import matplotlib.pyplot as plt
 from .bigelm_classes import Bigelm_container, Grid_parameters, Bigelm_grid
 
 
@@ -43,8 +44,6 @@ def initialise_grids(grid_file, grid_params, lines_list):
     #                     interpd_grid_shape may have a major impact on the speed
     #                     of the program.
     """
-
-    container1 = Bigelm_container()  # Initialise container object
 
     # Load database csv table containing the model grid output
     D_table = pd.read_csv( grid_file, delimiter=",", header=0, engine="python" )
@@ -182,46 +181,64 @@ def initialise_grids(grid_file, grid_params, lines_list):
 
     #--------------------------------------------------------------------------
     # Combine and return results...
-
-    container1.Params        = Params
-    container1.Raw_grids     = Raw_grids
-    # container1.Interpd_grids = Interpd_grids
+    container1 = Bigelm_container()  # Initialise container object
+    container1.Params = Params
+    container1.Raw_grids = Raw_grids
+    container1.flux_interpolators = setup_interpolators(Raw_grids)
 
     return container1
 
 
 
 
+#============================================================================
+def setup_interpolators(Raw_grids):
+    """
+    
+    I'm jumping through hoops here becuase I can't find an ND spline
+    interpolator that I'm happy with here...
+    """
 
+    p_index_interpolators = []
+    for a in Raw_grids.val_arrs: # Setup linear interpolator for each param
+        interpolator = interp1d(x=a, y=np.arange(len(a)), bounds_error=True)
+        p_index_interpolators.append(interpolator)
+    # So p_index_interpolators[j][f] will give the interpolated "index"
+    # corresponding to the value f along the j axis (i.e. to parameter j having
+    # value f).  We're converting the actual value of the parameter to a "pixel"
+    # coordinate.
 
-    # http://stackoverflow.com/questions/6238250/multivariate-spline-interpolation-in-python-scipy
+    line_interpolators = {}
+    for line, flux_grid in Raw_grids.grids.items():
 
-    # Note that the output interpolated coords will be the same dtype as your input
-    # data.  If we have an array of ints, and we want floating point precision in
-    # the output interpolated points, we need to cast the array as floats
-    data = np.arange(40).reshape((8,5)).astype(np.float)
+        def line_interpolator(p_vector):
+            """
+            Function for interpolating the value of an emission line, given a
+            list of parameter values.
+            """
+            # http://stackoverflow.com/questions/6238250/multivariate-spline-interpolation-in-python-scipy
+            # Firstly convert the parameter values to pixel coordinates:
+            coords = [p_index_interpolators[i][f] for i,f in enumerate(p_vector)]
+            coords = np.array(coords)[:,np.newaxis] # Need transpose
+            # Now interpolate in the flux grid using the pixel coordinates:
+            flux = ndimage.map_coordinates(flux_grid, coords, order=3)
+            return flux[0] # Return as a float, not a numpy array
+            # In the coords array, each column is a point to be interpolated/
+            # Here we have only one column.
+            # We use 3rd-order (cubic) spline interpolation.
+            # We don't need to worry about interpolating outside the grid,
+            # since the p_index_interpolators would have thrown an error
 
-    # I'm writing these as row, column pairs for clarity...
-    coords = np.array([[1.2, 3.5], [6.7, 2.5], [7.9, 3.5], [3.5, 3.5]])
-    # However, map_coordinates expects the transpose of this
-    coords = coords.T
+            # Lingering questions:
+            # - Could there be an issue with the spline interpolation
+            # returning negative flux values?
+            # - Is this too slow because the array is being copied in memory
+            # on each interpolation?
+            # - Does this naive spline interpolation (not Akima spline) behave
+            # poorly with "outliers" in the model grid data?
 
-    # The "mode" kwarg here just controls how the boundaries are treated
-    # mode='nearest' is _not_ nearest neighbor interpolation, it just uses the
-    # value of the nearest cell if the point lies outside the grid.  The default is
-    # to treat the values outside the grid as zero, which can cause some edge
-    # effects if you're interpolating points near the edge
-    # The "order" kwarg controls the order of the splines used. The default is 
-    # cubic splines, order=3
-    zi = ndimage.map_coordinates(data, coords, order=3, mode='nearest')
+        line_interpolators[line] = line_interpolator
 
-    row, column = coords
-    nrows, ncols = data.shape
-    im = plt.imshow(data, interpolation='nearest', extent=[0, ncols, nrows, 0])
-    plt.colorbar(im)
-    plt.scatter(column, row, c=zi, vmin=data.min(), vmax=data.max())
-    for r, c, z in zip(row, column, zi):
-        plt.annotate('%0.3f' % z, (c,r), xytext=(-10,10), textcoords='offset points',
-                arrowprops=dict(arrowstyle='->'), ha='right')
-    plt.show()
+    return line_interpolators
+
 

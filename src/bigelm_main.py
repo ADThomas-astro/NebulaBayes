@@ -191,7 +191,7 @@ def run_bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
         # Unpack:
         Params        = Grid_init.Params
         Raw_grids     = Grid_init.Raw_grids
-        Interpd_grids = Grid_init.Interpd_grids
+        # Interpd_grids = Grid_init.Interpd_grids
 
     # The following keyword arguments are relevant whether or
     # not "Grid_container" was specified:
