@@ -46,7 +46,7 @@ def initialise_grids(grid_file, grid_params, lines_list):
 
     container1 = Bigelm_container()  # Initialise container object
 
-    # Load ASCII database csv table containing the model grid output:
+    # Load database csv table containing the model grid output
     D_table = pd.read_csv( grid_file, delimiter=",", header=0, engine="python" )
     # The python engine is slower than the C engine, but it works!
     # Remove any whitespace from column names
@@ -114,26 +114,30 @@ def initialise_grids(grid_file, grid_params, lines_list):
     # Interpd_grids.spacing = [ (val_arr[1] - val_arr[0]) for val_arr in Interpd_grids.val_arrs ]
 
     #--------------------------------------------------------------------------
-    # Construct the raw model grids as multidimensional arrays...
-
+    # Construct the raw model grids as a multidimensional array for each line
     print("Building flux arrays for the model grids...")
-    # How long does this take?
     # We use an inefficient method for building the model grids because we're
     # not assuming anything about the order of the rows in the input table.
     # First reduce D_table to include only the required columns:
-    D_table2 = D_table[ (Params.names + lines_list) ]
-    for emission_line in lines_list:
-        # Initialise new (emission_line, flux_array) item in dictionary, as an array of nans:
+    columns = Params.names + lines_list
+    D_table = D_table[ columns ]
+    for emission_line in lines_list: # Initialise new (emission_line,flux_array)
+        # item in dictionary, as an array of nans:
         Raw_grids.grids[emission_line] = np.zeros( Raw_grids.shape ) + np.nan
-        # Populate the model flux array for this emission line:
-        for row, flux in enumerate( D_table[emission_line] ): # Iterate column
-            # Generator for the value of each grid parameter in this row
-            row_p_vals = ( D_table.ix[row,p] for p in Params.names )
-            # Find the set of grid indices associated with the parameter values:
-            p_indices = [Raw_grids.val_indices[j][v] for j,v in enumerate(row_p_vals)]
-            # Write the flux value for this gridpoint into the correct location
-            # in the grid array for this emission line:
-            Raw_grids.grids[emission_line][tuple(p_indices)] = flux
+    # Iterate over rows in the input model grid table:
+    for row_tuple in D_table.itertuples(index=False, name=None):
+        # row_tuple is not a namedtuple, since I set name=None.  I don't want
+        # namedtuples => columns names would need to be valid python identifiers
+        # and there would be a limit of 255 columns
+        row_vals = dict(zip(columns,row_tuple)) # Maps col names to row values
+        # Generate the value of each grid parameter for this row (in order)
+        row_p_vals = ( row_vals[p] for p in Params.names )
+        # List the grid indices associated with the param values for this row
+        row_p_inds = [Raw_grids.par_indices[j][v] for j,v in enumerate(row_p_vals)]
+        for line in lines_list: # Iterate emission lines
+            # Write the line flux value for this gridpoint into the correct
+            # location in the flux array for this line:
+            Raw_grids.grids[line][tuple(row_p_inds)] = row_vals[line]
 
     arr_n_bytes = Raw_grids.grids[lines_list[0]].nbytes
     n_lines = len(lines_list)
@@ -141,12 +145,8 @@ def initialise_grids(grid_file, grid_params, lines_list):
     {1} total for all {2} lines""".format( arr_n_bytes, arr_n_bytes*n_lines,
                                                                     n_lines ) )
 
-    import sys
-    sys.exit()
-
     #--------------------------------------------------------------------------
     # Interpolate model grids to a higher resolution and even spacing...
-
     print("Interpolating flux arrays for the model grids...")
     # # # A list of all parameter value combinations in the
     # # # interpolated grid in the form of a numpy array:

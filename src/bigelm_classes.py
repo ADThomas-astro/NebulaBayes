@@ -60,10 +60,10 @@ class Bigelm_grid(object):
         including the dictionary to hold the actual grids.
         """
         self.val_arrs = val_arrs # List of arrs of gridpoint vals for each param
-        self.val_indices = []
+        self.par_indices = []
         for a in self.val_arrs:
-            self.val_indices.append( {val:j for j,val in enumerate(a)} )
-        # So self.val_indices[j][v] will give the index along axis j of a grid
+            self.par_indices.append( {val:j for j,val in enumerate(a)} )
+        # So self.par_indices[j][v] will give the index along axis j of a grid
         # that corresponds to parameter j having value v.
         # Calculate shape of each grid (length of each dimension):
         self.shape = tuple( [len(val_arr) for val_arr in self.val_arrs ] )
