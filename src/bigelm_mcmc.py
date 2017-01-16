@@ -26,7 +26,7 @@ def calculate_posterior(p_list, Grid_container, Obs_Container, log_prior_func):
 
     Returns the natural log of the posterior at the point p_list.
     """
-    print("Calculating posterior at point", p_list)
+    # print("Calculating posterior at point", p_list)
     # The posterior will have the same shape as an interpolated model grid
     # for one of the emission lines
 
@@ -52,14 +52,15 @@ def calculate_posterior(p_list, Grid_container, Obs_Container, log_prior_func):
     # Calculate likelihood:
     log_likelihood = 0  # Initialise likelihood of 1 (multiplictive identity)
     for i, emission_line in enumerate(lines_list):
-        # Use a log version of equation 3 on pg 4 of Blanc et al. 2015
+        # Use a log version of equation 3 on pg 4 of Blanc et al. 2015 (IZI)
         # N.B. var is the sum of variances due to both the measured and modelled fluxes
-        pred_flux = Grid_container.flux_interpolators[emission_line][p_list]
-        pred_flux = max(0, pred_flux) # Ensure nonnegative - inteprolation may be weird...
-        var = obs_flux_errors[i]**2 + (epsilon_2 * pred_flux)**2
-        log_likelihood += ( - (( obs_fluxes[i] - pred_flux )**2 / 
+        pred_flux_i = Grid_container.flux_interpolators[emission_line](p_list)
+        pred_flux_i = max(0, pred_flux_i) # Ensure nonnegative - inteprolation may be weird...
+        var = obs_flux_errors[i]**2 + (epsilon_2 * pred_flux_i)**2
+        log_likelihood += ( - (( obs_fluxes[i] - pred_flux_i )**2 / 
                                  ( 2.0 * var ))  -  0.5*np.log( var ) )
         # N.B. "log" is base e
+    log_likelihood += np.log(2 * np.pi)
 
     # Note: ??????? The parameter space, space of measurements and space of predictions are all continuous.
     # Each value P in the posterior array is differential, i.e. P*dx = (posterior)*dx
@@ -79,7 +80,7 @@ def uniform_prior(Grid_container, p_list):
     Returns the log of the value of the prior at the point p_list.
     Since this is a uniform prior, p_list is ignored.
     """
-    ranges = [(a.max() - a.min()) for a in Grid_container.val_arrs]
+    ranges = [(a.max() - a.min()) for a in Grid_container.Raw_grids.val_arrs]
     prior = 1. / np.product( ranges )
     return np.log( prior )
 
@@ -98,23 +99,27 @@ def fit_MCMC(Grid_container, Obs_Container, nwalkers, nburn, niter):
     Returns the emcee.EnsembleSampler object.
     """
     # Note: used starmodel.py in "isochrones" by Tim D Morton for inspiration
+    print("Running MCMC sampling...")
 
     # Initialise the sampler:
     log_prior_func = uniform_prior # Uniform prior function
     # kwargs to be passed through to "calculate_posterior":
+    Raw_grids = Grid_container.Raw_grids
     kwargs = {"Grid_container":Grid_container, "Obs_Container":Obs_Container,
               "log_prior_func":log_prior_func}
-    sampler = emcee.EnsembleSampler(nwalkers=nwalkers, dim=Grid_container.dim, 
+    sampler = emcee.EnsembleSampler(nwalkers=nwalkers, dim=Raw_grids.ndim, 
                                     lnpostfn=calculate_posterior, kwargs=kwargs)
+    # Docs at 
+    # http://dan.iel.fm/emcee/current/api/#the-affine-invariant-ensemble-sampler
 
     # Determine the starting distribution:
-    centre = [(a.max() - a.min())/2.0 for a in Grid_container.val_arrs]
+    centre = [(a.max() - a.min())/2.0 for a in Raw_grids.val_arrs]
     # centre is a vector in the middle of the parameter space
-    ranges = [(a.max() - a.min()) for a in Grid_container.val_arrs]
+    ranges = [(a.max() - a.min()) for a in Raw_grids.val_arrs]
     # ranges is the range of each parameter
     p0_lists = []
-    for i in range(Grid_container.ndim):  # Iterate over parameters
-        p0_list_i = rand.normal(size=nwalkers, scale=ranges[i]/5.) + centre[i]
+    for i in range(Raw_grids.ndim):  # Iterate over parameters
+        p0_list_i = rand.normal(size=nwalkers, scale=ranges[i]/1e4) + centre[i]
         p0_lists.append( p0_list_i.tolist() )
     p0 = np.array(p0_lists).T # shape (nwalkers, ndim)
     # Now each row of p0 contains the starting coordinates for a walker,
@@ -124,11 +129,22 @@ def fit_MCMC(Grid_container, Obs_Container, nwalkers, nburn, niter):
     
     # Run the sampler!
     # Burn in:
-    pos, lnprob, rstate = sampler.run_mcmc(p0, nburn)
+    for i, (pos,lnprob,rstate) in enumerate(sampler.sample(p0, iterations=nburn)):
+        print("Step", i, "({0:5.1%})".format(i*1.0/nburn*100))
     sampler.reset()
     # Now run for real:
-    sampler.run_mcmc(pos, niter, rstate0=rstate)
+    print("Finished burn-in, running for real...")
+    for i, (pos,lnprob,rstate) in enumerate(sampler.sample(pos, iterations=niter,
+                                                                rstate0=rstate)):
+        print("Step", i, "({0:5.1%})".format(i*1.0/niter*100))
 
+    # # Burn in
+    # pos, lnprob, rstate = sampler.run_mcmc(p0, nburn)
+    # sampler.reset()
+    # # Now run for real:
+    # sampler.run_mcmc(pos, niter, rstate0=rstate)
+
+    print("MCMC sampling finished")
     return sampler
     
 

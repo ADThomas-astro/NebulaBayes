@@ -60,6 +60,7 @@ class Bigelm_grid(object):
         including the dictionary to hold the actual grids.
         """
         self.val_arrs = val_arrs # List of arrs of gridpoint vals for each param
+        self.p_minmax = [(a.min(), a.max()) for a in val_arrs]
         self.par_indices = []
         for a in self.val_arrs:
             self.par_indices.append( {val:j for j,val in enumerate(a)} )

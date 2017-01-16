@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from scipy import ndimage
 from scipy.interpolate import interp1d
+from scipy.interpolate import RegularGridInterpolator
 # import matplotlib.pyplot as plt
 from .bigelm_classes import Bigelm_container, Grid_parameters, Bigelm_grid
 
@@ -44,10 +45,11 @@ def initialise_grids(grid_file, grid_params, lines_list):
     #                     interpd_grid_shape may have a major impact on the speed
     #                     of the program.
     """
-
+    print("Loading input grid table...")
     # Load database csv table containing the model grid output
     D_table = pd.read_csv( grid_file, delimiter=",", header=0, engine="python" )
     # The python engine is slower than the C engine, but it works!
+    print("Cleaning input grid table...")
     # Remove any whitespace from column names
     D_table.rename(inplace=True, columns={c:c.strip() for c in D_table.columns})
     for line in lines_list: # Ensure line columns have float dtype
@@ -81,7 +83,7 @@ def initialise_grids(grid_file, grid_params, lines_list):
     #                          "exactly one integer for each parameter" )
 
     #--------------------------------------------------------------------------
-    # Set up raw grid and interpolation...
+    # Set up raw grid...
 
     # Determine the list of parameter values for the raw grid:
     # Initialise list of arrays, with each array being the list of grid values for a parameter:
@@ -97,20 +99,6 @@ def initialise_grids(grid_file, grid_params, lines_list):
     if Raw_grids.n_gridpoints != len(D_table):
         raise ValueError("The input model grid table does not" + 
                          "have a consistent length.")
-
-    # # Determine the parameter values for the interpolated grid,
-    # # and then initialise a grid object for the interpolated grid:
-    # # Create a list of arrays, where each array contains a list of constantly-spaced values for
-    # # the corresponding parameter in the interpolated grid:
-    # param_val_arrs_interp = []
-    # for p_arr, n in zip(Raw_grids.val_arrs, interpd_grid_shape):
-    #     param_val_arrs_interp.append( np.linspace( np.min(p_arr),
-    #                                                np.max(p_arr), n ) )
-    # # Initialise Bigelm_grid object to hold the interpolated grids, arrays of parameter values, etc.:
-    # Interpd_grids = Bigelm_grid( param_val_arrs_interp )
-    # # List of interpolated grid spacing for each parameter
-    # # (needed for integration and plotting later):
-    # Interpd_grids.spacing = [ (val_arr[1] - val_arr[0]) for val_arr in Interpd_grids.val_arrs ]
 
     #--------------------------------------------------------------------------
     # Construct the raw model grids as a multidimensional array for each line
@@ -145,41 +133,6 @@ def initialise_grids(grid_file, grid_params, lines_list):
                                                                     n_lines ) )
 
     #--------------------------------------------------------------------------
-    # Interpolate model grids to a higher resolution and even spacing...
-    print("Interpolating flux arrays for the model grids...")
-    # # # A list of all parameter value combinations in the
-    # # # interpolated grid in the form of a numpy array:
-    # # param_combos = np.array( list(
-    # #         itertools.product( *param_val_arrs_interp ) ) )
-    # # # A list of all index combinations for the
-    # # # interpolated grid, corresponding to param_combos:
-    # # param_index_combos = np.array( list(
-    # #         itertools.product( *[np.arange(n) for n in Interpd_grids.shape] ) ) )
-    # Generate a tuple containing an index array for each grid dimension,
-    # with each combination of indices (e.g. from the 7th entry in each
-    # index array) correspond to a param_combos row (e.g. the 7th):
-    
-    # param_fancy_index = tuple(
-    #         [ param_index_combos[:,i] for i in np.arange(Params.n_params) ] )
-    # This will be used to take advantage of numpy's fancy indexing capability.
-
-    for emission_line in lines_list:
-        pass
-        # # Create new (emission_line, flux_array) item in dictionary of interpolated grid arrays:
-        # Interpd_grids.grids[emission_line] = np.zeros( Interpd_grids.shape )
-        
-
-        # Function here!
-        # # Create function for carrying out the interpolation:
-        # interp_fn = siRGI(tuple(Raw_grids.val_arrs),
-        #                   Raw_grids.grids[emission_line], method="linear")
-        
-    #     # Fill the interpolated fluxes into the final grid structure, using "fancy indexing":
-    #     Interpd_grids.grids[emission_line][param_fancy_index] = interp_fn( param_combos )
-    # print( "An interpolated grid flux array for a single emission line is " + 
-    #        str(Interpd_grids.grids[lines_list[0]].nbytes) + " bytes" )
-
-    #--------------------------------------------------------------------------
     # Combine and return results...
     container1 = Bigelm_container()  # Initialise container object
     container1.Params = Params
@@ -192,13 +145,14 @@ def initialise_grids(grid_file, grid_params, lines_list):
 
 
 #============================================================================
-def setup_interpolators(Raw_grids):
+def setup_interpolators(Raw_grids, interp="Linear"):
     """
-    
-    I'm jumping through hoops here becuase I can't find an ND spline
-    interpolator that I'm happy with here...
+    Raw_grids: Contains details of the input model grid
+    interp: can be "Linear", "Spline"
+    Returns a dictionary mapping emission line names to callable "interpolators"
     """
 
+    # Some preparation for using the "Spline" method
     p_index_interpolators = []
     for a in Raw_grids.val_arrs: # Setup linear interpolator for each param
         interpolator = interp1d(x=a, y=np.arange(len(a)), bounds_error=False,
@@ -209,17 +163,36 @@ def setup_interpolators(Raw_grids):
     # value f).  We're converting the actual value of the parameter to a "pixel"
     # coordinate.
 
-    line_interpolators = {}
+    # Iterate over emission lines, storing an "interpolator" for each:
+    line_interpolators = {} # Keys are emisison line names
     for line, flux_grid in Raw_grids.grids.items():
 
-        def line_interpolator(p_vector):
+        # LinearGridInterpolator = RegularGridInterpolator(Raw_grids.val_arrs,
+        #     flux_grid, method="linear", bounds_error=False, fill_value=None)
+        LinearGridInterpolator = RegularGridInterpolator(Raw_grids.val_arrs,
+            flux_grid, method="linear", bounds_error=False, fill_value=1e55) # Return massive flux if outside range!
+
+        # def line_interpolator_linear(p_vector):
+        #     """
+        #     A wrapper around RegularGridInterpolator - necessary because I 
+        #     don't like the options for values outside the parameter space.
+        #     """
+        #     # Move values outside the bounds onto the boundaries
+        #     p_new = []
+        #     for i,(p,(p_min,p_max)) in enumerate(zip(p_vector, Raw_grids.p_minmax)):
+        #         p_new.append( max(p_min, min(p, p_max)) )
+
+        #     return LinearGridInterpolator( p_new )
+
+
+        def line_interpolator_spline(p_vector):
             """
             Function for interpolating the value of an emission line, given a
             list of parameter values.
             """
             # http://stackoverflow.com/questions/6238250/multivariate-spline-interpolation-in-python-scipy
             # Firstly convert the parameter values to pixel coordinates:
-            coords = [p_index_interpolators[i][f] for i,f in enumerate(p_vector)]
+            coords = [p_index_interpolators[i](f) for i,f in enumerate(p_vector)]
             coords = np.array(coords)[:,np.newaxis] # Need transpose
             # Now interpolate in the flux grid using the pixel coordinates:
             flux = ndimage.map_coordinates(flux_grid, coords, order=3)
@@ -238,7 +211,12 @@ def setup_interpolators(Raw_grids):
             # - Does this naive spline interpolation (not Akima spline) behave
             # poorly with "outliers" in the model grid data?
 
-        line_interpolators[line] = line_interpolator
+        if interp == "Linear":
+            line_interpolators[line] = LinearGridInterpolator#line_interpolator_linear
+        elif interp == "Spline":
+            line_interpolators[line] = line_interpolator_spline
+        else:
+            raise ValueError("Unknown value given for keyword 'interp'")
 
     return line_interpolators
 

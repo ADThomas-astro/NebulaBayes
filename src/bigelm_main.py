@@ -7,6 +7,7 @@ from . import bigelm_grid_interpolation
 from . import bigelm_mcmc
 from .bigelm_classes import Bigelm_container
 from .corner import corner
+from collections import OrderedDict as OD
 
 
 """
@@ -41,9 +42,9 @@ def run_bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
     the model grid information (see output_grids keyword below).
 
     Required arguments to bigelm:
-    obs_fluxes:         a numpy array of observed emission-line fluxes
+    obs_fluxes:         list or array of observed emission-line fluxes
                         normalised to Hbeta
-    obs_flux_errors:    a numpy array of corresponding measurement errors
+    obs_flux_errors:    list or array of corresponding measurement errors
     obs_emission_lines: a list of corresponding emission line names as strings
     and EITHER the following two keyword arguments:
         grid_file:      the filename of an ASCII csv table containing photoionisation model
@@ -123,9 +124,11 @@ def run_bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
 
     # Check measure data inputs all have the same length:
     n_measured = len(obs_emission_lines)
-    if (n_measured != obs_fluxes.size or n_measured != obs_flux_errors.size):    
+    if (n_measured != len(obs_fluxes) or n_measured != len(obs_flux_errors)):    
         raise ValueError("Input arrays obs_fluxes, obs_flux_errors " + 
                          "and obs_emission_lines don't have the same length.")
+    obs_fluxes = np.array(obs_fluxes) # Ensure numpy array
+    obs_flux_errors = np.array(obs_flux_errors)
 
     # We'll consider only the emission lines in the input measured fluxes,
     # and ignore any other emission lines provided in the model grid:
@@ -155,8 +158,12 @@ def run_bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
         # We use the Bigelm_container output object that was supplied:
         In_results = kwargs.pop("Grid_container")
         # Unpack the Grid_parameters and Bigelm_grid objects:
-        Params    = In_results.Params
-        Raw_grids = In_results.Raw_grids
+        Grid_container = Bigelm_container()
+        Grid_container.Params    = In_results.Params
+        Grid_container.Raw_grids = In_results.Raw_grids
+        Grid_container.flux_interpolators = In_results.flux_interpolators
+        Params = Grid_container.Params
+        Raw_grids = Grid_container.Raw_grids
         # We ignore the other attributes of the In_results object.
 
         # Check that all emission lines in input are also in grids:
@@ -189,19 +196,15 @@ def run_bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
         # Call grid initialisation:
         Grid_container = bigelm_grid_interpolation.initialise_grids(grid_file,
                                                   grid_params, lines_list)
-        
-        #Grid_container.lines_list = lines_list
-        # Unpack:
-        Params        = Grid_container.Params
-        Raw_grids     = Grid_container.Raw_grids
-        # Interpd_grids = Grid_init.Interpd_grids
+        # Grid_container has attributes Params, Raw_grids and flux_interpolators
+        Params = Grid_container.Params
+        Raw_grids = Grid_container.Raw_grids
 
-    # The following keyword arguments are relevant whether or
-    # not "Grid_container" was specified:
-    # Determine if an output image file name was specified:
+    #------------------------------------------------------------------------
+    # Now the Grid_container and Params and Raw_grids are defined.
 
     # Determine the dictionary of parameter display names to use for plotting:
-    Params.display_names = {p:p for p in Params.names}  # Default
+    Params.display_names = OD([(p,p) for p in Params.names])
     if "param_display_names" in kwargs:
         custom_display_names = kwargs.pop("param_display_names")
         for x in custom_display_names:
@@ -229,32 +232,33 @@ def run_bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
     Obs_Container.lines_list = lines_list
     Obs_Container.obs_fluxes = obs_fluxes
     Obs_Container.obs_flux_errors = obs_flux_errors
-    sampler = bigelm_mcmc.fit_MCMC(Grid_container, Obs_Container, nwalkers=100,
-                                    nburn=50, niter=200)
+    sampler = bigelm_mcmc.fit_MCMC(Grid_container, Obs_Container, nwalkers=30,
+                                    nburn=15, niter=30)
     print("Mean acceptance fraction: {0:.3f}"
                 .format(np.mean(sampler.acceptance_fraction)))
 
-
-    
     #--------------------------------------------------------------------------
-    # Plot the 2D and 1D marginalised posterior pdfs if requested
+    # Plot a corner plot if requested
+    print("Plotting...")
     if image_out != None: # Only do plotting if an image name was specified:
         # bigelm_plotting.plot_marginalised_posterior(image_out, Params,
         #                         Raw_grids, Interpd_grids, 
         #                 marginalised_posteriors_1D, marginalised_posteriors_2D)
-        samples = sampler.chain.reshape((-1, Grid_container.ndim))
+        samples = sampler.flatchain.reshape((-1, Raw_grids.ndim))
         # Each row of "samples" is a sample in the parameter space
-        fig = corner.corner(samples, labels=Params.display_names)#,
+        display_labels = list(Params.display_names.values())
+        fig = corner(samples, labels=display_labels)#,
+                    # range=Raw_grids.p_minmax)#,
                       # truths=[m_true, b_true, np.log(f_true)])
         fig.savefig(image_out)
     
 
     #--------------------------------------------------------------------------
-    print("Bigelm finished.")
-    Results = Grid_container()
+    Results = Bigelm_container()
     Results.Params = Params
     if output_grids:
         Results.Raw_grids = Raw_grids
+    print("Bigelm finished.")
     return Results
 
 
