@@ -67,6 +67,7 @@ class Bigelm_grid(object):
         # that corresponds to parameter j having value v.
         # Calculate shape of each grid (length of each dimension):
         self.shape = tuple( [len(val_arr) for val_arr in self.val_arrs ] )
+        self.ndim = len( self.shape )
         # Calculate the number of gridpoints (assuming a rectangular grid):
         self.n_gridpoints = np.product( self.shape )
         # Initialise a dictionary to hold the n-dimensional

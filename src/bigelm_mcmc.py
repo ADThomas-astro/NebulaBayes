@@ -15,14 +15,14 @@ Adam D. Thomas 2015 - 2016
 
 
 
-def calculate_posterior(p_list, Grid_container, Obs_Container, ln_prior):
+def calculate_posterior(p_list, Grid_container, Obs_Container, log_prior_func):
     """
     Evaluate the posterior at a particular point in the parameter space.
-    p_list:  list of parameters
-    Grid_container: Has attribute "flux_interpolators", which return the 
-                interpolated emission-line flux for a set of parameter values.
+    p_list:  list of parameter values (a point in the parameter space)
+    Grid_container: Has attribute "flux_interpolators", which are functions that
+       return the interpolated emission-line flux for a set of parameter values.
     Obs_Container: Has attributes lines_list, obs_fluxes, and obs_flux_errors
-    ln_prior: Value of the logarithm of the prior at the point p_list
+    log_prior: Value of the logarithm of the prior at the point p_list
 
     Returns the natural log of the posterior at the point p_list.
     """
@@ -61,19 +61,23 @@ def calculate_posterior(p_list, Grid_container, Obs_Container, ln_prior):
                                  ( 2.0 * var ))  -  0.5*np.log( var ) )
         # N.B. "log" is base e
 
-    # Note:  The parameter space, space of measurements and space of predictions are all continuous.
+    # Note: ??????? The parameter space, space of measurements and space of predictions are all continuous.
     # Each value P in the posterior array is differential, i.e. P*dx = (posterior)*dx
     # for a vector of parameters x.  # ????????????????
 
+    log_prior = log_prior_func(Grid_container, p_list)
     # Return (un-normalised) log posterior (product of likelihood and prior):
-    return log_likelihood + ln_prior  # Posterior from Bayes' Theorem!
+    return log_likelihood + log_prior  # Posterior from Bayes' Theorem!
 
 
 
-def uniform_prior(Grid_container):
+def uniform_prior(Grid_container, p_list):
     """
-    Return the natural logarithm of a uniform prior over the full parameter
-    space.  The returned value applies everywhere in the parameter space.
+    Return the natural logarithm of a uniform prior.
+    Grid_container: Contains details of the input model grid
+    p_list: List of parameter values at a point in the parameter space
+    Returns the log of the value of the prior at the point p_list.
+    Since this is a uniform prior, p_list is ignored.
     """
     ranges = [(a.max() - a.min()) for a in Grid_container.val_arrs]
     prior = 1. / np.product( ranges )
@@ -84,7 +88,7 @@ def uniform_prior(Grid_container):
 def fit_MCMC(Grid_container, Obs_Container, nwalkers, nburn, niter):
     """
     Run MCMC fitting
-    Grid_container: Contain details of the input model grid
+    Grid_container: Contains details of the input model grid
     Obs_Container: Has attributes lines_list, obs_fluxes, and obs_flux_errors,
                    and is passed through to the function "calculate_posterior"
     nwalkers: number of "walkers" to use in exploring the parameter space
@@ -96,12 +100,11 @@ def fit_MCMC(Grid_container, Obs_Container, nwalkers, nburn, niter):
     # Note: used starmodel.py in "isochrones" by Tim D Morton for inspiration
 
     # Initialise the sampler:
-    ln_prior = uniform_prior(Grid_container) # Calculate uniform prior
-    ndim = len(Grid_container.shape) # Dimension of parameter space
+    log_prior_func = uniform_prior # Uniform prior function
     # kwargs to be passed through to "calculate_posterior":
     kwargs = {"Grid_container":Grid_container, "Obs_Container":Obs_Container,
-              "ln_prior":ln_prior}
-    sampler = emcee.EnsembleSampler(nwalkers=nwalkers, dim=ndim, 
+              "log_prior_func":log_prior_func}
+    sampler = emcee.EnsembleSampler(nwalkers=nwalkers, dim=Grid_container.dim, 
                                     lnpostfn=calculate_posterior, kwargs=kwargs)
 
     # Determine the starting distribution:
@@ -110,7 +113,7 @@ def fit_MCMC(Grid_container, Obs_Container, nwalkers, nburn, niter):
     ranges = [(a.max() - a.min()) for a in Grid_container.val_arrs]
     # ranges is the range of each parameter
     p0_lists = []
-    for i in range(ndim):  # Iterate over parameters
+    for i in range(Grid_container.ndim):  # Iterate over parameters
         p0_list_i = rand.normal(size=nwalkers, scale=ranges[i]/5.) + centre[i]
         p0_lists.append( p0_list_i.tolist() )
     p0 = np.array(p0_lists).T # shape (nwalkers, ndim)
