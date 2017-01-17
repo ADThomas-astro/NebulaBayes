@@ -150,25 +150,26 @@ def plot_MCMC_chain(sampler_chain,param_display_names, show=False, outfile=None)
 
     # Initialise plot and axes:
     fig, ax_arr = plt.subplots(nrows=ndim, ncols=1, sharex=True, sharey=False,
-                  squeeze=True, figsize=(4,2+ndim*2))# Width and height in inches
+                  squeeze=True, figsize=(4,1.5+ndim*1.5))# Width and height in inches
 
     x_vec = np.arange(nsteps)
     # Iterate over axes plotting the chains for each parameter
     for i, ax in enumerate(ax_arr):
         # This axes is for the ith parameter (dimension)
         for walker in range(nwalkers):
-            ax.plot(x_vec,sampler_chain[walker,:,i])
+            ax.plot(x_vec, sampler_chain[walker,:,i], c="0.6", lw=0.5)
         ax.set_ylabel(param_display_names[i])
 
     ax_arr[-1].set_xlabel("Step number")
-
+    plt.subplots_adjust(left=0.2, right=0.95, bottom=0.15, hspace=0, top=0.95)
     
-    if outfile: # Save otu image if requested
+    if outfile: # Save out image if requested
         plt.savefig(outfile)
 
     if show: # Show interactive plot if requested
         was_interactive = plt.isinteractive()
-        plt.ion() # Make interactive
+        plt.ioff() # Make not interactive - block program from continuing
+        print("Displaying figure; close to continue...")
         plt.show()
         plt.interactive(was_interactive) # Return to previous interactive setting
 

@@ -2,6 +2,7 @@ from __future__ import print_function, division
 import numpy as np  # Core numerical library
 import numpy.random as rand
 import emcee
+from .bigelm_plotting import plot_MCMC_chain
 
 
 
@@ -26,9 +27,19 @@ def calculate_posterior(p_list, Grid_container, Obs_Container, log_prior_func):
 
     Returns the natural log of the posterior at the point p_list.
     """
-    # print("Calculating posterior at point", p_list)
-    # The posterior will have the same shape as an interpolated model grid
-    # for one of the emission lines
+    # Firstly: we return a very negative posterior if we're outside the
+    # parameter space, more negative if we're further away
+    p_out_list = []
+    for p, (p_min, p_max) in zip(p_list, Grid_container.Raw_grids.p_minmax):
+        dist_min, dist_max = p - p_min, p_max - p # Both > 0 if p inside bounds
+        if dist_min < 0 or dist_max < 0:
+            range_p = p_max - p_min
+            p_out_list.append( -min(dist_min, dist_max) / range_p ) # Normalised
+    if len(p_out_list) > 0:
+        tot_range = np.sqrt(np.sum([d**2 for d in p_out_list]))
+        return -10**(150 + tot_range)
+        # Return increasingly small posterior the further we are away from
+        # the allowed region
 
     # Use systematic uncertainty in modelled fluxes, as in Blanc et al.
     epsilon = 0.15 # dex.  Default is 0.15 dex systematic uncertainty
@@ -86,7 +97,43 @@ def uniform_prior(Grid_container, p_list):
 
 
 
-def fit_MCMC(Grid_container, Obs_Container, nwalkers, nburn, niter):
+# class MH_proposal_axisaligned_constrained(object):
+#     """
+#     A Metropolis-Hastings proposal, with axis-aligned Gaussian steps,
+#     for convenient use as the ``mh_proposal`` option to
+#     :func:`EnsembleSampler.sample` .
+#     ADT: I added a feature to not allow going outside the given params ranges
+#     """
+#     # Modified from MH_proposal_axisaligned in
+#     # /Applications/anaconda/lib/python3.5/site-packages/emcee/utils.py
+#     def __init__(self, stdev, min_X, max_X):
+#         self.stdev = stdev # List the standard deviation to use in each dimension
+#         self.min_X = min_X # List min allowed value for each parameter
+#         self.max_X = max_X # List max allowed value for each parameter
+#         assert len(stdev) == len(min_X) and len(stdev) == len(max_X)
+#         assert np.all(max_X > min_X)
+
+#     def __call__(self, X):
+#         (nw, npar) = X.shape # Number of walkers and the dimension of the space
+#         assert(len(self.stdev) == npar)
+#         new_X = X + self.stdev * np.random.normal(size=X.shape)
+#         low_diff = new_X - self.min_X # Should all be positive
+#         high_diff = new_X - self.max_X # Should all be negative
+#         if np.all(low_diff > 0) and np.all(high_diff < 0):
+#             return new_X
+#         # If the proposed values aren't in the allowed ranges, let's fix them:
+#         ranges = (self.max_X - self.min_X)
+#         where_low, where_high = low_diff < 0, low_diff > 0
+#         new_X[where_low] = np.amin(new_X[where_low]-2*low_diff[where_low])
+
+
+#         return X + self.stdev * np.random.normal(size=X.shape)
+
+
+
+
+def fit_MCMC(Grid_container, Obs_Container, nwalkers, nburn, niter,
+                                            burnchainplot=None, chainplot=None):
     """
     Run MCMC fitting
     Grid_container: Contains details of the input model grid
@@ -131,12 +178,18 @@ def fit_MCMC(Grid_container, Obs_Container, nwalkers, nburn, niter):
     # Burn in:
     for i, (pos,lnprob,rstate) in enumerate(sampler.sample(p0, iterations=nburn)):
         print("Step", i, "({0:5.1%})".format(i*1.0/nburn*100))
+    # Have a look at the burn-in
+    param_display_names = list(Grid_container.Params.display_names.values())
+    plot_MCMC_chain(sampler.chain, param_display_names, show=True, outfile=burnchainplot)
+    
     sampler.reset()
     # Now run for real:
     print("Finished burn-in, running for real...")
     for i, (pos,lnprob,rstate) in enumerate(sampler.sample(pos, iterations=niter,
                                                                 rstate0=rstate)):
         print("Step", i, "({0:5.1%})".format(i*1.0/niter*100))
+    # Have a look at the final results
+    plot_MCMC_chain(sampler.chain, param_display_names, show=True, outfile=chainplot)
 
     # # Burn in
     # pos, lnprob, rstate = sampler.run_mcmc(p0, nburn)

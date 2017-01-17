@@ -169,9 +169,10 @@ def setup_interpolators(Raw_grids, interp="Linear"):
 
         # LinearGridInterpolator = RegularGridInterpolator(Raw_grids.val_arrs,
         #     flux_grid, method="linear", bounds_error=False, fill_value=None)
+        # LinearGridInterpolator = RegularGridInterpolator(Raw_grids.val_arrs,
+        #     flux_grid, method="linear", bounds_error=False, fill_value=1e55) # Return massive flux if outside range!
         LinearGridInterpolator = RegularGridInterpolator(Raw_grids.val_arrs,
-            flux_grid, method="linear", bounds_error=False, fill_value=1e55) # Return massive flux if outside range!
-
+            flux_grid, method="linear", bounds_error=True, fill_value=1e55) # Return massive flux if outside range!
         # def line_interpolator_linear(p_vector):
         #     """
         #     A wrapper around RegularGridInterpolator - necessary because I 

@@ -99,6 +99,8 @@ def run_bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
                           raw parameter names will be used as display names by default.
                           This keyword may only be supplied if the "Grid_container" keyword is not used
                           (the previous param_display_names will be used).
+    nburn:                Default 100
+    n_iter:               Default 100
     #priors???            NOT IMPLETMENTED: A dictionary of functions for priors for each parameter... ???
     #extra_lines:         NOT IMPLEMENTED: A list of additional emission lines to make grids for.  Useful for
                           making grids for use in later bigelm runs.  A union of obs_emission_lines and extra_lines
@@ -219,6 +221,14 @@ def run_bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
     if "output_grids" in kwargs: # If output_grids was specified
         output_grids = kwargs.pop("output_grids")
 
+    nburn = 100 # Default
+    if "nburn" in kwargs:
+        nburn = kwargs.pop("image_out")
+
+    niter = 100 # Default
+    if "niter" in kwargs:
+        niter = kwargs.pop("image_out")
+
     # Ensure there aren't any remaining keyword arguments that we haven't used:
     if len(kwargs) != 0:
         raise ValueError( "Unknown or unnecessary keyword argument(s) " +
@@ -232,8 +242,8 @@ def run_bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
     Obs_Container.lines_list = lines_list
     Obs_Container.obs_fluxes = obs_fluxes
     Obs_Container.obs_flux_errors = obs_flux_errors
-    sampler = bigelm_mcmc.fit_MCMC(Grid_container, Obs_Container, nwalkers=30,
-                                    nburn=15, niter=30)
+    sampler = bigelm_mcmc.fit_MCMC(Grid_container, Obs_Container, nwalkers=40,
+                nburn=nburn, niter=niter, burnchainplot=burnchainplot, chainplot=chainplot)
     print("Mean acceptance fraction: {0:.3f}"
                 .format(np.mean(sampler.acceptance_fraction)))
 
@@ -247,8 +257,8 @@ def run_bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
         samples = sampler.flatchain.reshape((-1, Raw_grids.ndim))
         # Each row of "samples" is a sample in the parameter space
         display_labels = list(Params.display_names.values())
-        fig = corner(samples, labels=display_labels)#,
-                    # range=Raw_grids.p_minmax)#,
+        fig = corner(samples, labels=display_labels, range=[0.5]*5)
+                     # range=Raw_grids.p_minmax)#,
                       # truths=[m_true, b_true, np.log(f_true)])
         fig.savefig(image_out)
     
