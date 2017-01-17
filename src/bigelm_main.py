@@ -101,6 +101,8 @@ def run_bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
                           (the previous param_display_names will be used).
     nburn:                Default 100
     n_iter:               Default 100
+    burnchainplot         Filename for plot.  Default None
+    chainplot             Filename for plot.  Default None
     #priors???            NOT IMPLETMENTED: A dictionary of functions for priors for each parameter... ???
     #extra_lines:         NOT IMPLEMENTED: A list of additional emission lines to make grids for.  Useful for
                           making grids for use in later bigelm runs.  A union of obs_emission_lines and extra_lines
@@ -221,13 +223,17 @@ def run_bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
     if "output_grids" in kwargs: # If output_grids was specified
         output_grids = kwargs.pop("output_grids")
 
-    nburn = 100 # Default
+    nburn, niter = 100, 100 # Defaults
     if "nburn" in kwargs:
-        nburn = kwargs.pop("image_out")
-
-    niter = 100 # Default
+        nburn = kwargs.pop("nburn")
     if "niter" in kwargs:
-        niter = kwargs.pop("image_out")
+        niter = kwargs.pop("niter")
+
+    burnchainplot, chainplot = None, None # Defaults
+    if "burnchainplot" in kwargs:
+        burnchainplot = kwargs.pop("burnchainplot")
+    if "chainplot" in kwargs:
+        chainplot = kwargs.pop("chainplot")
 
     # Ensure there aren't any remaining keyword arguments that we haven't used:
     if len(kwargs) != 0:

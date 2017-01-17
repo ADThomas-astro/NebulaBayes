@@ -180,7 +180,7 @@ def fit_MCMC(Grid_container, Obs_Container, nwalkers, nburn, niter,
         print("Step", i, "({0:5.1%})".format(i*1.0/nburn*100))
     # Have a look at the burn-in
     param_display_names = list(Grid_container.Params.display_names.values())
-    plot_MCMC_chain(sampler.chain, param_display_names, show=True, outfile=burnchainplot)
+    plot_MCMC_chain(sampler.chain, param_display_names, show=False, outfile=burnchainplot)
     
     sampler.reset()
     # Now run for real:
@@ -189,7 +189,7 @@ def fit_MCMC(Grid_container, Obs_Container, nwalkers, nburn, niter,
                                                                 rstate0=rstate)):
         print("Step", i, "({0:5.1%})".format(i*1.0/niter*100))
     # Have a look at the final results
-    plot_MCMC_chain(sampler.chain, param_display_names, show=True, outfile=chainplot)
+    plot_MCMC_chain(sampler.chain, param_display_names, show=False, outfile=chainplot)
 
     # # Burn in
     # pos, lnprob, rstate = sampler.run_mcmc(p0, nburn)
