@@ -4,9 +4,10 @@ import numpy as np  # Core numerical library
 # import itertools # For finding Cartesian product and combinatorial combinations
 # from . import bigelm_plotting
 from . import bigelm_grid_interpolation
-from . import bigelm_mcmc
+from . import bigelm_posterior
 from .bigelm_classes import Bigelm_container
-from .corner import corner
+# from .corner import corner  # For MCMC
+from . import bigelm_plotting
 from collections import OrderedDict as OD
 
 
@@ -80,6 +81,8 @@ def run_bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
     Optional additional keyword arguments:
     image_out:            A filename for saving out a results image of 2D and 1D marginalised posterior pdfs.
                           The figure will only be generated and saved if this keyword parameter is specified.
+    table_out:            A filename for a csv file containing Bayesian parameter
+                          estimates for the grid.
     output_grids:         A Boolean, False by default.  If True, the outputted Results object will
                           contain the raw grids ("Raw_grids") object as an
                           as attribute.
@@ -91,6 +94,8 @@ def run_bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
     #                       may have a major impact on the speed of the program.
     #                       This keyword may only be supplied if the "Grid_container" keyword is not used.
     #                       Will be passed to function initialise_grids.
+    n_interp_pts:         Number of interpolated points for 1D and 2D marginalised
+                          posteriors and parameter estimation; default 100
     param_display_names:  A dictionary of display names for grid parameters, for plotting purposes.
                           A dictionary key is the parameter name in the grid file, and the corresponding
                           value its display name.
@@ -200,7 +205,7 @@ def run_bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
         # Call grid initialisation:
         Grid_container = bigelm_grid_interpolation.initialise_grids(grid_file,
                                                   grid_params, lines_list)
-        # Grid_container has attributes Params, Raw_grids and flux_interpolators
+        # Grid_container has attributes Params and Raw_grids
         Params = Grid_container.Params
         Raw_grids = Grid_container.Raw_grids
 
@@ -218,60 +223,92 @@ def run_bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
     if "image_out" in kwargs: # If it was specified, we'll save a plot.
         image_out = kwargs.pop("image_out")
 
+    table_out = None # Default - don't save table if table_out==None
+    if "table_out" in kwargs: # If it was specified, we'll save a plot.
+        table_out = kwargs.pop("table_out")
+
     # Determine if we should include the model flux grids in the output:
     output_grids = False # Default - don't include raw and interpolated grids in output
     if "output_grids" in kwargs: # If output_grids was specified
         output_grids = kwargs.pop("output_grids")
 
-    nburn, niter = 100, 100 # Defaults
-    if "nburn" in kwargs:
-        nburn = kwargs.pop("nburn")
-    if "niter" in kwargs:
-        niter = kwargs.pop("niter")
+    # nburn, niter = 100, 100 # Defaults
+    # if "nburn" in kwargs:
+    #     nburn = kwargs.pop("nburn")
+    # if "niter" in kwargs:
+    #     niter = kwargs.pop("niter")
 
-    burnchainplot, chainplot = None, None # Defaults
-    if "burnchainplot" in kwargs:
-        burnchainplot = kwargs.pop("burnchainplot")
-    if "chainplot" in kwargs:
-        chainplot = kwargs.pop("chainplot")
+    # burnchainplot, chainplot = None, None # Defaults
+    # if "burnchainplot" in kwargs:
+    #     burnchainplot = kwargs.pop("burnchainplot")
+    # if "chainplot" in kwargs:
+    #     chainplot = kwargs.pop("chainplot")
+
+    n_interp_pts = 100 # Default
+    if "n_interp_pts" in kwargs: # If n_interp_pts was specified
+        n_interp_pts = kwargs.pop("n_interp_pts")
 
     # Ensure there aren't any remaining keyword arguments that we haven't used:
     if len(kwargs) != 0:
         raise ValueError( "Unknown or unnecessary keyword argument(s) " +
                           str(kwargs.keys())[1:-1] )        
 
-
-
-    #--------------------------------------------------------------------------
-    # Run MCMC sampling
+    # #--------------------------------------------------------------------------
     Obs_Container = Bigelm_container()
     Obs_Container.lines_list = lines_list
     Obs_Container.obs_fluxes = obs_fluxes
     Obs_Container.obs_flux_errors = obs_flux_errors
-    sampler = bigelm_mcmc.fit_MCMC(Grid_container, Obs_Container, nwalkers=40,
-                nburn=nburn, niter=niter, burnchainplot=burnchainplot, chainplot=chainplot)
-    print("Mean acceptance fraction: {0:.3f}"
-                .format(np.mean(sampler.acceptance_fraction)))
+    # # Run MCMC sampling
+    # # sampler = bigelm_mcmc.fit_MCMC(Grid_container, Obs_Container, nwalkers=40,
+    # #             nburn=nburn, niter=niter, burnchainplot=burnchainplot, chainplot=chainplot)
+    # # print("Mean acceptance fraction: {0:.3f}"
+    # #             .format(np.mean(sampler.acceptance_fraction)))
+
+    #--------------------------------------------------------------------------
+    # Calculate N-dimensional posterior array
+    posterior = bigelm_posterior.calculate_posterior(Grid_container,
+                    Obs_Container, log_prior_func=bigelm_posterior.uniform_prior)
+
+    #--------------------------------------------------------------------------
+    # Marginalise (and normalise) posterior
+    marginalised_posteriors_1D, marginalised_posteriors_2D, posterior = \
+                       bigelm_posterior.marginalise_posterior(posterior, Params,
+                                                             Raw_grids.val_arrs)
+
+    # Interpolate 1D and 2D posteriors
+    posteriors_1D_interp, posteriors_2D_interp, param_val_arrs_interp = \
+            bigelm_grid_interpolation.interpolate_posteriors(Raw_grids, Params,
+           marginalised_posteriors_1D, marginalised_posteriors_2D, n_interp_pts)
+
+    #--------------------------------------------------------------------------
+    # Do Bayesian parameter estimation
+    DF_estimates = bigelm_posterior.make_parameter_estimate_table(
+                                    posteriors_1D_interp, param_val_arrs_interp)
+    if table_out is not None:  # Save out if requested
+        DF_estimates.to_csv(table_out, index=False, float_format='%.5f')
 
     #--------------------------------------------------------------------------
     # Plot a corner plot if requested
-    print("Plotting...")
     if image_out != None: # Only do plotting if an image name was specified:
-        # bigelm_plotting.plot_marginalised_posterior(image_out, Params,
-        #                         Raw_grids, Interpd_grids, 
-        #                 marginalised_posteriors_1D, marginalised_posteriors_2D)
-        samples = sampler.flatchain.reshape((-1, Raw_grids.ndim))
-        # Each row of "samples" is a sample in the parameter space
-        display_labels = list(Params.display_names.values())
-        fig = corner(samples, labels=display_labels, range=[0.5]*5)
-                     # range=Raw_grids.p_minmax)#,
-                      # truths=[m_true, b_true, np.log(f_true)])
-        fig.savefig(image_out)
+        bigelm_plotting.plot_marginalised_posterior(image_out, Params,
+                                Raw_grids, param_val_arrs_interp, 
+                                    posteriors_1D_interp, posteriors_2D_interp)
+        
+        # # MCMC corner plot
+        # samples = sampler.flatchain.reshape((-1, Raw_grids.ndim))
+        # # Each row of "samples" is a sample in the parameter space
+        # display_labels = list(Params.display_names.values())
+        # fig = corner(samples, labels=display_labels, range=[0.5]*5)
+        #              # range=Raw_grids.p_minmax)#,
+        #               # truths=[m_true, b_true, np.log(f_true)])
+        # fig.savefig(image_out)
     
 
     #--------------------------------------------------------------------------
     Results = Bigelm_container()
     Results.Params = Params
+    Results.DF_estimates = DF_estimates
+    # Results.posterior = posterior
     if output_grids:
         Results.Raw_grids = Raw_grids
     print("Bigelm finished.")

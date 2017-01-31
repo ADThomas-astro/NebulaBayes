@@ -20,11 +20,6 @@ class Bigelm_container(object):
         function and by the bigelm function.
     """
 
-    # XXXXX - fix this text:
-    # Several attributes will be added to the instance of
-    # this class, including the full posterior array and
-    # arrays for marginalised posteriors, as well as...
-
 
 #============================================================================
 class Grid_parameters(object):
