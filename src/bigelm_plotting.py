@@ -16,7 +16,7 @@ Adam D. Thomas 2015 - 2016
 
 #============================================================================
 def plot_marginalised_posterior(image_out, Params, Raw_grids, param_val_arrs_interp, 
-                                marginalised_posteriors_1D, marginalised_posteriors_2D):
+                                marginalised_posteriors_1D, marginalised_posteriors_2D, text_lines=None):
     """
         Generate a plot of all the 2D and 1D marginalised posterior pdfs.
         Plot the results as a "corner plot", a triangular grid of
@@ -154,6 +154,12 @@ def plot_marginalised_posterior(image_out, Params, Raw_grids, param_val_arrs_int
         fig.subplots_adjust(left=0.2, bottom=0.2, wspace=0.6, hspace=0.6)
     else:
         fig.subplots_adjust(left=0.15, bottom=0.15, wspace=0.1, hspace=0.1)
+
+    if text_lines is not None:
+        for i,text_line in enumerate(text_lines):
+            plt.annotate(text_line, (0.5, 0.9-0.05*i),
+                        xycoords="figure fraction", annotation_clip=False, 
+                        horizontalalignment="left", verticalalignment="center", fontsize=7)
 
     print("Saving figure...")
     fig.savefig( image_out )

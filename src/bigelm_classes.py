@@ -1,4 +1,5 @@
 from __future__ import print_function, division
+from collections import OrderedDict as OD
 import numpy as np
 
 
@@ -68,7 +69,7 @@ class Bigelm_grid(object):
         self.n_gridpoints = np.product( self.shape )
         # Initialise a dictionary to hold the n-dimensional
         # model grid for each emission line:
-        self.grids = {}
+        self.grids = OD()
 
 
 

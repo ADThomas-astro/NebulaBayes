@@ -19,7 +19,9 @@ to 1D and 2D marginalised posteriors, and do Bayesian parameter estimation.
 
 def calculate_posterior(Grid_container, Obs_Container, log_prior_func):
     """
-    Calculate the posterior over the entire N-D grid at once using Bayes' Theorem.
+    Calculate the posterior over the entire N-D grid at once using Bayes'
+    Theorem.  The emission line grids are interpolated prior to calculating
+    the posterior.
     """
     # Use systematic uncertainty in modelled fluxes, as in Blanc et al.
     epsilon = 0.15 # dex.  Default is 0.15 dex systematic uncertainty
@@ -39,11 +41,11 @@ def calculate_posterior(Grid_container, Obs_Container, log_prior_func):
     lines_list = Obs_Container.lines_list
     obs_fluxes = Obs_Container.obs_fluxes
     obs_flux_errors = Obs_Container.obs_flux_errors
-    grids = Grid_container.Raw_grids.grids
+    grids = Grid_container.Interpd_grids.grids
 
     # Calculate likelihood:
     # Initialise likelihood with 1 everywhere (multiplictive identity)
-    log_likelihood = np.zeros(Grid_container.Raw_grids.shape, dtype="float")
+    log_likelihood = np.zeros(Grid_container.Interpd_grids.shape, dtype="float")
     for i, emission_line in enumerate(lines_list):
         # Use a log version of equation 3 on pg 4 of Blanc et al. 2015 (IZI)
         # N.B. var is the sum of variances due to both the measured and modelled fluxes
@@ -71,8 +73,8 @@ def uniform_prior(Grid_container):
     Grid_container: Contains details of the input model grid
     Returns an array of the value of a uniform prior over the grid.
     """
-    ranges = [(a.max() - a.min()) for a in Grid_container.Raw_grids.val_arrs]
-    prior = np.ones(Grid_container.Raw_grids.shape, dtype="float")
+    ranges = [(a.max() - a.min()) for a in Grid_container.Interpd_grids.val_arrs]
+    prior = np.ones(Grid_container.Interpd_grids.shape, dtype="float")
     prior /=  np.product( ranges )
     return prior
 
@@ -302,6 +304,56 @@ def make_parameter_estimate_table(marginalised_posteriors_1D, val_arrs_dict):
     # Sort DF before returning, so DF is deterministic (note Upper and lower
     # case parame names are sorted into separate sections)
     return DF_estimates.sort_values(by="Parameter")
+
+
+def make_posterior_peak_table(posterior, Interpd_grids, lines_list, obs_fluxes,
+                                                               obs_flux_errors):
+    """
+    Make a pandas dataframe containing observed emission lines and model fluxes
+    for the model corresponding to the peak in the posterior.
+    """
+    inds_max = np.unravel_index(posterior.argmax(), posterior.shape)
+    grid_fluxes_max = [Interpd_grids.grids[line][inds_max] for line in lines_list]
+    OD_1 = OD([ ("Line",lines_list), ("Model_flux",grid_fluxes_max),
+                ("Obs_flux",obs_fluxes), ("Obs_flux_err",obs_flux_errors)  ])
+    DF_peak = pd.DataFrame( OD_1 )
+    DF_peak["Obs_S/N"] = DF_peak["Model_flux"] / DF_peak["Obs_flux_err"]
+    DF_peak.set_index("Line", inplace=True)
+    return DF_peak
+
+
+
+def calculate_chi2(DF_peak):
+    """
+    Calculate chi2 between model and observations for the model corresponding to
+    the peak in the posterior.
+    """
+    DF_peak["chi2_working"] = ( (DF_peak["Obs_flux"] - DF_peak["Model_flux"])**2
+                                 / DF_peak["Obs_flux_err"]**2  )
+    chi2 = DF_peak["chi2_working"].sum()
+    chi2 /= len(DF_peak) # This is the reduced chi-squared
+    return chi2
+
+
+# def calculate_posterior_stats(posterior, proportions=None):
+#     """
+#     For each value k in proportions, calculate the fraction of the posterior
+#     volume that has a value higher the k times the maximum value of the posterior.
+#     proportions: sequence of floats in range [0,1]
+#     Returns a list of floats corresponding to the input proportions.
+#     """
+#     if proportions is None:
+#         proportions = np.arange(0.05, 1.02, 0.05)
+
+#     p_max = np.max( posterior )
+#     n_posterior = posterior.size
+
+#     results = np.zeros(proportions.size)
+#     for k in proportions:
+#         results.append( np.sum( posterior > k*p_max ) / n_posterior )
+
+#     return results
+
 
 
 

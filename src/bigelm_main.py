@@ -12,7 +12,7 @@ from collections import OrderedDict as OD
 
 
 """
-Adam D. Thomas 2015 - 2016
+Adam D. Thomas 2015 - 2017
 
 """
 
@@ -83,19 +83,17 @@ def run_bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
                           The figure will only be generated and saved if this keyword parameter is specified.
     table_out:            A filename for a csv file containing Bayesian parameter
                           estimates for the grid.
-    output_grids:         A Boolean, False by default.  If True, the outputted Results object will
-                          contain the raw grids ("Raw_grids") object as an
-                          as attribute.
+    output_grids:         A Boolean, True by default.  If True, the outputted Results object will
+                          contain the raw grids ("Raw_grids") object and interpolated grids object as
+                          attributes.
                           The Raw_grids object is an instance of the Bigelm_grid class defined in this module.
-    # interpd_grid_shape:   A tuple of integers, giving the size of each dimension of the interpolated
-    #                       grid.  The order of the integers corresponds to the order of parameters in grid_params.
-    #                       The default is 30 gridpoints along each dimension.  Note that the number of
-    #                       interpolated gridpoints entered in interpd_grid_shape
-    #                       may have a major impact on the speed of the program.
-    #                       This keyword may only be supplied if the "Grid_container" keyword is not used.
-    #                       Will be passed to function initialise_grids.
-    n_interp_pts:         Number of interpolated points for 1D and 2D marginalised
-                          posteriors and parameter estimation; default 100
+    interpd_grid_shape:   A tuple of integers, giving the size of each dimension of the interpolated
+                          grid.  The order of the integers corresponds to the order of parameters in grid_params.
+                          The default is 30 gridpoints along each dimension.  Note that the number of
+                          interpolated gridpoints entered in interpd_grid_shape
+                          may have a major impact on the speed of the program.
+                          This keyword may only be supplied if the "Grid_container" keyword is not used.
+                          Will be passed to function initialise_grids.
     param_display_names:  A dictionary of display names for grid parameters, for plotting purposes.
                           A dictionary key is the parameter name in the grid file, and the corresponding
                           value its display name.
@@ -170,9 +168,11 @@ def run_bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
         Grid_container = Bigelm_container()
         Grid_container.Params    = In_results.Params
         Grid_container.Raw_grids = In_results.Raw_grids
-        Grid_container.flux_interpolators = In_results.flux_interpolators
+        # Grid_container.flux_interpolators = In_results.flux_interpolators
+        Grid_container.Interpd_grids = In_results.Interpd_grids
         Params = Grid_container.Params
         Raw_grids = Grid_container.Raw_grids
+        Interpd_grids = Grid_container.Interpd_grids
         # We ignore the other attributes of the In_results object.
 
         # Check that all emission lines in input are also in grids:
@@ -196,18 +196,22 @@ def run_bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
             raise ValueError("grid_params must be provided if " + 
                              "Grid_container is not provided"   )
 
-        # interpd_grid_shape = None # Default to pass into XXX function
-        # # Determine if a custom interpolated grid shape was specified:
-        # if "interpd_grid_shape" in kwargs:
-        #     interpd_grid_shape = kwargs.pop("interpd_grid_shape")
+        interpd_grid_shape = [15]*len(grid_params) # Default 
+        # Determine if a custom interpolated grid shape was specified:
+        if "interpd_grid_shape" in kwargs:
+            interpd_grid_shape = kwargs.pop("interpd_grid_shape")
+            if len(interpd_grid_shape) != Params.n_params:
+                raise ValueError("interpd_grid_shape should contain exactly "
+                                 "one integer for each parameter" )
 
 
         # Call grid initialisation:
         Grid_container = bigelm_grid_interpolation.initialise_grids(grid_file,
-                                                  grid_params, lines_list)
-        # Grid_container has attributes Params and Raw_grids
+                                    grid_params, lines_list, interpd_grid_shape)
+        # Grid_container has attributes Params, Raw_grids and Interpd_grids
         Params = Grid_container.Params
         Raw_grids = Grid_container.Raw_grids
+        Interpd_grids = Grid_container.Interpd_grids
 
     #------------------------------------------------------------------------
     # Now the Grid_container and Params and Raw_grids are defined.
@@ -228,7 +232,7 @@ def run_bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
         table_out = kwargs.pop("table_out")
 
     # Determine if we should include the model flux grids in the output:
-    output_grids = False # Default - don't include raw and interpolated grids in output
+    output_grids = True # Default - do include raw and interpolated grids in output
     if "output_grids" in kwargs: # If output_grids was specified
         output_grids = kwargs.pop("output_grids")
 
@@ -244,9 +248,9 @@ def run_bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
     # if "chainplot" in kwargs:
     #     chainplot = kwargs.pop("chainplot")
 
-    n_interp_pts = 100 # Default
-    if "n_interp_pts" in kwargs: # If n_interp_pts was specified
-        n_interp_pts = kwargs.pop("n_interp_pts")
+    # n_interp_pts = 100 # Default
+    # if "n_interp_pts" in kwargs: # If n_interp_pts was specified
+    #     n_interp_pts = kwargs.pop("n_interp_pts")
 
     # Ensure there aren't any remaining keyword arguments that we haven't used:
     if len(kwargs) != 0:
@@ -273,26 +277,35 @@ def run_bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
     # Marginalise (and normalise) posterior
     marginalised_posteriors_1D, marginalised_posteriors_2D, posterior = \
                        bigelm_posterior.marginalise_posterior(posterior, Params,
-                                                             Raw_grids.val_arrs)
+                                                         Interpd_grids.val_arrs)
 
-    # Interpolate 1D and 2D posteriors
-    posteriors_1D_interp, posteriors_2D_interp, param_val_arrs_interp = \
-            bigelm_grid_interpolation.interpolate_posteriors(Raw_grids, Params,
-           marginalised_posteriors_1D, marginalised_posteriors_2D, n_interp_pts)
+    # # Interpolate 1D and 2D posteriors
+    # posteriors_1D_interp, posteriors_2D_interp, param_val_arrs_interp = \
+    #         bigelm_grid_interpolation.interpolate_posteriors(Interpd_grids, Params,
+    #                      marginalised_posteriors_1D, marginalised_posteriors_2D)
 
+    posteriors_1D_interp = marginalised_posteriors_1D
+    posteriors_2D_interp = marginalised_posteriors_2D
+    param_val_arrs_interp = Interpd_grids.val_arrs
+    interp_arr_dict = OD([(p,a) for p,a in zip(Params.names,param_val_arrs_interp)])
     #--------------------------------------------------------------------------
     # Do Bayesian parameter estimation
     DF_estimates = bigelm_posterior.make_parameter_estimate_table(
-                                    posteriors_1D_interp, param_val_arrs_interp)
+                                            posteriors_1D_interp, interp_arr_dict)
     if table_out is not None:  # Save out if requested
         DF_estimates.to_csv(table_out, index=False, float_format='%.5f')
 
     #--------------------------------------------------------------------------
     # Plot a corner plot if requested
     if image_out != None: # Only do plotting if an image name was specified:
-        bigelm_plotting.plot_marginalised_posterior(image_out, Params,
-                                Raw_grids, param_val_arrs_interp, 
-                                    posteriors_1D_interp, posteriors_2D_interp)
+        DF_peak = bigelm_posterior.make_posterior_peak_table(posterior,
+                         Interpd_grids, lines_list, obs_fluxes, obs_flux_errors)
+        chi2 = bigelm_posterior.calculate_chi2(DF_peak)
+        plot_text = "chi^2_r at posterior peak = {0:.2f}\n\n".format(chi2)
+        plot_text += str(DF_peak)
+        bigelm_plotting.plot_marginalised_posterior(image_out, Params, Raw_grids,
+                                interp_arr_dict, posteriors_1D_interp,
+                                posteriors_2D_interp, plot_text)
         
         # # MCMC corner plot
         # samples = sampler.flatchain.reshape((-1, Raw_grids.ndim))
@@ -311,9 +324,10 @@ def run_bigelm(obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
     # Results.posterior = posterior
     if output_grids:
         Results.Raw_grids = Raw_grids
+        Results.Interpd_grids = Interpd_grids
+
     print("Bigelm finished.")
     return Results
-
 
 
 
