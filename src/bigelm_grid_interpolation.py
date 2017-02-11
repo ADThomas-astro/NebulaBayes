@@ -171,7 +171,7 @@ def interpolate_flux_arrays(Raw_grids, Params, interpd_shape):
     bad "overshoots" in interpolation).
 
     """
-    print("Interpolating model emission line flux grids to shape {0}...".format(interpd_shape))
+    print("Interpolating model emission line flux grids to shape {0}...".format(tuple(interpd_shape)))
 
     # Initialise Bigelm_grid object for interpolated arrays
     val_arrs_interp = []

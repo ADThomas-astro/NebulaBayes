@@ -156,10 +156,10 @@ def plot_marginalised_posterior(image_out, Params, Raw_grids, param_val_arrs_int
         fig.subplots_adjust(left=0.15, bottom=0.15, wspace=0.1, hspace=0.1)
 
     if text_lines is not None:
-        for i,text_line in enumerate(text_lines):
-            plt.annotate(text_line, (0.5, 0.9-0.05*i),
-                        xycoords="figure fraction", annotation_clip=False, 
-                        horizontalalignment="left", verticalalignment="center", fontsize=7)
+        plt.annotate(text_lines, (0.48, 0.94),
+                    xycoords="figure fraction", annotation_clip=False, 
+                    horizontalalignment="left", verticalalignment="top", 
+                    family="monospace", fontsize=9)
 
     print("Saving figure...")
     fig.savefig( image_out )

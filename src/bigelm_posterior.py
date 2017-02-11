@@ -328,9 +328,9 @@ def calculate_chi2(DF_peak):
     Calculate chi2 between model and observations for the model corresponding to
     the peak in the posterior.
     """
-    DF_peak["chi2_working"] = ( (DF_peak["Obs_flux"] - DF_peak["Model_flux"])**2
+    chi2_working = ( (DF_peak["Obs_flux"] - DF_peak["Model_flux"])**2
                                  / DF_peak["Obs_flux_err"]**2  )
-    chi2 = DF_peak["chi2_working"].sum()
+    chi2 = np.sum(chi2_working.values)
     chi2 /= len(DF_peak) # This is the reduced chi-squared
     return chi2
 
