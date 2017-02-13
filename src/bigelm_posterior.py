@@ -17,11 +17,26 @@ to 1D and 2D marginalised posteriors, and do Bayesian parameter estimation.
 """
 
 
-def calculate_posterior(Grid_container, Obs_Container, log_prior_func):
+
+
+def calculate_posterior(Grid_container, Obs_Container, log_prior_func, deredden):
+    """
+    Wrapper to delegate calculating posterior to the correct function
+    """
+    if deredden:
+        posterior = calculate_posterior_no_dered(Grid_container, Obs_Container, log_prior_func)
+    else:
+        posterior = calculate_posterior_dered(Grid_container, Obs_Container, log_prior_func)
+
+    return posterior
+
+
+
+def calculate_posterior_no_dered(Grid_container, Obs_Container, log_prior_func):
     """
     Calculate the posterior over the entire N-D grid at once using Bayes'
     Theorem.  The emission line grids are interpolated prior to calculating
-    the posterior.
+    the posterior.  The input observation have already been dereddened.
     """
     # Use systematic uncertainty in modelled fluxes, as in Blanc et al.
     epsilon = 0.15 # dex.  Default is 0.15 dex systematic uncertainty
@@ -38,18 +53,17 @@ def calculate_posterior(Grid_container, Obs_Container, log_prior_func):
     # fluxes already normalised to Hbeta.  In izi.pro the default is 0.15 dex,
     # but the default is given as 0.1 dex in the Blanc+15 paper.
 
-    lines_list = Obs_Container.lines_list
     obs_fluxes = Obs_Container.obs_fluxes
     obs_flux_errors = Obs_Container.obs_flux_errors
-    grids = Grid_container.Interpd_grids.grids
 
     # Calculate likelihood:
     # Initialise likelihood with 1 everywhere (multiplictive identity)
     log_likelihood = np.zeros(Grid_container.Interpd_grids.shape, dtype="float")
-    for i, emission_line in enumerate(lines_list):
+    for i, emission_line in enumerate(Obs_Container.lines_list):
         # Use a log version of equation 3 on pg 4 of Blanc et al. 2015 (IZI)
         # N.B. var is the sum of variances due to both the measured and modelled fluxes
-        pred_flux_i = grids[emission_line] # N-D array of predicted fluxes (must be non-negative)
+        # N-D array of predicted fluxes (must be non-negative):
+        pred_flux_i = Grid_container.Interpd_grids.grids[emission_line]
         var = obs_flux_errors[i]**2 + (epsilon_2 * pred_flux_i)**2
         log_likelihood += ( - (( obs_fluxes[i] - pred_flux_i )**2 / 
                                  ( 2.0 * var ))  -  0.5*np.log( var ) )
@@ -63,7 +77,87 @@ def calculate_posterior(Grid_container, Obs_Container, log_prior_func):
     log_prior = log_prior_func(Grid_container)
     posterior = log_likelihood + log_prior  # Bayes theorem
     posterior -= posterior.max() # "Normalise" so we can return to linear space
-    return 10**posterior  # Return linear posterior N-D array
+    return np.exp(posterior)  # Return linear posterior N-D array
+
+
+
+def calculate_posterior_dered(Grid_container, Obs_Container, log_prior_func):
+    """
+    Calculate the posterior over the entire N-D grid at once using Bayes'
+    Theorem.  The emission line grids are interpolated prior to calculating
+    the posterior.  We add a dimension corresponding to extinction, and we
+    correct observation for extinction before comparing to models to calculate
+    posterior.
+    """
+    extinctions = [0, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 1.25, 1.5, 1.75,
+                    2.0, 2.3, 2.6, 3.0, 3.5, 4.0, 4.5, 5.0]
+    # Extinctions from A_v = 0 mag to A_v = 5 mag.
+
+    # Use systematic uncertainty in modelled fluxes, as in Blanc et al.
+    epsilon = 0.15 # dex.  Default is 0.15 dex systematic uncertainty
+    # Convert from dex to a scaling factor:
+    epsilon_2 = 10**epsilon - 1  # This gives a factor of 0.41 for epsilon=0.15 dex
+    # epsilon_2 is a scaling factor to go from a linear modelled flux to an
+    # associated systematic error
+    # Note the original from izi.pro is equivalent to:
+    # epsilon_2 = epsilon * np.log(10)
+    # This gives 0.345 for epsilon=0.15 dex. I don't understand this.
+    # Why was a log used?  And a log base e?  This is surely wrong.
+    # What is intended by this formula anyway?
+    # Note that epsilon_2 is the assumed factional systematic error in the model
+    # fluxes already normalised to Hbeta.  In izi.pro the default is 0.15 dex,
+    # but the default is given as 0.1 dex in the Blanc+15 paper.
+
+    obs_fluxes = Obs_Container.obs_fluxes
+    obs_flux_errors = Obs_Container.obs_flux_errors
+    obs_wavelengths = Obs_Container.obs_wavelengths
+
+    # Initialise likelihood with 1 everywhere (multiplictive identity)
+    posterior_shape = tuple(Grid_container.Interpd_grids.shape) + (len(extinctions),)
+    log_likelihood = np.zeros(posterior_shape, dtype="float")
+    # The last axis is the extinction axis
+    for j, A_v in enumerate(extinctions):
+        # Calculate likelihood:
+        for i, emission_line in enumerate(Obs_Container.lines_list):
+            # Deredden emission lines
+            dered_flux_i, dered_flux_err_i = deredden_flux(obs_wavelengths[i],
+                                         obs_fluxes[i], obs_flux_errors[i], A_v)
+
+            # Use a log version of equation 3 on pg 4 of Blanc et al. 2015 (IZI)
+            # N.B. var is the sum of variances due to both the measured and modelled fluxes
+            # N-D array of predicted fluxes (must be non-negative):
+            pred_flux_i = Grid_container.Interpd_grids.grids[emission_line]
+            var = dered_flux_err_i**2 + (epsilon_2 * pred_flux_i)**2
+            log_likelihood[...,j] += ( - (( dered_flux_i - pred_flux_i )**2 / 
+                                            ( 2.0 * var ))  -  0.5*np.log( var ) )
+            # N.B. "log" is base e
+
+    log_likelihood += np.log(2 * np.pi)
+
+    # Note: ??????? The parameter space, space of measurements and space of predictions are all continuous.
+    # Each value P in the posterior array is differential, i.e. P*dx = (posterior)*dx
+    # for a vector of parameters x.  # ???????????????? ADT - I don't understand my own note
+
+    log_prior = log_prior_func(Grid_container)
+    posterior = log_likelihood + log_prior  # Bayes theorem
+    posterior -= posterior.max() # "Normalise" so we can return to linear space
+    return np.exp(posterior)  # Return linear posterior N-D array
+
+
+
+def deredden_flux(obs_wavelength, obs_flux, obs_flux_err, A_v):
+    """
+    De-redded a flux
+    obs_wavelength: Wavelength of input emission line in Angstroem
+    obs_flux: Emission line flux relative to Hbeta=1
+    obs_flux_err: Error in emission line flux, relative to Hbeta=1
+    A_v: Extinction in magnitudes
+    """
+
+    # FILL ME IN!
+
+    return obs_flux, obs_flux_err
+
 
 
 

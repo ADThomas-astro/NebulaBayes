@@ -38,7 +38,8 @@ Bigelm is heavily based on IZI (Blanc+2015).
 #============================================================================
 class Bigelm_model(object):
     """
-    Primary class for working with Bigelm.
+    Primary class for working with Bigelm.  To use, initialise a class instance
+    with a grid and then call the instance to run Bayesian parameter estimation.
     """
 
     def __init__(self, grid_file, grid_params, lines_list, interpd_grid_shape=None):
@@ -89,9 +90,9 @@ class Bigelm_model(object):
 
 
 
-    def run(self, obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
+    def __call__(self, obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
         """
-        Run BIGELM using the grids saved in this Bigelm_model object.
+        Run BIGELM Bayesian parameter estimation using the grids saved in this Bigelm_model object.
         Required arguments:
         obs_fluxes:         list or array of observed emission-line fluxes
                             normalised to Hbeta
@@ -99,6 +100,11 @@ class Bigelm_model(object):
         obs_emission_lines: a list of corresponding emission line names as strings
         
         Optional additional keyword arguments:
+        deredden:             Add a parameter to the grid that is the extinction of
+                              the observed fluxes.  The model grid fluxes will
+                              be compared with reddening-corrected observed fluxes.  Default False.
+        obs_wavelengths:      If deredden=True, you must also supply a list of wavelengths (Angstroems)
+                              associated with obs_fluxes.  Default None.
         image_out:            A filename for saving out a results image of 2D and 1D marginalised posterior pdfs.
                               The figure will only be generated and saved if this keyword parameter is specified.
         table_out:            A filename for a csv file containing Bayesian parameter
@@ -169,16 +175,21 @@ class Bigelm_model(object):
             for x in custom_display_names:
                 Params.display_names[x] = custom_display_names[x] # Override default
 
-        image_out = None # Default - no plotting if image_out==None
-        if "image_out" in kwargs: # If it was specified, we'll save a plot.
-            image_out = kwargs.pop("image_out")
-
-        table_out = None # Default - don't save table if table_out==None
-        if "table_out" in kwargs: # If it was specified, we'll save a plot.
-            table_out = kwargs.pop("table_out")
+        # Deredden observed fluxes and have extra grid parameter for extinction?
+        deredden = kwargs.pop("deredden", False)
+        # Observed wavelengths?
+        obs_wavelengths = kwargs.pop("obs_wavelengths", None)
+        if deredden and (obs_wavelengths is None):
+            raise ValueError("Must supply obs_wavelengths if deredden=True")
+        if len(obs_wavelengths) != n_measured:
+            raise ValueError("obs_wavelengths must have same length as obs_fluxes")
+        # Output corner plot image: Default is no plotting (None)
+        image_out = kwargs.pop("image_out", None)
+        # Output parameter estimate table: Default is no plotting (None)
+        table_out = kwargs.pop("table_out", None)
 
         # Ensure there aren't any remaining keyword arguments that we haven't used:
-        if len(kwargs) != 0:
+        if len(kwargs) > 0:
             raise ValueError( "Unknown or unnecessary keyword argument(s) " +
                               str(kwargs.keys())[1:-1] )
 
@@ -187,11 +198,13 @@ class Bigelm_model(object):
         Obs_Container.lines_list = lines_list
         Obs_Container.obs_fluxes = obs_fluxes
         Obs_Container.obs_flux_errors = obs_flux_errors
+        Obs_Container.obs_wavelengths = obs_wavelengths
 
         #--------------------------------------------------------------------------
         # Calculate N-dimensional posterior array
         posterior = bigelm_posterior.calculate_posterior(self.Grid_container,
-                            Obs_Container, log_prior_func=bigelm_posterior.uniform_prior)
+                            Obs_Container, deredden=deredden,
+                            log_prior_func=bigelm_posterior.uniform_prior)
 
         #--------------------------------------------------------------------------
         # Marginalise (and normalise) posterior
