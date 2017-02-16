@@ -5,6 +5,7 @@ import numpy as np  # Core numerical library
 import pandas as pd
 from scipy.integrate import cumtrapz
 from scipy.signal import argrelextrema
+from .src.bigelm_dereddening import deredden
 
 
 
@@ -19,16 +20,29 @@ to 1D and 2D marginalised posteriors, and do Bayesian parameter estimation.
 
 
 
-def calculate_posterior(Grid_container, Obs_Container, log_prior_func, deredden):
+def calculate_posterior(Grid_container, Obs_Container, log_prior_func, A_v_vals):
     """
-    Wrapper to delegate calculating posterior to the correct function
+    Delegate calculating posterior to the correct function, and return an object
+    instance that contains information about the posterior.
     """
-    if deredden:
-        posterior = calculate_posterior_no_dered(Grid_container, Obs_Container, log_prior_func)
-    else:
-        posterior = calculate_posterior_dered(Grid_container, Obs_Container, log_prior_func)
+    Result = object() # Object instance that will end up holding all the results
+    if A_v_vals is not None: # Add a dimension!
+        # The posterior will have a dimension appended for "extinction"
+        Result.posterior = calculate_posterior_dered(Grid_container,
+                                        Obs_Container, log_prior_func, A_v_vals)
+        Result.val_arrs = Grid_container.Interpd_grids.val_arrs + [A_v_vals]
+        Result.Params = object()
+        Result.Params.names = Grid_container.Params.grid_params + ["A_v"]
+        Result.Params.n_params = len(Result.Params.names)
 
-    return posterior
+    else: # Number of dimensions remains the same
+        Result.posterior = calculate_posterior_no_dered(Grid_container,
+                                                Obs_Container, log_prior_func)
+        Result.val_arrs = Grid_container.Interpd_grids.val_arrs
+        Result.Params = Grid_container.Params
+
+    Result.arr_dict = OD([(p,a) for p,a in zip(Result.Params.names,Result.val_arrs)])
+    return Result
 
 
 
@@ -36,7 +50,7 @@ def calculate_posterior_no_dered(Grid_container, Obs_Container, log_prior_func):
     """
     Calculate the posterior over the entire N-D grid at once using Bayes'
     Theorem.  The emission line grids are interpolated prior to calculating
-    the posterior.  The input observation have already been dereddened.
+    the posterior.  The input observations have already been dereddened.
     """
     # Use systematic uncertainty in modelled fluxes, as in Blanc et al.
     epsilon = 0.15 # dex.  Default is 0.15 dex systematic uncertainty
@@ -81,17 +95,14 @@ def calculate_posterior_no_dered(Grid_container, Obs_Container, log_prior_func):
 
 
 
-def calculate_posterior_dered(Grid_container, Obs_Container, log_prior_func):
+def calculate_posterior_dered(Grid_container, Obs_Container, log_prior_func, A_v_vals):
     """
     Calculate the posterior over the entire N-D grid at once using Bayes'
     Theorem.  The emission line grids are interpolated prior to calculating
     the posterior.  We add a dimension corresponding to extinction, and we
-    correct observation for extinction before comparing to models to calculate
+    correct observations for extinction before comparing to models to calculate
     posterior.
     """
-    extinctions = [0, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 1.25, 1.5, 1.75,
-                    2.0, 2.3, 2.6, 3.0, 3.5, 4.0, 4.5, 5.0]
-    # Extinctions from A_v = 0 mag to A_v = 5 mag.
 
     # Use systematic uncertainty in modelled fluxes, as in Blanc et al.
     epsilon = 0.15 # dex.  Default is 0.15 dex systematic uncertainty
@@ -113,15 +124,15 @@ def calculate_posterior_dered(Grid_container, Obs_Container, log_prior_func):
     obs_wavelengths = Obs_Container.obs_wavelengths
 
     # Initialise likelihood with 1 everywhere (multiplictive identity)
-    posterior_shape = tuple(Grid_container.Interpd_grids.shape) + (len(extinctions),)
+    posterior_shape = tuple(Grid_container.Interpd_grids.shape) + (len(A_v_vals),)
     log_likelihood = np.zeros(posterior_shape, dtype="float")
     # The last axis is the extinction axis
-    for j, A_v in enumerate(extinctions):
+    for j, A_v in enumerate(A_v_vals):
         # Calculate likelihood:
         for i, emission_line in enumerate(Obs_Container.lines_list):
             # Deredden emission lines
-            dered_flux_i, dered_flux_err_i = deredden_flux(obs_wavelengths[i],
-                                         obs_fluxes[i], obs_flux_errors[i], A_v)
+            dered_flux_i, dered_flux_err_i = deredden(obs_wavelengths[i],
+                                    obs_fluxes[i], obs_flux_errors[i], A_v=A_v)
 
             # Use a log version of equation 3 on pg 4 of Blanc et al. 2015 (IZI)
             # N.B. var is the sum of variances due to both the measured and modelled fluxes
@@ -145,22 +156,6 @@ def calculate_posterior_dered(Grid_container, Obs_Container, log_prior_func):
 
 
 
-def deredden_flux(obs_wavelength, obs_flux, obs_flux_err, A_v):
-    """
-    De-redded a flux
-    obs_wavelength: Wavelength of input emission line in Angstroem
-    obs_flux: Emission line flux relative to Hbeta=1
-    obs_flux_err: Error in emission line flux, relative to Hbeta=1
-    A_v: Extinction in magnitudes
-    """
-
-    # FILL ME IN!
-
-    return obs_flux, obs_flux_err
-
-
-
-
 def uniform_prior(Grid_container):
     """
     Return the natural logarithm of a uniform prior.
@@ -174,13 +169,14 @@ def uniform_prior(Grid_container):
 
 
 
-
-def marginalise_posterior(posterior, Params, val_arrs):
+def marginalise_posterior(Result):
     """
     Calculate normalised 1D and 2D posterior for all possible combinations of
-    parameters.
+    parameters.  We modify the Result object.
     """
-    spacing = [ (v[1] - v[0]) for v in val_arrs ] # In order of params/dimensions
+    spacing = [ (v[1] - v[0]) for v in Result.val_arrs ] # In order of params/dimensions
+    Params = Result.Params
+    n = Params.n_params
     #--------------------------------------------------------------------------
     # Calculate the 2D marginalised posterior pdf for every possible combination
     # of 2 parameters
@@ -191,7 +187,7 @@ def marginalise_posterior(posterior, Params, val_arrs):
     #                        ('BBBP','UH_at_r_inner'), ('Gamma','NT_frac'),
     #                        ('Gamma','UH_at_r_inner'), ('NT_frac','UH_at_r_inner')]
     # Corresponding list of possible combinations of two parameter indices:
-    Params.double_indices = list( itertools.combinations( np.arange(Params.n_params), 2) )
+    Params.double_indices = list( itertools.combinations( np.arange(n), 2) )
     # Looks something like: [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)]
     # Note that the order of indices in each tuple is from samller to larger
     
@@ -200,13 +196,13 @@ def marginalise_posterior(posterior, Params, val_arrs):
     # Iterate over all possible pairs of parameters:
     for double_name, param_inds_double in zip(Params.double_names, Params.double_indices):
         # Generate list of indices/dimensions/parameters to integrate over:
-        inds_for_integration = np.arange( Params.n_params ).tolist()  # Initialise
+        inds_for_integration = np.arange(n).tolist()  # Initialise
         inds_for_integration.remove( param_inds_double[0] )
         inds_for_integration.remove( param_inds_double[1] )
         inds_for_integration.reverse() # Ensure we integrate over higher dimensions first,
         # so dimension index numbers are still valid after each integration.
 
-        marginalised_posteriors_2D[double_name] = posterior.copy()  # Initialise
+        marginalised_posteriors_2D[double_name] = Result.posterior.copy()  # Initialise
         # Keep integrating one dimension at a time until the result only has 2 dimensions:
         for param_index in inds_for_integration:
             # Integrate over this dimension (parameter), using the trapezoidal rule
@@ -258,13 +254,13 @@ def marginalise_posterior(posterior, Params, val_arrs):
         marginalised_posteriors_1D[param] /= integral
     # Now normalise the full posterior, since we output it and the user
     # might want it normalised:
-    posterior /= integral
+    Result.posterior /= integral
 
-    return marginalised_posteriors_1D, marginalised_posteriors_2D, posterior
+    Result.marginalised_posteriors_2D = marginalised_posteriors_2D
+    Result.marginalised_posteriors_1D = marginalised_posteriors_1D
 
 
 
-#============================================================================
 def do_single_parameter_estimate(param_name, val_arr, posterior_1D):
     """
     Bayesian parameter estimate for a single parameter, including the credible
@@ -356,8 +352,7 @@ def do_single_parameter_estimate(param_name, val_arr, posterior_1D):
 
 
 
-#============================================================================
-def make_parameter_estimate_table(marginalised_posteriors_1D, val_arrs_dict):
+def make_parameter_estimate_table(Result):
     """
     Do Bayesian parameter estimation for all parameters in the grid.
     marginalised_posteriors_1D: Dicionary mapping parameter names to 1D numpy
@@ -368,12 +363,9 @@ def make_parameter_estimate_table(marginalised_posteriors_1D, val_arrs_dict):
     Returns a pandas DataFrame with a row for each parameter.
     """
     print("Calculating parameter estimates...")
-    # Initialise and do some checks:
-    n_params = len(marginalised_posteriors_1D)
-    assert n_params == len(val_arrs_dict)
-
     # Initialise DataFrame to hold results
     # DataFrame columns and types:
+    n = Result.Params.n_params
     columns = [("Parameter", np.str),  ("Estimate", np.float),
                ("CI68_low", np.float), ("CI68_high", np.float),
                ("CI95_low", np.float), ("CI95_high", np.float),
@@ -383,37 +375,49 @@ def make_parameter_estimate_table(marginalised_posteriors_1D, val_arrs_dict):
                ("P(lower)>50%?", np.str), ("P(upper)>50%?", np.str),
                ("n_local_maxima", np.int)]
     DF_estimates = pd.DataFrame( OD(
-                           [(c, np.zeros(n_params, dtype=t)) for c,t in columns]
+                                  [(c, np.zeros(n, dtype=t)) for c,t in columns]
                                     )   )
     for col in [col for col,t in columns if t==np.float]:
         DF_estimates.loc[:,col] = np.nan
     DF_estimates.loc[:,"n_local_maxima"] = -1
 
-    for i, (param_name,posteriors_1D) in enumerate(marginalised_posteriors_1D.items()):
-        val_arr = val_arrs_dict[param_name]
-        p_dict = do_single_parameter_estimate(param_name, val_arr, posteriors_1D)
+    for i, (p,posterior_1D) in enumerate(Result.marginalised_posteriors_1D.items()):
+        val_arr = Result.arr_dict[p]
+        p_dict = do_single_parameter_estimate(p, val_arr, posterior_1D)
         for field, value in p_dict.items():
             DF_estimates.loc[i,field] = value
 
     # Sort DF before returning, so DF is deterministic (note Upper and lower
     # case parame names are sorted into separate sections)
-    return DF_estimates.sort_values(by="Parameter")
+    Result.DF_estimates = DF_estimates.sort_values(by="Parameter")
 
 
-def make_posterior_peak_table(posterior, Interpd_grids, lines_list, obs_fluxes,
-                                                               obs_flux_errors):
+
+def make_posterior_peak_table(Result, Obs_Container, Interpd_grids):
     """
     Make a pandas dataframe containing observed emission lines and model fluxes
     for the model corresponding to the peak in the posterior.
     """
-    inds_max = np.unravel_index(posterior.argmax(), posterior.shape)
-    grid_fluxes_max = [Interpd_grids.grids[line][inds_max] for line in lines_list]
-    OD_1 = OD([ ("Line",lines_list), ("Model_flux",grid_fluxes_max),
-                ("Obs_flux",obs_fluxes), ("Obs_flux_err",obs_flux_errors)  ])
+    inds_max = np.unravel_index(Result.posterior.argmax(), Result.posterior.shape)
+    lines_list = Obs_Container.lines_list
+    SN = Obs_Container.obs_fluxes / Obs_Container.obs_flux_errors
+    grid_dim = len(Interpd_grids.val_arrs)
+    grid_fluxes_max = [Interpd_grids.grids[l][inds_max[:grid_dim]] for l in lines_list]
+    is_dered = (Result.posterior.shape != grid_dim)
+    # is_dered is True if we've added an extra dimension for dereddening,
+    # False otherwise
+    if is_dered:
+        A_v = Result.val_arrs[-1][inds_max[-1]] # Extinction in magnitudes
+        obs_fluxes_dered = deredden(Obs_Container.obs_wavelengths,
+                                    Obs_Container.obs_fluxes, A_v=A_v)
+        OD_1 = OD([ ("Line",lines_list), ("Model_flux",grid_fluxes_max),
+                    ("Obs_flux_dered",obs_fluxes_dered)
+                    ("Obs_flux_raw",Obs_Container.obs_fluxes), ("Obs_S/N",SN) ])
+    else:
+        OD_1 = OD([ ("Line",lines_list), ("Model_flux",grid_fluxes_max),
+                    ("Obs_flux",Obs_Container.obs_fluxes), ("Obs_S/N",SN) ])
     DF_peak = pd.DataFrame( OD_1 )
-    DF_peak["Obs_S/N"] = DF_peak["Model_flux"] / DF_peak["Obs_flux_err"]
-    DF_peak.set_index("Line", inplace=True)
-    return DF_peak
+    Result.DF_peak = DF_peak.set_index("Line", inplace=True)
 
 
 

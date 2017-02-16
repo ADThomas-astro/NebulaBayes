@@ -5,7 +5,6 @@ import numpy as np  # Core numerical library
 # from . import bigelm_plotting
 from . import bigelm_grid_interpolation
 from . import bigelm_posterior
-from .bigelm_classes import Bigelm_container
 # from .corner import corner  # For MCMC
 from . import bigelm_plotting
 from collections import OrderedDict as OD
@@ -194,58 +193,52 @@ class Bigelm_model(object):
                               str(kwargs.keys())[1:-1] )
 
         #----------------------------------------------------------------------
-        Obs_Container = Bigelm_container()
+        Obs_Container = object()
         Obs_Container.lines_list = lines_list
         Obs_Container.obs_fluxes = obs_fluxes
         Obs_Container.obs_flux_errors = obs_flux_errors
         Obs_Container.obs_wavelengths = obs_wavelengths
 
-        #--------------------------------------------------------------------------
+        #----------------------------------------------------------------------
+        # Results = object()
+        # Results.Params = Params
+
+        # Results.marginalised_posteriors_1D = marginalised_posteriors_1D
+        # Results.marginalised_posteriors_2D = marginalised_posteriors_2D
         # Calculate N-dimensional posterior array
-        posterior = bigelm_posterior.calculate_posterior(self.Grid_container,
-                            Obs_Container, deredden=deredden,
+        # Extinctions from A_v = 0 mag to A_v = 5 mag.
+        extinctions = [0, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 1.25, 1.5, 1.75,
+                       2.0, 2.3, 2.6, 3.0, 3.5, 4.0, 4.5, 5.0] # A_v in mag
+        A_v_vals = extinctions if deredden==True else None   
+        Result = bigelm_posterior.calculate_posterior(self.Grid_container,
+                            Obs_Container, A_v_vals=A_v_vals,
                             log_prior_func=bigelm_posterior.uniform_prior)
 
-        #--------------------------------------------------------------------------
-        # Marginalise (and normalise) posterior
-        marginalised_posteriors_1D, marginalised_posteriors_2D, posterior = \
-                           bigelm_posterior.marginalise_posterior(posterior, Params,
-                                                             Interpd_grids.val_arrs)
-
-        posteriors_1D_interp = marginalised_posteriors_1D
-        posteriors_2D_interp = marginalised_posteriors_2D
-        param_val_arrs_interp = Interpd_grids.val_arrs
-        interp_arr_dict = OD([(p,a) for p,a in zip(Params.names,param_val_arrs_interp)])
+        #----------------------------------------------------------------------
+        # Marginalise (and normalise) posterior (modify Result object)
+        bigelm_posterior.marginalise_posterior(Result)
         
-        #--------------------------------------------------------------------------
+        #----------------------------------------------------------------------
         # Do Bayesian parameter estimation
-        DF_estimates = bigelm_posterior.make_parameter_estimate_table(
-                                                posteriors_1D_interp, interp_arr_dict)
+        bigelm_posterior.make_parameter_estimate_table(Result)
         if table_out is not None:  # Save out if requested
-            DF_estimates.to_csv(table_out, index=False, float_format='%.5f')
+            Result.DF_estimates.to_csv(table_out, index=False, float_format='%.5f')
 
-        #--------------------------------------------------------------------------
+        #----------------------------------------------------------------------
+        # Add a table of fluxes at the posterior peak to the results
+        bigelm_posterior.make_posterior_peak_table(Result,
+                                                   Obs_Container, Interpd_grids)
         # Plot a corner plot if requested
         if image_out != None: # Only do plotting if an image name was specified:
-            DF_peak = bigelm_posterior.make_posterior_peak_table(posterior,
-                             Interpd_grids, lines_list, obs_fluxes, obs_flux_errors)
-            chi2 = bigelm_posterior.calculate_chi2(DF_peak)
+            chi2 = bigelm_posterior.calculate_chi2(Result.DF_peak)
             plot_text = "chi^2_r at posterior peak = {0:.2f}\n\n\n".format(chi2)
             plot_text += "Observed fluxes vs. model fluxes at posterior peak\n"
-            plot_text += str(DF_peak)
-            bigelm_plotting.plot_marginalised_posterior(image_out, Params, Raw_grids,
-                                    interp_arr_dict, posteriors_1D_interp,
-                                    posteriors_2D_interp, plot_text)
+            plot_text += str(Result.DF_peak) # To print in a monospace font
+            bigelm_plotting.plot_marginalised_posterior(image_out, Raw_grids,
+                                                        Result, plot_text)
 
-        #--------------------------------------------------------------------------
-        Results = Bigelm_container()
-        Results.Params = Params
-        Results.DF_estimates = DF_estimates
-        Results.posterior = posterior
-        Results.marginalised_posteriors_1D = marginalised_posteriors_1D
-        Results.marginalised_posteriors_2D = marginalised_posteriors_2D
 
         print("Bigelm finished.")
-        return Results
+        return Result
 
 

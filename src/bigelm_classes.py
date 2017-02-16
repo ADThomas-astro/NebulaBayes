@@ -12,36 +12,6 @@ Adam D. Thomas 2015 - 2016
 """
 
 
-
-#============================================================================
-class Bigelm_container(object):
-    """
-        Simple class to hold bigelm inputs and outputs.
-        An instance of this class is returned by both the initialise_grids
-        function and by the bigelm function.
-    """
-
-
-#============================================================================
-class Grid_parameters(object):
-    """
-    Simple class to hold grid parameter names and lists derived from the names.
-    Only one instance of this class is used by bigelm, to hold the parameter
-    names for both the raw and interpolated model grids.
-    """
-    def __init__(self, param_names):
-        """
-        Initialise some quantities that will be useful later:
-        """
-        self.names = param_names
-        self.n_params = len(param_names)
-
-    # The attributes "display_names", "double_names" and 
-    # "double_indices" will be added to the instance of this
-    # class used in bigelm.
-
-
-
 #============================================================================
 class Bigelm_grid(object):
     """
