@@ -7,7 +7,7 @@ import pandas as pd
 from scipy.interpolate import RegularGridInterpolator as siRGI
 # from scipy.interpolate import interp1d
 # from scipy.interpolate import Akima1DInterpolator#, RectBivariateSpline
-from .bigelm_classes import Grid_parameters, Bigelm_grid
+from .bigelm_classes import Bigelm_grid
 import itertools # For Cartesian product
 
 
@@ -19,6 +19,8 @@ ADT 2015 - 2017
 
 """
 
+class dummy(object):
+    pass
 
 
 def initialise_grids(grid_file, grid_params, lines_list, interpd_grid_shape):
@@ -81,7 +83,7 @@ def initialise_grids(grid_file, grid_params, lines_list, interpd_grid_shape):
 
     # Initialise a custom class instance to hold parameter names and related
     # lists for both the raw and interpolated grids:
-    Params = object()
+    Params = dummy()
     Params.names = grid_params
     Params.n_params = len(grid_params)
 
@@ -95,7 +97,7 @@ def initialise_grids(grid_file, grid_params, lines_list, interpd_grid_shape):
 
     #--------------------------------------------------------------------------
     # Combine and return results...
-    Container1 = object()  # Initialise container object
+    Container1 = dummy()  # Initialise container object
     Container1.Params = Params
     Container1.Raw_grids = Raw_grids
     Container1.Interpd_grids = Interpd_grids

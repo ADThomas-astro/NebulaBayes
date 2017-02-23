@@ -26,12 +26,13 @@ History
  - 20170216 - Added "Av_from_BD", "deredden" and "redden" functions; removed
               "(de)redden_Av" functions; refactored tests into the "_test"
               function and expanded them. 
+ - 20170221 - Fixed minor bug in checking length of observed errors array
 
 
 Keywords - extinction, extragalactic reddening, Fischera & Dopita 2005, 2011,
            attenuation curve, relative color excess, Calzetti 2001, dust
 """
-__version__ = 0.03
+__version__ = 0.04
 
 
 
@@ -239,7 +240,7 @@ def deredden(line_lambdas, line_fluxes, line_errs=None, BD=None, A_v=None):
         return dered_fluxes
     else:
         line_errs = np.array(line_errs)
-        assert line_errs.size == line_lambdas.size
+        assert line_errs.size == len(line_lambdas) # line_lambdas may be list
         dered_errs = line_errs * (dered_fluxes / line_fluxes)
         return dered_fluxes, dered_errs
 
@@ -279,7 +280,7 @@ def redden(line_lambdas, line_fluxes, line_errs=None, BD=None, A_v=None):
         return red_fluxes
     else:
         line_errs = np.array(line_errs)
-        assert line_errs.size == line_lambdas.size
+        assert line_errs.size == len(line_lambdas) # line_lambdas may be list
         red_errs = line_errs * (red_fluxes / line_fluxes)
         return red_fluxes, red_errs
 

@@ -1,5 +1,6 @@
 from __future__ import print_function, division
 import numpy as np  # Core numerical library
+import pandas as pd
 # For interpolating an n-dimensional regular grid:
 # import itertools # For finding Cartesian product and combinatorial combinations
 # from . import bigelm_plotting
@@ -180,8 +181,11 @@ class Bigelm_model(object):
         obs_wavelengths = kwargs.pop("obs_wavelengths", None)
         if deredden and (obs_wavelengths is None):
             raise ValueError("Must supply obs_wavelengths if deredden=True")
-        if len(obs_wavelengths) != n_measured:
-            raise ValueError("obs_wavelengths must have same length as obs_fluxes")
+        if obs_wavelengths is not None:
+            if not deredden:
+                pass # obs_wavelengths is unnecessary; don't check or use it
+            elif len(obs_wavelengths) != n_measured:
+                raise ValueError("obs_wavelengths must have same length as obs_fluxes")
         # Output corner plot image: Default is no plotting (None)
         image_out = kwargs.pop("image_out", None)
         # Output parameter estimate table: Default is no plotting (None)
@@ -193,7 +197,9 @@ class Bigelm_model(object):
                               str(kwargs.keys())[1:-1] )
 
         #----------------------------------------------------------------------
-        Obs_Container = object()
+        class dummy(object):
+            pass
+        Obs_Container = dummy()
         Obs_Container.lines_list = lines_list
         Obs_Container.obs_fluxes = obs_fluxes
         Obs_Container.obs_flux_errors = obs_flux_errors
@@ -230,9 +236,10 @@ class Bigelm_model(object):
                                                    Obs_Container, Interpd_grids)
         # Plot a corner plot if requested
         if image_out != None: # Only do plotting if an image name was specified:
-            chi2 = bigelm_posterior.calculate_chi2(Result.DF_peak)
+            chi2 = bigelm_posterior.calculate_chi2(Result.DF_peak, Result.posterior.ndim)
             plot_text = "chi^2_r at posterior peak = {0:.2f}\n\n\n".format(chi2)
             plot_text += "Observed fluxes vs. model fluxes at posterior peak\n"
+            pd.set_option("display.precision", 4)
             plot_text += str(Result.DF_peak) # To print in a monospace font
             bigelm_plotting.plot_marginalised_posterior(image_out, Raw_grids,
                                                         Result, plot_text)

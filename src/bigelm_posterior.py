@@ -5,7 +5,7 @@ import numpy as np  # Core numerical library
 import pandas as pd
 from scipy.integrate import cumtrapz
 from scipy.signal import argrelextrema
-from .src.bigelm_dereddening import deredden
+from .bigelm_dereddening import deredden
 
 
 
@@ -17,7 +17,8 @@ to 1D and 2D marginalised posteriors, and do Bayesian parameter estimation.
 
 """
 
-
+class dummy(object):
+    pass
 
 
 def calculate_posterior(Grid_container, Obs_Container, log_prior_func, A_v_vals):
@@ -25,13 +26,13 @@ def calculate_posterior(Grid_container, Obs_Container, log_prior_func, A_v_vals)
     Delegate calculating posterior to the correct function, and return an object
     instance that contains information about the posterior.
     """
-    Result = object() # Object instance that will end up holding all the results
+    Result = dummy() # Object instance that will end up holding all the results
     if A_v_vals is not None: # Add a dimension!
         # The posterior will have a dimension appended for "extinction"
         Result.posterior = calculate_posterior_dered(Grid_container,
                                         Obs_Container, log_prior_func, A_v_vals)
         Result.val_arrs = Grid_container.Interpd_grids.val_arrs + [A_v_vals]
-        Result.Params = object()
+        Result.Params = dummy()
         Result.Params.names = Grid_container.Params.grid_params + ["A_v"]
         Result.Params.n_params = len(Result.Params.names)
 
@@ -192,7 +193,7 @@ def marginalise_posterior(Result):
     # Note that the order of indices in each tuple is from samller to larger
     
     # Initialise dictionary of all possible 2D marginalised posterior arrays:
-    marginalised_posteriors_2D = {}  # The dict keys will be tuples of 2 parameter names.
+    posteriors_marginalised_2D = {}  # The dict keys will be tuples of 2 parameter names.
     # Iterate over all possible pairs of parameters:
     for double_name, param_inds_double in zip(Params.double_names, Params.double_indices):
         # Generate list of indices/dimensions/parameters to integrate over:
@@ -202,25 +203,25 @@ def marginalise_posterior(Result):
         inds_for_integration.reverse() # Ensure we integrate over higher dimensions first,
         # so dimension index numbers are still valid after each integration.
 
-        marginalised_posteriors_2D[double_name] = Result.posterior.copy()  # Initialise
+        posteriors_marginalised_2D[double_name] = Result.posterior.copy()  # Initialise
         # Keep integrating one dimension at a time until the result only has 2 dimensions:
         for param_index in inds_for_integration:
             # Integrate over this dimension (parameter), using the trapezoidal rule
-            marginalised_posteriors_2D[double_name] = np.trapz( 
-                marginalised_posteriors_2D[double_name], axis=param_index,
+            posteriors_marginalised_2D[double_name] = np.trapz( 
+                posteriors_marginalised_2D[double_name], axis=param_index,
                 dx=spacing[param_index] )
 
     #--------------------------------------------------------------------------
     # Calculate the 1D marginalised posterior pdf for each individual parameter
     print("Calculating 1D marginalised posteriors...")
     # Initialise dictionary of all 1D marginalised posterior arrays:
-    marginalised_posteriors_1D = {}
+    posteriors_marginalised_1D = {}
 
     # For the first parameter in Params.names:
     # Integrate the first 2D marginalised posterior pdf over the other
     # dimension (parameter), using the trapezoidal rule:
-    marginalised_posteriors_1D[Params.names[0]] = np.trapz( 
-            marginalised_posteriors_2D[Params.double_names[0]], axis=1,
+    posteriors_marginalised_1D[Params.names[0]] = np.trapz( 
+            posteriors_marginalised_2D[Params.double_names[0]], axis=1,
             dx=spacing[1] )
 
     # For all parameters after the first in Params.names:
@@ -232,7 +233,7 @@ def marginalise_posterior(Result):
         assert( param_inds_double[0] == 0 )
         param = Params.names[ param_inds_double[1] ]
         # Integrate over first dimension (parameter) using trapezoidal method:
-        marginalised_posteriors_1D[param] = np.trapz( marginalised_posteriors_2D[double_name],
+        posteriors_marginalised_1D[param] = np.trapz( posteriors_marginalised_2D[double_name],
                                                      axis=0, dx=spacing[0] )
 
     #--------------------------------------------------------------------------
@@ -242,22 +243,22 @@ def marginalise_posterior(Result):
 
     # Firstly find the integral over all Params.n_params dimensions by picking
     # any 1D marginalised posterior (we use the first) and integrating over it:
-    integral = np.trapz( marginalised_posteriors_1D[ Params.names[0] ],
+    integral = np.trapz( posteriors_marginalised_1D[ Params.names[0] ],
                          dx=spacing[0] )
     # print( "Integral for un-normalised full posterior is " + str(integral) )
     # Now actually normalise each 2D and 1D marginalised posterior:
     for double_name in Params.double_names:
         # Divide arrays in-place in memory:
-        marginalised_posteriors_2D[double_name] /= integral
+        posteriors_marginalised_2D[double_name] /= integral
     for param in Params.names:
         # Divide arrays in-place in memory:
-        marginalised_posteriors_1D[param] /= integral
+        posteriors_marginalised_1D[param] /= integral
     # Now normalise the full posterior, since we output it and the user
     # might want it normalised:
     Result.posterior /= integral
 
-    Result.marginalised_posteriors_2D = marginalised_posteriors_2D
-    Result.marginalised_posteriors_1D = marginalised_posteriors_1D
+    Result.posteriors_marginalised_2D = posteriors_marginalised_2D
+    Result.posteriors_marginalised_1D = posteriors_marginalised_1D
 
 
 
@@ -355,7 +356,7 @@ def do_single_parameter_estimate(param_name, val_arr, posterior_1D):
 def make_parameter_estimate_table(Result):
     """
     Do Bayesian parameter estimation for all parameters in the grid.
-    marginalised_posteriors_1D: Dicionary mapping parameter names to 1D numpy
+    posteriors_marginalised_1D: Dicionary mapping parameter names to 1D numpy
                     arrays of marginalised posterior PDFs; the probabilities
                     correspond to the parameter values listed in val_arrs_dict.
     val_arrs_dict:  Mapping of parameter names to 1D numpy arrays of co-ordinate
@@ -374,14 +375,13 @@ def make_parameter_estimate_table(Result):
                ("P(lower)", np.float),    ("P(upper)", np.float),
                ("P(lower)>50%?", np.str), ("P(upper)>50%?", np.str),
                ("n_local_maxima", np.int)]
-    DF_estimates = pd.DataFrame( OD(
-                                  [(c, np.zeros(n, dtype=t)) for c,t in columns]
-                                    )   )
+    OD1 = OD([(c, np.zeros(n, dtype=t)) for c,t in columns])
+    DF_estimates = pd.DataFrame(OD1)
     for col in [col for col,t in columns if t==np.float]:
         DF_estimates.loc[:,col] = np.nan
     DF_estimates.loc[:,"n_local_maxima"] = -1
 
-    for i, (p,posterior_1D) in enumerate(Result.marginalised_posteriors_1D.items()):
+    for i, (p,posterior_1D) in enumerate(Result.posteriors_marginalised_1D.items()):
         val_arr = Result.arr_dict[p]
         p_dict = do_single_parameter_estimate(p, val_arr, posterior_1D)
         for field, value in p_dict.items():
@@ -403,7 +403,7 @@ def make_posterior_peak_table(Result, Obs_Container, Interpd_grids):
     SN = Obs_Container.obs_fluxes / Obs_Container.obs_flux_errors
     grid_dim = len(Interpd_grids.val_arrs)
     grid_fluxes_max = [Interpd_grids.grids[l][inds_max[:grid_dim]] for l in lines_list]
-    is_dered = (Result.posterior.shape != grid_dim)
+    is_dered = (len(Result.posterior.shape) != grid_dim)
     # is_dered is True if we've added an extra dimension for dereddening,
     # False otherwise
     if is_dered:
@@ -414,22 +414,26 @@ def make_posterior_peak_table(Result, Obs_Container, Interpd_grids):
                     ("Obs_flux_dered",obs_fluxes_dered)
                     ("Obs_flux_raw",Obs_Container.obs_fluxes), ("Obs_S/N",SN) ])
     else:
+        sds_diff = (grid_fluxes_max - Obs_Container.obs_fluxes) / Obs_Container.obs_flux_errors
         OD_1 = OD([ ("Line",lines_list), ("Model_flux",grid_fluxes_max),
-                    ("Obs_flux",Obs_Container.obs_fluxes), ("Obs_S/N",SN) ])
+                    ("Obs_flux",Obs_Container.obs_fluxes), ("Obs_S/N",SN),
+                    ("Delta_(SDs)",sds_diff) ])
     DF_peak = pd.DataFrame( OD_1 )
-    Result.DF_peak = DF_peak.set_index("Line", inplace=True)
+    Result.DF_peak = DF_peak.set_index("Line")
 
 
 
-def calculate_chi2(DF_peak):
+def calculate_chi2(DF_peak, grid_n):
     """
     Calculate chi2 between model and observations for the model corresponding to
     the peak in the posterior.
     """
+    flux_err = DF_peak["Obs_flux"] / DF_peak["Obs_S/N"]
     chi2_working = ( (DF_peak["Obs_flux"] - DF_peak["Model_flux"])**2
-                                 / DF_peak["Obs_flux_err"]**2  )
+                                 / flux_err**2  )
     chi2 = np.sum(chi2_working.values)
-    chi2 /= len(DF_peak) # This is the reduced chi-squared
+    dof = len(DF_peak) - grid_n # Degrees of freedom
+    chi2 /= dof # This is the reduced chi-squared
     return chi2
 
 
