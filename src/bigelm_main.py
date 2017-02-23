@@ -241,8 +241,8 @@ class Bigelm_model(object):
             plot_text += "Observed fluxes vs. model fluxes at posterior peak\n"
             pd.set_option("display.precision", 4)
             plot_text += str(Result.DF_peak) # To print in a monospace font
-            bigelm_plotting.plot_marginalised_posterior(image_out, Raw_grids,
-                                                        Result, plot_text)
+            bigelm_plotting.plot_marginalised_posterior(image_out, Result,
+                                                           Raw_grids, plot_text)
 
 
         print("Bigelm finished.")
