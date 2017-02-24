@@ -334,11 +334,10 @@ class Bigelm_result(object):
         Make a pandas dataframe containing observed emission lines and model
         fluxes for the model corresponding to the peak in the posterior.
         """
-        DF_peak = DF_obs.copy() # Index is "Line"
-        # Note that DF_obs may possibly have a "Wavelength" column
+        DF_peak = DF_obs.copy() # Index: "Line"; columns: "Flux", "Flux_err"
+        # DF_obs may also possibly have a "Wavelength" column
         inds_max = np.unravel_index(self.posterior.argmax(), self.posterior.shape)
-        lines_list = DF_obs.index.values
-        grid_fluxes_max = [Interpd_grids.grids[l][inds_max] for l in lines_list]
+        grid_fluxes_max = [Interpd_grids.grids[l][inds_max] for l in DF_peak.index]
         DF_peak["Model_flux"] = grid_fluxes_max
         DF_peak["Obs_S/N"] = DF_obs["Flux"].values / DF_obs["Flux_err"].values
         DF_peak["Delta_(SDs)"] = ((DF_peak["Model_flux"].values - DF_obs["Flux"].values)
