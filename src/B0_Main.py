@@ -1,5 +1,5 @@
 from __future__ import print_function, division
-# from collections import OrderedDict as OD
+from collections import OrderedDict as OD
 import numpy as np  # Core numerical library
 import pandas as pd
 # For interpolating an n-dimensional regular grid:
@@ -197,25 +197,25 @@ class Bigelm_model(object):
                               str(kwargs.keys())[1:-1] )
 
         #----------------------------------------------------------------------
-        class dummy(object):
-            pass
-        Obs_Container = dummy()
-        Obs_Container.lines_list = lines_list
-        Obs_Container.obs_fluxes = obs_fluxes
-        Obs_Container.obs_flux_errors = obs_flux_errors
-        Obs_Container.obs_wavelengths = obs_wavelengths
+        # Form the data for the observations into a DataFrame table.
+        obs_dict = OD([("Line",lines_list)])
+        if obs_wavelengths is not None:
+            obs_dict["Wavelength"] = obs_wavelengths
+        obs_dict["Flux"] = obs_fluxes
+        obs_dict["Flux_err"] = obs_flux_errors
+        DF_obs = pd.DataFrame(obs_dict)
+        DF_obs.set_index("Line", inplace=True)
 
         #----------------------------------------------------------------------
         # Create a "Bigelm_result" object instance, which involves calculating
         # the posterior and parameter estimates:
-        Result = B2_Bayes.Bigelm_result(Interpd_grids, Obs_Container,
-                                              deredden=deredden,
+        Result = B2_Bayes.Bigelm_result(Interpd_grids, DF_obs, deredden=deredden,
                                           log_prior_func=B2_Bayes.uniform_prior)
         Result.Grid_spec.param_display_names = param_display_names
 
         # Save out results table if requested
         if table_out is not None:
-            Result.DF_estimates.to_csv(table_out, index=False, float_format='%.5f')
+            Result.DF_estimates.to_csv(table_out, index=True, float_format='%.5f')
 
         # Plot a corner plot if requested
         if image_out != None: # Only do plotting if an image name was specified:

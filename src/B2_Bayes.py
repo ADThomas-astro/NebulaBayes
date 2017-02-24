@@ -5,7 +5,7 @@ import numpy as np  # Core numerical library
 import pandas as pd
 from scipy.integrate import cumtrapz
 from scipy.signal import argrelextrema
-from .dereddening import deredden
+# from .dereddening import deredden
 from .B1_Grid_working import Grid_description
 
 
@@ -25,7 +25,7 @@ class Bigelm_result(object):
     """
     Class to hold the posterior, marginalised posteriors and parameter estimates.
     """
-    def __init__(self, Interpd_grids, Obs_Container, deredden, log_prior_func):
+    def __init__(self, Interpd_grids, DF_obs, deredden, log_prior_func):
         """
         Initialise an instance of the class by performing Bayesian parameter
         estimation.
@@ -34,7 +34,7 @@ class Bigelm_result(object):
         self.ndim = Interpd_grids.ndim
 
         # Calculates the posterior (create self.posterior attribute)
-        self.calculate_posterior(Interpd_grids, Obs_Container, log_prior_func)
+        self.calculate_posterior(Interpd_grids, DF_obs, log_prior_func)
 
         # Store the interpolated grid description in this object as well:
         self.Grid_spec = Grid_description(Interpd_grids.param_names,
@@ -51,7 +51,7 @@ class Bigelm_result(object):
 
         # Make a table (pandas DataFrame) comparing observed to model fluxes
         # at the peak of the posterior
-        self.make_posterior_peak_table(Obs_Container, Interpd_grids)
+        self.make_posterior_peak_table(DF_obs, Interpd_grids)
 
         self.calculate_chi2() # Chi2 at posterior peak (self.chi2 attribute)
 
@@ -83,7 +83,7 @@ class Bigelm_result(object):
 
 
 
-    def calculate_posterior(self, Interpd_grids, Obs_Container, log_prior_func):
+    def calculate_posterior(self, Interpd_grids, DF_obs, log_prior_func):
         """
         Calculate the posterior over the entire N-D grid at once using Bayes'
         Theorem.  The emission line grids are interpolated prior to calculating
@@ -104,19 +104,16 @@ class Bigelm_result(object):
         # fluxes already normalised to Hbeta.  In izi.pro the default is 0.15 dex,
         # but the default is given as 0.1 dex in the Blanc+15 paper.
 
-        obs_fluxes = Obs_Container.obs_fluxes
-        obs_flux_errors = Obs_Container.obs_flux_errors
-
         # Calculate likelihood:
         # Initialise likelihood with 1 everywhere (multiplictive identity)
         log_likelihood = np.zeros(Interpd_grids.shape, dtype="float")
-        for i, emission_line in enumerate(Obs_Container.lines_list):
+        for line in DF_obs.index: # Iterate over emission lines
             # Use a log version of equation 3 on pg 4 of Blanc et al. 2015 (IZI)
             # N.B. var is the sum of variances due to both the measured and modelled fluxes
             # N-D array of predicted fluxes (must be non-negative):
-            pred_flux_i = Interpd_grids.grids[emission_line]
-            var = obs_flux_errors[i]**2 + (epsilon_2 * pred_flux_i)**2
-            log_likelihood += ( - (( obs_fluxes[i] - pred_flux_i )**2 / 
+            pred_flux_i = Interpd_grids.grids[line]
+            var = DF_obs.loc[line,"Flux_err"]**2 + (epsilon_2 * pred_flux_i)**2
+            log_likelihood += ( - (( DF_obs.loc[line,"Flux"] - pred_flux_i )**2 / 
                                      ( 2.0 * var ))  -  0.5*np.log( var ) )
             # N.B. "log" is base e
         log_likelihood += np.log(2 * np.pi)
@@ -325,38 +322,45 @@ class Bigelm_result(object):
             param_val_arr = self.Grid_spec.paramName2paramValueArr[p]
             p_dict = make_single_parameter_estimate(p, param_val_arr, posterior_1D)
             for field, value in p_dict.items():
-                DF_estimates.loc[p,field] = value
+                if field != "Parameter":
+                    DF_estimates.loc[p,field] = value
 
         self.DF_estimates = DF_estimates
 
 
 
-    def make_posterior_peak_table(self, Obs_Container, Interpd_grids):
+    def make_posterior_peak_table(self, DF_obs, Interpd_grids):
         """
         Make a pandas dataframe containing observed emission lines and model
         fluxes for the model corresponding to the peak in the posterior.
         """
+        DF_peak = DF_obs.copy() # Index is "Line"
+        # Note that DF_obs may possibly have a "Wavelength" column
         inds_max = np.unravel_index(self.posterior.argmax(), self.posterior.shape)
-        lines_list = Obs_Container.lines_list
-        SN = Obs_Container.obs_fluxes / Obs_Container.obs_flux_errors
-        grid_dim = self.Grid_spec.ndim
-        grid_fluxes_max = [Interpd_grids.grids[l][inds_max[:grid_dim]] for l in lines_list]
+        lines_list = DF_obs.index.values
+        grid_fluxes_max = [Interpd_grids.grids[l][inds_max] for l in lines_list]
+        DF_peak["Model_flux"] = grid_fluxes_max
+        DF_peak["Obs_S/N"] = DF_obs["Flux"].values / DF_obs["Flux_err"].values
+        DF_peak["Delta_(SDs)"] = ((DF_peak["Model_flux"].values - DF_obs["Flux"].values)
+                                        / DF_obs["Flux_err"].values )
+        DF_peak.rename(columns={"Flux":"Obs_flux"}, inplace=True)
         # is_dered is True if we've added an extra dimension for dereddening,
-        # False otherwise
-        if self.deredden:
-            A_v = self.val_arrs[-1][inds_max[-1]] # Extinction in magnitudes
-            obs_fluxes_dered = deredden(Obs_Container.obs_wavelengths,
-                                        Obs_Container.obs_fluxes, A_v=A_v)
-            OD_1 = OD([ ("Line",lines_list), ("Model_flux",grid_fluxes_max),
-                        ("Obs_flux_dered",obs_fluxes_dered)
-                        ("Obs_flux_raw",Obs_Container.obs_fluxes), ("Obs_S/N",SN) ])
-        else:
-            sds_diff = (grid_fluxes_max - Obs_Container.obs_fluxes) / Obs_Container.obs_flux_errors
-            OD_1 = OD([ ("Line",lines_list), ("Model_flux",grid_fluxes_max),
-                        ("Obs_flux",Obs_Container.obs_fluxes), ("Obs_S/N",SN),
-                        ("Delta_(SDs)",sds_diff) ])
-        DF_peak = pd.DataFrame( OD_1 )
-        self.DF_peak = DF_peak.set_index("Line")
+        # # False otherwise
+        # if self.deredden:
+        #     A_v = self.val_arrs[-1][inds_max[-1]] # Extinction in magnitudes
+        #     obs_fluxes_dered = deredden(Obs_Container.obs_wavelengths,
+        #                                 Obs_Container.obs_fluxes, A_v=A_v)
+        #     OD_1 = OD([ ("Line",lines_list), ("Model_flux",grid_fluxes_max),
+        #                 ("Obs_flux_dered",obs_fluxes_dered)
+        #                 ("Obs_flux_raw",Obs_Container.obs_fluxes), ("Obs_S/N",SN) ])
+        # else:
+        # OD_1 = OD([ ("Line",lines_list), ("Model_flux",grid_fluxes_max),
+        #             ("Obs_flux",Obs_Container.obs_fluxes), ("Obs_S/N",SN),
+        #             ("Delta_(SDs)",sds_diff) ])
+        # DF_peak = pd.DataFrame( OD_1 )
+        # Columns to include in output and their order (index is "Line"):
+        cols_to_include = ["Model_flux", "Obs_flux", "Obs_S/N", "Delta_(SDs)"]
+        self.DF_peak = DF_peak[cols_to_include]
 
 
 
