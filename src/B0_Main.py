@@ -1,14 +1,12 @@
 from __future__ import print_function, division
+from collections import OrderedDict as OD
 import numpy as np  # Core numerical library
 import pandas as pd
 # For interpolating an n-dimensional regular grid:
 # import itertools # For finding Cartesian product and combinatorial combinations
-# from . import bigelm_plotting
-from . import bigelm_grid_interpolation
-from . import bigelm_posterior
-# from .corner import corner  # For MCMC
-from . import bigelm_plotting
-from collections import OrderedDict as OD
+from . import B1_Grid_working
+from . import B2_Bayes
+from . import B3_Plotting
 
 
 """
@@ -35,7 +33,6 @@ Bigelm is heavily based on IZI (Blanc+2015).
 
 
 
-#============================================================================
 class Bigelm_model(object):
     """
     Primary class for working with Bigelm.  To use, initialise a class instance
@@ -85,7 +82,7 @@ class Bigelm_model(object):
             interpd_grid_shape = [15]*len(grid_params) # Default 
 
         # Call grid initialisation:
-        self.Grid_container = bigelm_grid_interpolation.initialise_grids(grid_file,
+        self.Grid_container = B1_Grid_working.initialise_grids(grid_file,
                                     grid_params, lines_list, interpd_grid_shape)
 
 
@@ -206,42 +203,34 @@ class Bigelm_model(object):
         Obs_Container.obs_wavelengths = obs_wavelengths
 
         #----------------------------------------------------------------------
-        # Results = object()
-        # Results.Params = Params
-
-        # Results.marginalised_posteriors_1D = marginalised_posteriors_1D
-        # Results.marginalised_posteriors_2D = marginalised_posteriors_2D
         # Calculate N-dimensional posterior array
         # Extinctions from A_v = 0 mag to A_v = 5 mag.
-        extinctions = [0, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 1.25, 1.5, 1.75,
-                       2.0, 2.3, 2.6, 3.0, 3.5, 4.0, 4.5, 5.0] # A_v in mag
-        A_v_vals = extinctions if deredden==True else None   
-        Result = bigelm_posterior.calculate_posterior(self.Grid_container,
-                            Obs_Container, A_v_vals=A_v_vals,
-                            log_prior_func=bigelm_posterior.uniform_prior)
+        Result = B2_Bayes.calculate_posterior(self.Grid_container, Obs_Container,
+                                              deredden=deredden,
+                                          log_prior_func=B2_Bayes.uniform_prior)
 
         #----------------------------------------------------------------------
         # Marginalise (and normalise) posterior (modify Result object)
-        bigelm_posterior.marginalise_posterior(Result)
+        B2_Bayes.marginalise_posterior(Result)
         
         #----------------------------------------------------------------------
         # Do Bayesian parameter estimation
-        bigelm_posterior.make_parameter_estimate_table(Result)
+        B2_Bayes.make_parameter_estimate_table(Result)
         if table_out is not None:  # Save out if requested
             Result.DF_estimates.to_csv(table_out, index=False, float_format='%.5f')
 
         #----------------------------------------------------------------------
         # Add a table of fluxes at the posterior peak to the results
-        bigelm_posterior.make_posterior_peak_table(Result,
+        B2_Bayes.make_posterior_peak_table(Result,
                                                    Obs_Container, Interpd_grids)
         # Plot a corner plot if requested
         if image_out != None: # Only do plotting if an image name was specified:
-            chi2 = bigelm_posterior.calculate_chi2(Result.DF_peak, Result.posterior.ndim)
+            chi2 = B2_Bayes.calculate_chi2(Result.DF_peak, Result.posterior.ndim)
             plot_text = "chi^2_r at posterior peak = {0:.2f}\n\n\n".format(chi2)
             plot_text += "Observed fluxes vs. model fluxes at posterior peak\n"
             pd.set_option("display.precision", 4)
             plot_text += str(Result.DF_peak) # To print in a monospace font
-            bigelm_plotting.plot_marginalised_posterior(image_out, Result,
+            B3_Plotting.plot_marginalised_posterior(image_out, Result,
                                                            Raw_grids, plot_text)
 
 

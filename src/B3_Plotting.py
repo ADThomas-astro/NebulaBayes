@@ -10,7 +10,7 @@ import itertools
 
 
 """
-Adam D. Thomas 2015 - 2016
+Adam D. Thomas 2015 - 2017
 
 """
 
@@ -21,7 +21,8 @@ def plot_marginalised_posterior(out_filename, Result, Raw_grids, plot_anno=None)
     Generate a plot of all the 2D and 1D marginalised posterior pdfs.  The
     resulting "corner plot" is a triangular grid of 2-D images for each 2D
     marginalised posterior pdf, with appropriate 1D plots of 1D marginalised
-    posteriors included along the diagonal.
+    posteriors included along the diagonal.  This function is designed to
+    produce attractive plots independent of the dimensionality (axes grid size).
     out_filename: The filename for the output corner plot image file.
     Result: An object which contains the marginalised posteriors and
             interpolated grid information

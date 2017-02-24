@@ -5,7 +5,7 @@ import numpy as np  # Core numerical library
 import pandas as pd
 from scipy.integrate import cumtrapz
 from scipy.signal import argrelextrema
-from .bigelm_dereddening import deredden
+from .dereddening import deredden
 
 
 
@@ -21,19 +21,19 @@ class dummy(object):
     pass
 
 
-def calculate_posterior(Grid_container, Obs_Container, log_prior_func, A_v_vals):
+def calculate_posterior(Grid_container, Obs_Container, deredden, log_prior_func):
     """
     Delegate calculating posterior to the correct function, and return an object
     instance that contains information about the posterior.
     """
     Result = dummy() # Object instance that will end up holding all the results
-    if A_v_vals is not None: # Add a dimension!
+    if deredden:
         # The posterior will have a dimension appended for "extinction"
         Result.posterior = calculate_posterior_dered(Grid_container,
-                                        Obs_Container, log_prior_func, A_v_vals)
-        Result.val_arrs = Grid_container.Interpd_grids.val_arrs + [A_v_vals]
+                                        Obs_Container, log_prior_func)
+        Result.val_arrs = Grid_container.Interpd_grids.val_arrs
         Result.Params = dummy()
-        Result.Params.names = Grid_container.Params.grid_params + ["A_v"]
+        Result.Params.names = Grid_container.Params.grid_params
         Result.Params.n_params = len(Result.Params.names)
 
     else: # Number of dimensions remains the same

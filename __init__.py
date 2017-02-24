@@ -18,7 +18,7 @@
     """
 
 
-from .src.bigelm_main import Bigelm_model
+from .src.B0_Main import Bigelm_model
 from ._version import __version__
 
 # N.B. The docstring at the top may be accessed interactively in ipython3 with:
