@@ -131,7 +131,7 @@ class Bigelm_model(object):
         """
         print("Running BIGELM...")
         Params = self.Grid_container.Params
-        Interpd_grids = self.Grid_container.Interpd_grids
+        # Interpd_grids = self.Grid_container.Interpd_grids
         Raw_grids = self.Grid_container.Raw_grids
 
 
@@ -203,36 +203,24 @@ class Bigelm_model(object):
         Obs_Container.obs_wavelengths = obs_wavelengths
 
         #----------------------------------------------------------------------
-        # Calculate N-dimensional posterior array
-        # Extinctions from A_v = 0 mag to A_v = 5 mag.
-        Result = B2_Bayes.calculate_posterior(self.Grid_container, Obs_Container,
+        # Create a "Bigelm_result" object instance, which involves calculating
+        # the posterior and parameter estimates:
+        Result = B2_Bayes.Bigelm_result(self.Grid_container, Obs_Container,
                                               deredden=deredden,
                                           log_prior_func=B2_Bayes.uniform_prior)
 
-        #----------------------------------------------------------------------
-        # Marginalise (and normalise) posterior (modify Result object)
-        B2_Bayes.marginalise_posterior(Result)
-        
-        #----------------------------------------------------------------------
-        # Do Bayesian parameter estimation
-        B2_Bayes.make_parameter_estimate_table(Result)
-        if table_out is not None:  # Save out if requested
+        # Save out results table if requested
+        if table_out is not None:
             Result.DF_estimates.to_csv(table_out, index=False, float_format='%.5f')
 
-        #----------------------------------------------------------------------
-        # Add a table of fluxes at the posterior peak to the results
-        B2_Bayes.make_posterior_peak_table(Result,
-                                                   Obs_Container, Interpd_grids)
         # Plot a corner plot if requested
         if image_out != None: # Only do plotting if an image name was specified:
-            chi2 = B2_Bayes.calculate_chi2(Result.DF_peak, Result.posterior.ndim)
-            plot_text = "chi^2_r at posterior peak = {0:.2f}\n\n\n".format(chi2)
+            plot_text = "chi^2_r at posterior peak = {0:.2f}\n\n\n".format(Result.chi2)
             plot_text += "Observed fluxes vs. model fluxes at posterior peak\n"
             pd.set_option("display.precision", 4)
             plot_text += str(Result.DF_peak) # To print in a monospace font
-            B3_Plotting.plot_marginalised_posterior(image_out, Result,
+            B3_Plotting.plot_marginalised_posteriors(image_out, Result,
                                                            Raw_grids, plot_text)
-
 
         print("Bigelm finished.")
         return Result

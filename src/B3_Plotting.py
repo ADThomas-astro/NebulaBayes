@@ -16,7 +16,7 @@ Adam D. Thomas 2015 - 2017
 
 
 
-def plot_marginalised_posterior(out_filename, Result, Raw_grids, plot_anno=None):
+def plot_marginalised_posteriors(out_filename, Result, Raw_grids, plot_anno=None):
     """
     Generate a plot of all the 2D and 1D marginalised posterior pdfs.  The
     resulting "corner plot" is a triangular grid of 2-D images for each 2D

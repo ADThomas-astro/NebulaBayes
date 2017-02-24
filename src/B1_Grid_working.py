@@ -20,7 +20,7 @@ ADT 2015 - 2017
 """
 
 
-#============================================================================
+
 class Bigelm_grid(object):
     """
         Simple class to hold n_dimensional grid arrays,
