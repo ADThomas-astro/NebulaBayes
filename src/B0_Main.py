@@ -1,5 +1,5 @@
 from __future__ import print_function, division
-from collections import OrderedDict as OD
+# from collections import OrderedDict as OD
 import numpy as np  # Core numerical library
 import pandas as pd
 # For interpolating an n-dimensional regular grid:
@@ -82,8 +82,10 @@ class Bigelm_model(object):
             interpd_grid_shape = [15]*len(grid_params) # Default 
 
         # Call grid initialisation:
-        self.Grid_container = B1_Grid_working.initialise_grids(grid_file,
+        Raw_grids, Interpd_grids = B1_Grid_working.initialise_grids(grid_file,
                                     grid_params, lines_list, interpd_grid_shape)
+        self.Raw_grids = Raw_grids
+        self.Interpd_grids = Interpd_grids
 
 
 
@@ -130,9 +132,10 @@ class Bigelm_model(object):
         At the moment zero model flux => zero systematic error on the flux. Wrong!
         """
         print("Running BIGELM...")
-        Params = self.Grid_container.Params
+        # Params = self.Grid_container.Params
         # Interpd_grids = self.Grid_container.Interpd_grids
-        Raw_grids = self.Grid_container.Raw_grids
+        Raw_grids = self.Raw_grids
+        Interpd_grids = self.Interpd_grids
 
 
         # Check types??
@@ -165,12 +168,12 @@ class Bigelm_model(object):
         if np.sum( obs_flux_errors < 0 ) != 0:
             raise ValueError("The flux error for an emission line is negative.")
 
-        # Determine the dictionary of parameter display names to use for plotting:
-        Params.display_names = OD([(p,p) for p in Params.names])
+        # Determine the list of parameter display names to use for plotting:
+        param_display_names = Interpd_grids.param_names.copy() # Default
         if "param_display_names" in kwargs:
             custom_display_names = kwargs.pop("param_display_names")
-            for x in custom_display_names:
-                Params.display_names[x] = custom_display_names[x] # Override default
+            for i, custom_name in enumerate(custom_display_names):
+                param_display_names[i] = custom_name # Override default
 
         # Deredden observed fluxes and have extra grid parameter for extinction?
         deredden = kwargs.pop("deredden", False)
@@ -205,9 +208,10 @@ class Bigelm_model(object):
         #----------------------------------------------------------------------
         # Create a "Bigelm_result" object instance, which involves calculating
         # the posterior and parameter estimates:
-        Result = B2_Bayes.Bigelm_result(self.Grid_container, Obs_Container,
+        Result = B2_Bayes.Bigelm_result(Interpd_grids, Obs_Container,
                                               deredden=deredden,
                                           log_prior_func=B2_Bayes.uniform_prior)
+        Result.Grid_spec.param_display_names = param_display_names
 
         # Save out results table if requested
         if table_out is not None:

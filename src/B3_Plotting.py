@@ -1,5 +1,5 @@
 from __future__ import print_function, division
-from collections import OrderedDict as OD
+# from collections import OrderedDict as OD
 import numpy as np  # Core numerical library
 import matplotlib.pyplot as plt  # Plotting
 # For generating a custom colourmap:
@@ -48,7 +48,7 @@ def plot_marginalised_posteriors(out_filename, Result, Raw_grids, plot_anno=None
     # Create a figure and a 2D-array of axes objects:
     # We keep the figure size and bounds of the axes grid the same, and change
     # only n_rows(==n_cols) for different grid dimensions.
-    n = Result.Params.n_params
+    n = Result.ndim
     fig_width_ht = 6, 6 # Figure width and height in inches
     grid_bounds = {"left":0.13, "bottom":0.13, "right":0.95, "top":0.95}
     axes_width = (grid_bounds["right"] - grid_bounds["left"]) / n # Figure frac
@@ -60,13 +60,15 @@ def plot_marginalised_posteriors(out_filename, Result, Raw_grids, plot_anno=None
     for ax in axes.ravel():    # Turn all axes off for now.
         ax.set_visible(False)  # Needed axes will be turned on later.
 
-    par_arr_map = OD([(p,v) for p,v in zip(Result.Params.names, Result.val_arrs)])
-    interp_spacing = {p:(v[1]-v[0]) for p,v in par_arr_map.items()}
-
+    # Some quantities for working with the parameters:
+    par_arr_map = Result.Grid_spec.paramName2paramValueArr
+    interp_spacing = {p : (arr[1] - arr[0]) for p,arr in par_arr_map.items()}
+    display_names  = Result.Grid_spec.param_display_names
+    double_names   = Result.Grid_spec.double_names
+    double_indices = Result.Grid_spec.double_indices
 
     # Iterate over the 2D marginalised posteriors:
-    for double_name, param_inds_double in zip(Result.Params.double_names,
-                                              Result.Params.double_indices):
+    for double_name, param_inds_double in zip(double_names, double_indices):
         # We will plot an image for each marginalised posterior
         ind_y, ind_x = param_inds_double
         name_y, name_x = double_name
@@ -109,8 +111,8 @@ def plot_marginalised_posteriors(out_filename, Result, Raw_grids, plot_anno=None
         #    (0.1,0.5), color="white", xycoords="axes fraction", fontsize=4)
 
         # Plot dots to show the location of gridpoints from the raw model grid:
-        raw_gridpoints_iter = itertools.product(Raw_grids.val_arrs[ind_x],
-                                                Raw_grids.val_arrs[ind_y])
+        raw_gridpoints_iter = itertools.product(Raw_grids.param_values_arrs[ind_x],
+                                                Raw_grids.param_values_arrs[ind_y] )
         ax_i.scatter(*zip(*raw_gridpoints_iter), marker='o', s=0.3, color='0.4')
         
         # Format the current axes:
@@ -121,8 +123,7 @@ def plot_marginalised_posteriors(out_filename, Result, Raw_grids, plot_anno=None
             # Generate x-axis label
             label_x = grid_bounds["right"] - axes_width * (ind_x + 0.5)
             label_y = grid_bounds["bottom"] * 0.25
-            ax_i.annotate(Result.Params.display_names[Result.Params.names[ind_x]],
-                          (label_x, label_y),
+            ax_i.annotate(display_names[ind_x], (label_x, label_y),
                           xycoords="figure fraction", **label_kwargs)
             for tick in ax_i.get_xticklabels():  # Rotate x tick labels
                     tick.set_rotation(90)
@@ -133,9 +134,8 @@ def plot_marginalised_posteriors(out_filename, Result, Raw_grids, plot_anno=None
             # Generate y-axis label
             label_x = grid_bounds["left"] * 0.25
             label_y = grid_bounds["bottom"] + axes_height * (ind_y + 0.5)
-            ax_i.annotate(Result.Params.display_names[Result.Params.names[ind_y]],
-                          (label_x, label_y),
-                          xycoords="figure fraction", rotation="vertical", **label_kwargs)
+            ax_i.annotate(display_names[ind_y], (label_x, label_y),
+                xycoords="figure fraction", rotation="vertical", **label_kwargs)
             for tick in ax_i.get_yticklabels():
                     tick.set_fontsize(tick_fontsize)
         else: # Not first column
@@ -144,7 +144,7 @@ def plot_marginalised_posteriors(out_filename, Result, Raw_grids, plot_anno=None
 
     # Iterate over the 1D marginalised posteriors:
     # We plot the 1D pdfs along the diagonal of the grid of plots:
-    for ind, param in enumerate(Result.Params.names):
+    for ind, param in enumerate(Result.Grid_spec.param_names):
         ax_i = axes[ ind, ind ]
         ax_i.set_visible(True)  # turn this axis back on
         ax_i.plot(par_arr_map[param], Result.posteriors_marginalised_1D[param],
@@ -155,9 +155,8 @@ def plot_marginalised_posteriors(out_filename, Result, Raw_grids, plot_anno=None
         if ind == 0: # Last column
             label_x = grid_bounds["right"] - 0.5 * axes_width
             label_y = grid_bounds["bottom"] * 0.25
-            ax_i.annotate(Result.Params.display_names[Result.Params.names[ind]],
-                          (label_x, label_y), xycoords="figure fraction",
-                                                                **label_kwargs)
+            ax_i.annotate(display_names[ind], (label_x, label_y),
+                                     xycoords="figure fraction", **label_kwargs)
             for tick in ax_i.get_xticklabels():
                     tick.set_rotation(90)  # Rotate x tick labels
                     tick.set_fontsize(tick_fontsize)

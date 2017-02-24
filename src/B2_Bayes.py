@@ -6,6 +6,7 @@ import pandas as pd
 from scipy.integrate import cumtrapz
 from scipy.signal import argrelextrema
 from .dereddening import deredden
+from .B1_Grid_working import Grid_description
 
 
 
@@ -24,35 +25,35 @@ class Bigelm_result(object):
     """
     Class to hold the posterior, marginalised posteriors and parameter estimates.
     """
-    def __init__(self, Grid_container, Obs_Container, deredden, log_prior_func):
+    def __init__(self, Interpd_grids, Obs_Container, deredden, log_prior_func):
         """
         Initialise an instance of the class by performing Bayesian parameter
         estimation.
         """
         self.deredden = deredden
-        self.ndim = len(Grid_container.Params.names)
+        self.ndim = Interpd_grids.ndim
 
         # Calculates the posterior (create self.posterior attribute)
-        self.calculate_posterior(Grid_container, Obs_Container, log_prior_func)
+        self.calculate_posterior(Interpd_grids, Obs_Container, log_prior_func)
+
+        # Store the interpolated grid description in this object as well:
+        self.Grid_spec = Grid_description(Interpd_grids.param_names,
+                           list(Interpd_grids.paramName2paramValueArr.values()))
 
         # Normalise and marginalise the posterior
-        self.marginalise_posterior(Grid_container.Interpd_grids, Grid_container.Params)
+        self.marginalise_posterior()
         # We've created attributes self.posteriors_marginalised_2D and
         # self.posteriors_marginalised_1D 
 
         # Make a table (pandas DataFrame) of parameter estimate results
-        self.make_parameter_estimate_table(Grid_container.Interpd_grids, Grid_container.Params)
+        self.make_parameter_estimate_table()
         # We've created the attribute self.DF_estimates
 
         # Make a table (pandas DataFrame) comparing observed to model fluxes
         # at the peak of the posterior
-        self.make_posterior_peak_table(Obs_Container, Grid_container.Interpd_grids)
+        self.make_posterior_peak_table(Obs_Container, Interpd_grids)
 
         self.calculate_chi2() # Chi2 at posterior peak (self.chi2 attribute)
-
-        # Temporary attributes for plotting:
-        self.Params = Grid_container.Params
-        self.val_arrs = Grid_container.Interpd_grids.val_arrs
 
 
 
@@ -82,7 +83,7 @@ class Bigelm_result(object):
 
 
 
-    def calculate_posterior(self, Grid_container, Obs_Container, log_prior_func):
+    def calculate_posterior(self, Interpd_grids, Obs_Container, log_prior_func):
         """
         Calculate the posterior over the entire N-D grid at once using Bayes'
         Theorem.  The emission line grids are interpolated prior to calculating
@@ -108,12 +109,12 @@ class Bigelm_result(object):
 
         # Calculate likelihood:
         # Initialise likelihood with 1 everywhere (multiplictive identity)
-        log_likelihood = np.zeros(Grid_container.Interpd_grids.shape, dtype="float")
+        log_likelihood = np.zeros(Interpd_grids.shape, dtype="float")
         for i, emission_line in enumerate(Obs_Container.lines_list):
             # Use a log version of equation 3 on pg 4 of Blanc et al. 2015 (IZI)
             # N.B. var is the sum of variances due to both the measured and modelled fluxes
             # N-D array of predicted fluxes (must be non-negative):
-            pred_flux_i = Grid_container.Interpd_grids.grids[emission_line]
+            pred_flux_i = Interpd_grids.grids[emission_line]
             var = obs_flux_errors[i]**2 + (epsilon_2 * pred_flux_i)**2
             log_likelihood += ( - (( obs_fluxes[i] - pred_flux_i )**2 / 
                                      ( 2.0 * var ))  -  0.5*np.log( var ) )
@@ -124,7 +125,7 @@ class Bigelm_result(object):
         # Each value P in the posterior array is differential, i.e. P*dx = (posterior)*dx
         # for a vector of parameters x.  # ???????????????? ADT - I don't understand my own note
 
-        log_prior = log_prior_func(Grid_container)
+        log_prior = log_prior_func(Interpd_grids)
         posterior = log_likelihood + log_prior  # Bayes theorem
         posterior -= posterior.max() # "Normalise" so we can return to linear space
         
@@ -194,31 +195,35 @@ class Bigelm_result(object):
 
 
 
-    def marginalise_posterior(self, Interpd_grids, Params):
+    def marginalise_posterior(self):
         """
         Calculate normalised 1D and 2D posterior for all possible combinations of
         parameters.
         """
-        spacing = [ (v[1] - v[0]) for v in Interpd_grids.val_arrs ] # In order of params/dimensions
-        n = Params.n_params
+        # The interpolated grids have uniform spacing:
+        spacing = [(v[1] - v[0]) for v in self.Grid_spec.param_values_arrs]
+        n = self.Grid_spec.ndim
         #--------------------------------------------------------------------------
         # Calculate the 2D marginalised posterior pdf for every possible combination
         # of 2 parameters
         print("Calculating 2D marginalised posteriors...")
         # List of all possible pairs of two parameter names:
-        Params.double_names = list( itertools.combinations( Params.names, 2) )
+        param_names = self.Grid_spec.param_names
+        double_names = list(itertools.combinations(param_names, 2))
+        self.Grid_spec.double_names = double_names
         # Looks something like: [('BBBP','Gamma'), ('BBBP','NT_frac'),
         #                        ('BBBP','UH_at_r_inner'), ('Gamma','NT_frac'),
         #                        ('Gamma','UH_at_r_inner'), ('NT_frac','UH_at_r_inner')]
         # Corresponding list of possible combinations of two parameter indices:
-        Params.double_indices = list( itertools.combinations( np.arange(n), 2) )
+        double_indices = list(itertools.combinations(np.arange(n), 2))
+        self.Grid_spec.double_indices = double_indices
         # Looks something like: [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)]
         # Note that the order of indices in each tuple is from samller to larger
         
         # Initialise dictionary of all possible 2D marginalised posterior arrays:
         posteriors_marginalised_2D = {}  # The dict keys will be tuples of 2 parameter names.
         # Iterate over all possible pairs of parameters:
-        for double_name, param_inds_double in zip(Params.double_names, Params.double_indices):
+        for double_name, param_inds_double in zip(double_names, double_indices):
             # Generate list of indices/dimensions/parameters to integrate over:
             inds_for_integration = np.arange(n).tolist()  # Initialise
             inds_for_integration.remove( param_inds_double[0] )
@@ -240,40 +245,38 @@ class Bigelm_result(object):
         # Initialise dictionary of all 1D marginalised posterior arrays:
         posteriors_marginalised_1D = {}
 
-        # For the first parameter in Params.names:
+        # For the first parameter in param_names:
         # Integrate the first 2D marginalised posterior pdf over the other
         # dimension (parameter), using the trapezoidal rule:
-        posteriors_marginalised_1D[Params.names[0]] = np.trapz( 
-                posteriors_marginalised_2D[Params.double_names[0]], axis=1,
-                dx=spacing[1] )
+        posteriors_marginalised_1D[param_names[0]] = np.trapz( 
+             posteriors_marginalised_2D[double_names[0]], axis=1, dx=spacing[1])
 
-        # For all parameters after the first in Params.names:
-        for double_name, param_inds_double in zip(Params.double_names[:Params.n_params-1],
-                                                  Params.double_indices[:Params.n_params-1]):
+        # For all parameters after the first in param_names:
+        for double_name, param_inds_double in zip(double_names[:n-1], double_indices[:n-1]):
             # For each pair of parameters we take the second parameter, and integrate 
             # over the first parameter of the pair (which by construction is always the
-            # first parameter in Params.names).
+            # first parameter in param_names).
             assert( param_inds_double[0] == 0 )
-            param = Params.names[ param_inds_double[1] ]
+            param = param_names[ param_inds_double[1] ]
             # Integrate over first dimension (parameter) using trapezoidal method:
-            posteriors_marginalised_1D[param] = np.trapz( posteriors_marginalised_2D[double_name],
-                                                         axis=0, dx=spacing[0] )
+            posteriors_marginalised_1D[param] = np.trapz(
+                 posteriors_marginalised_2D[double_name], axis=0, dx=spacing[0])
 
         #--------------------------------------------------------------------------
         # Calculate the 0D marginalised posterior pdf (by which I mean find
         # the normalisation constant - the 0D marginalised posterior should be 1!)
         # Then normalise the 1D and 2D marginalised posteriors:
 
-        # Firstly find the integral over all Params.n_params dimensions by picking
+        # Firstly find the integral over all n dimensions by picking
         # any 1D marginalised posterior (we use the first) and integrating over it:
-        integral = np.trapz( posteriors_marginalised_1D[ Params.names[0] ],
+        integral = np.trapz( posteriors_marginalised_1D[ param_names[0] ],
                              dx=spacing[0] )
         # print( "Integral for un-normalised full posterior is " + str(integral) )
         # Now actually normalise each 2D and 1D marginalised posterior:
-        for double_name in Params.double_names:
+        for double_name in double_names:
             # Divide arrays in-place in memory:
             posteriors_marginalised_2D[double_name] /= integral
-        for param in Params.names:
+        for param in param_names:
             # Divide arrays in-place in memory:
             posteriors_marginalised_1D[param] /= integral
         # Now normalise the full posterior, since we output it and the user
@@ -285,7 +288,7 @@ class Bigelm_result(object):
 
 
 
-    def make_parameter_estimate_table(self, Interpd_grids, Params):
+    def make_parameter_estimate_table(self):
         """
         Do Bayesian parameter estimation for all parameters in the grid.
         posteriors_marginalised_1D: Dicionary mapping parameter names to 1D numpy
@@ -306,23 +309,25 @@ class Bigelm_result(object):
                    ("P(lower)", np.float),    ("P(upper)", np.float),
                    ("P(lower)>50%?", np.str), ("P(upper)>50%?", np.str),
                    ("n_local_maxima", np.int)]
-        n = len(Params.names)
+        n = self.Grid_spec.ndim
         OD1 = OD([(c, np.zeros(n, dtype=t)) for c,t in columns])
         DF_estimates = pd.DataFrame(OD1)
+        DF_estimates.loc[:,"Parameter"] = self.Grid_spec.param_names
+        DF_estimates.sort_values(by="Parameter", inplace=True)
+        # Sort DF, so the DF is deterministic (note Upper and lower case param
+        # names are sorted into separate sections)
+        DF_estimates.set_index("Parameter", inplace=True)
         for col in [col for col,t in columns if t==np.float]:
             DF_estimates.loc[:,col] = np.nan
         DF_estimates.loc[:,"n_local_maxima"] = -1
-
-        arr_dict = dict(zip(Params.names, Interpd_grids.val_arrs))
-        for i, (p,posterior_1D) in enumerate(self.posteriors_marginalised_1D.items()):
-            val_arr = arr_dict[p]
-            p_dict = make_single_parameter_estimate(p, val_arr, posterior_1D)
+        
+        for p, posterior_1D in self.posteriors_marginalised_1D.items():
+            param_val_arr = self.Grid_spec.paramName2paramValueArr[p]
+            p_dict = make_single_parameter_estimate(p, param_val_arr, posterior_1D)
             for field, value in p_dict.items():
-                DF_estimates.loc[i,field] = value
+                DF_estimates.loc[p,field] = value
 
-        # Sort DF before returning, so DF is deterministic (note Upper and lower
-        # case parame names are sorted into separate sections)
-        self.DF_estimates = DF_estimates.sort_values(by="Parameter")
+        self.DF_estimates = DF_estimates
 
 
 
@@ -334,12 +339,11 @@ class Bigelm_result(object):
         inds_max = np.unravel_index(self.posterior.argmax(), self.posterior.shape)
         lines_list = Obs_Container.lines_list
         SN = Obs_Container.obs_fluxes / Obs_Container.obs_flux_errors
-        grid_dim = len(Interpd_grids.val_arrs)
+        grid_dim = self.Grid_spec.ndim
         grid_fluxes_max = [Interpd_grids.grids[l][inds_max[:grid_dim]] for l in lines_list]
-        is_dered = (len(self.posterior.shape) != grid_dim)
         # is_dered is True if we've added an extra dimension for dereddening,
         # False otherwise
-        if is_dered:
+        if self.deredden:
             A_v = self.val_arrs[-1][inds_max[-1]] # Extinction in magnitudes
             obs_fluxes_dered = deredden(Obs_Container.obs_wavelengths,
                                         Obs_Container.obs_fluxes, A_v=A_v)
@@ -459,14 +463,14 @@ def make_single_parameter_estimate(param_name, val_arr, posterior_1D):
 
 
 
-def uniform_prior(Grid_container):
+def uniform_prior(Interpd_grids):
     """
     Return the natural logarithm of a uniform prior.
-    Grid_container: Contains details of the input model grid
+    Interpd_grids: Contains details of the interpolated input model grid
     Returns an array of the value of a uniform prior over the grid.
     """
-    ranges = [(a.max() - a.min()) for a in Grid_container.Interpd_grids.val_arrs]
-    prior = np.ones(Grid_container.Interpd_grids.shape, dtype="float")
+    ranges = [(h - l) for l, h in Interpd_grids.paramName2paramMinMax.values()]
+    prior = np.ones(Interpd_grids.shape, dtype="float")
     prior /=  np.product( ranges )
     return prior
 
