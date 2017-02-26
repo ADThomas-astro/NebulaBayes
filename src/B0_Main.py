@@ -99,9 +99,8 @@ class Bigelm_model(object):
         obs_emission_lines: a list of corresponding emission line names as strings
         
         Optional additional keyword arguments:
-        deredden:             Add a parameter to the grid that is the extinction of
-                              the observed fluxes.  The model grid fluxes will
-                              be compared with reddening-corrected observed fluxes.  Default False.
+        deredden:             De-redden observed fluxes to match the Balmer
+                              at each interpolated grid point?  Default True.
         obs_wavelengths:      If deredden=True, you must also supply a list of wavelengths (Angstroems)
                               associated with obs_fluxes.  Default None.
         image_out:            A filename for saving out a results image of 2D and 1D marginalised posterior pdfs.
@@ -176,11 +175,11 @@ class Bigelm_model(object):
                 param_display_names[i] = custom_name # Override default
 
         # Deredden observed fluxes and have extra grid parameter for extinction?
-        deredden = kwargs.pop("deredden", False)
+        deredden = kwargs.pop("deredden", True)
         # Observed wavelengths?
         obs_wavelengths = kwargs.pop("obs_wavelengths", None)
         if deredden and (obs_wavelengths is None):
-            raise ValueError("Must supply obs_wavelengths if deredden=True")
+            raise ValueError("Must supply obs_wavelengths if deredden==True")
         if obs_wavelengths is not None:
             if not deredden:
                 pass # obs_wavelengths is unnecessary; don't check or use it

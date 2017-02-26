@@ -6,6 +6,7 @@ import pandas as pd
 from scipy.integrate import cumtrapz
 from scipy.signal import argrelextrema
 # from .dereddening import deredden
+import dereddening as dr
 from .B1_Grid_working import Grid_description
 
 
@@ -57,32 +58,6 @@ class Bigelm_result(object):
 
 
 
-    # def calculate_posterior(Grid_container, Obs_Container, deredden, log_prior_func):
-    #     """
-    #     Delegate calculating posterior to the correct function, and return an object
-    #     instance that contains information about the posterior.
-    #     """
-    #     Result = dummy() # Object instance that will end up holding all the results
-    #     if deredden:
-    #         # The posterior will have a dimension appended for "extinction"
-    #         Result.posterior = calculate_posterior_dered(Grid_container,
-    #                                         Obs_Container, log_prior_func)
-    #         Result.val_arrs = Grid_container.Interpd_grids.val_arrs
-    #         Result.Params = dummy()
-    #         Result.Params.names = Grid_container.Params.grid_params
-    #         Result.Params.n_params = len(Result.Params.names)
-
-    #     else: # Number of dimensions remains the same
-    #         Result.posterior = calculate_posterior_no_dered(Grid_container,
-    #                                                 Obs_Container, log_prior_func)
-    #         Result.val_arrs = Grid_container.Interpd_grids.val_arrs
-    #         Result.Params = Grid_container.Params
-
-    #     Result.arr_dict = OD([(p,a) for p,a in zip(Result.Params.names,Result.val_arrs)])
-    #     return Result
-
-
-
     def calculate_posterior(self, Interpd_grids, DF_obs, log_prior_func):
         """
         Calculate the posterior over the entire N-D grid at once using Bayes'
@@ -100,95 +75,58 @@ class Bigelm_result(object):
         # This gives 0.345 for epsilon=0.15 dex. I don't understand this.
         # Why was a log used?  And a log base e?  This is surely wrong.
         # What is intended by this formula anyway?
-        # Note that epsilon_2 is the assumed factional systematic error in the model
+        # Note that epsilon_2 is the assumed fractional systematic error in the model
         # fluxes already normalised to Hbeta.  In izi.pro the default is 0.15 dex,
         # but the default is given as 0.1 dex in the Blanc+15 paper.
 
-        # Calculate likelihood:
+        if self.deredden:
+            # Deredden observed fluxes at every interpolated gridpoint to match
+            # the model Balmer decrement at that gridpoint
+            grid_BD_arr = Interpd_grids.grids["Halpha"]
+            # Fluxes are normalised to Hbeta == 1, so grid_BD_arr is an array of
+            # the Balmer decrement F_Halpha / F_Hbeta over the model grid.
+            obs_flux_arrs, obs_flux_err_arrs = dr.deredden(
+                                    DF_obs["Wavelength"].values,
+                                    DF_obs["Flux"].values,
+                                    DF_obs["Flux_err"].values, BD=grid_BD_arr)
+        else: # Use the input observed fluxes, which hopefully may have
+              # already been dereddened.
+            shape = Interpd_grids.shape
+            obs_flux_arrs = [np.full(shape, f) for f in DF_obs["Flux"].values]
+            obs_flux_err_arrs = [np.full(shape, e) for e in DF_obs["Flux_err"].values]
+
+        # Now obs_flux_arrs is a list of arrays corresponding to the list
+        # of observed fluxes, where each array has the same shape as the 
+        # model grid.  The list obs_flux_err_arrs is the same, but for errors.
+        self.obs_flux_arrs = obs_flux_arrs
+        self.obs_flux_err_arrs = obs_flux_err_arrs
+
         # Initialise likelihood with 1 everywhere (multiplictive identity)
         log_likelihood = np.zeros(Interpd_grids.shape, dtype="float")
-        for line in DF_obs.index: # Iterate over emission lines
+        for i, line in enumerate(DF_obs.index): # Iterate over emission lines
             # Use a log version of equation 3 on pg 4 of Blanc et al. 2015 (IZI)
             # N.B. var is the sum of variances due to both the measured and modelled fluxes
             # N-D array of predicted fluxes (must be non-negative):
             pred_flux_i = Interpd_grids.grids[line]
-            var = DF_obs.loc[line,"Flux_err"]**2 + (epsilon_2 * pred_flux_i)**2
-            log_likelihood += ( - (( DF_obs.loc[line,"Flux"] - pred_flux_i )**2 / 
+            obs_flux_i = obs_flux_arrs[i]
+            obs_flux_err_i = obs_flux_err_arrs[i]
+            assert obs_flux_i.shape == pred_flux_i.shape
+            var = obs_flux_err_i**2 + (epsilon_2 * pred_flux_i)**2
+            log_likelihood += ( - (( obs_flux_i - pred_flux_i )**2 / 
                                      ( 2.0 * var ))  -  0.5*np.log( var ) )
             # N.B. "log" is base e
         log_likelihood += np.log(2 * np.pi)
 
         # Note: ??????? The parameter space, space of measurements and space of predictions are all continuous.
         # Each value P in the posterior array is differential, i.e. P*dx = (posterior)*dx
-        # for a vector of parameters x.  # ???????????????? ADT - I don't understand my own note
+        # for a vector of parameters x.  # ???????????????? ADT - I don't understand the purpose of my own note
 
         log_prior = log_prior_func(Interpd_grids)
-        posterior = log_likelihood + log_prior  # Bayes theorem
-        posterior -= posterior.max() # "Normalise" so we can return to linear space
-        
-        self.posterior = np.exp(posterior) # Linear posterior N-D array   
+        log_posterior = log_likelihood + log_prior  # Bayes theorem
+        # "Normalise" so we can return to linear space
+        log_posterior -= log_posterior.max()
 
-
-
-    # def calculate_posterior_dered(Grid_container, Obs_Container, log_prior_func, A_v_vals):
-    #     """
-    #     Calculate the posterior over the entire N-D grid at once using Bayes'
-    #     Theorem.  The emission line grids are interpolated prior to calculating
-    #     the posterior.  We add a dimension corresponding to extinction, and we
-    #     correct observations for extinction before comparing to models to calculate
-    #     posterior.
-    #     """
-
-    #     # Use systematic uncertainty in modelled fluxes, as in Blanc et al.
-    #     epsilon = 0.15 # dex.  Default is 0.15 dex systematic uncertainty
-    #     # Convert from dex to a scaling factor:
-    #     epsilon_2 = 10**epsilon - 1  # This gives a factor of 0.41 for epsilon=0.15 dex
-    #     # epsilon_2 is a scaling factor to go from a linear modelled flux to an
-    #     # associated systematic error
-    #     # Note the original from izi.pro is equivalent to:
-    #     # epsilon_2 = epsilon * np.log(10)
-    #     # This gives 0.345 for epsilon=0.15 dex. I don't understand this.
-    #     # Why was a log used?  And a log base e?  This is surely wrong.
-    #     # What is intended by this formula anyway?
-    #     # Note that epsilon_2 is the assumed factional systematic error in the model
-    #     # fluxes already normalised to Hbeta.  In izi.pro the default is 0.15 dex,
-    #     # but the default is given as 0.1 dex in the Blanc+15 paper.
-
-    #     obs_fluxes = Obs_Container.obs_fluxes
-    #     obs_flux_errors = Obs_Container.obs_flux_errors
-    #     obs_wavelengths = Obs_Container.obs_wavelengths
-
-    #     # Initialise likelihood with 1 everywhere (multiplictive identity)
-    #     posterior_shape = tuple(Grid_container.Interpd_grids.shape) + (len(A_v_vals),)
-    #     log_likelihood = np.zeros(posterior_shape, dtype="float")
-    #     # The last axis is the extinction axis
-    #     for j, A_v in enumerate(A_v_vals):
-    #         # Calculate likelihood:
-    #         for i, emission_line in enumerate(Obs_Container.lines_list):
-    #             # Deredden emission lines
-    #             dered_flux_i, dered_flux_err_i = deredden(obs_wavelengths[i],
-    #                                     obs_fluxes[i], obs_flux_errors[i], A_v=A_v)
-
-    #             # Use a log version of equation 3 on pg 4 of Blanc et al. 2015 (IZI)
-    #             # N.B. var is the sum of variances due to both the measured and modelled fluxes
-    #             # N-D array of predicted fluxes (must be non-negative):
-    #             pred_flux_i = Grid_container.Interpd_grids.grids[emission_line]
-    #             var = dered_flux_err_i**2 + (epsilon_2 * pred_flux_i)**2
-    #             log_likelihood[...,j] += ( - (( dered_flux_i - pred_flux_i )**2 / 
-    #                                             ( 2.0 * var ))  -  0.5*np.log( var ) )
-    #             # N.B. "log" is base e
-
-    #     log_likelihood += np.log(2 * np.pi)
-
-    #     # Note: ??????? The parameter space, space of measurements and space of predictions are all continuous.
-    #     # Each value P in the posterior array is differential, i.e. P*dx = (posterior)*dx
-    #     # for a vector of parameters x.  # ???????????????? ADT - I don't understand my own note
-
-    #     log_prior = log_prior_func(Grid_container)
-    #     posterior = log_likelihood + log_prior  # Bayes theorem
-    #     posterior -= posterior.max() # "Normalise" so we can return to linear space
-    #     return np.exp(posterior)  # Return linear posterior N-D array
-
+        self.posterior = np.exp(log_posterior) # The linear posterior N-D array   
 
 
 
@@ -336,29 +274,30 @@ class Bigelm_result(object):
         """
         DF_peak = DF_obs.copy() # Index: "Line"; columns: "Flux", "Flux_err"
         # DF_obs may also possibly have a "Wavelength" column
+        DF_peak.rename(columns={"Flux":"Obs"}, inplace=True)
+
         inds_max = np.unravel_index(self.posterior.argmax(), self.posterior.shape)
         grid_fluxes_max = [Interpd_grids.grids[l][inds_max] for l in DF_peak.index]
-        DF_peak["Model_flux"] = grid_fluxes_max
-        DF_peak["Obs_S/N"] = DF_obs["Flux"].values / DF_obs["Flux_err"].values
-        DF_peak["Delta_(SDs)"] = ((DF_peak["Model_flux"].values - DF_obs["Flux"].values)
-                                        / DF_obs["Flux_err"].values )
-        DF_peak.rename(columns={"Flux":"Obs_flux"}, inplace=True)
-        # is_dered is True if we've added an extra dimension for dereddening,
-        # # False otherwise
-        # if self.deredden:
-        #     A_v = self.val_arrs[-1][inds_max[-1]] # Extinction in magnitudes
-        #     obs_fluxes_dered = deredden(Obs_Container.obs_wavelengths,
-        #                                 Obs_Container.obs_fluxes, A_v=A_v)
-        #     OD_1 = OD([ ("Line",lines_list), ("Model_flux",grid_fluxes_max),
-        #                 ("Obs_flux_dered",obs_fluxes_dered)
-        #                 ("Obs_flux_raw",Obs_Container.obs_fluxes), ("Obs_S/N",SN) ])
-        # else:
-        # OD_1 = OD([ ("Line",lines_list), ("Model_flux",grid_fluxes_max),
-        #             ("Obs_flux",Obs_Container.obs_fluxes), ("Obs_S/N",SN),
-        #             ("Delta_(SDs)",sds_diff) ])
-        # DF_peak = pd.DataFrame( OD_1 )
-        # Columns to include in output and their order (index is "Line"):
-        cols_to_include = ["Model_flux", "Obs_flux", "Obs_S/N", "Delta_(SDs)"]
+        DF_peak["Model"] = grid_fluxes_max
+        
+        if self.deredden: # If we dereddened the observed fluxes at each gridpoint
+            obs_flux_dered = [arr[inds_max] for arr in self.obs_flux_arrs]
+            obs_flux_err_dered = [arr[inds_max] for arr in self.obs_flux_err_arrs]
+            DF_peak["Obs_dered"] = obs_flux_dered
+            DF_peak["Flux_err_dered"] = obs_flux_err_dered
+            DF_peak["Obs_S/N_dered"] = (DF_peak["Obs_dered"].values /
+                                        DF_peak["Flux_err_dered"].values   )
+            DF_peak["Delta_(SDs)"] = ((DF_peak["Model"].values - DF_peak["Obs_dered"].values)
+                                        / DF_peak["Flux_err_dered"].values )
+            # Columns to include in output and their order (index is "Line"):
+            cols_to_include = ["Model", "Obs_dered", "Obs_S/N_dered", "Delta_(SDs)"]
+        else:
+            DF_peak["Obs_S/N"] = DF_peak["Obs"].values / DF_peak["Flux_err"].values
+            DF_peak["Delta_(SDs)"] = ((DF_peak["Model"].values - DF_peak["Obs"].values)
+                                        / DF_peak["Flux_err"].values )
+            # Columns to include in output and their order (index is "Line"):
+            cols_to_include = ["Model", "Obs", "Obs_S/N", "Delta_(SDs)"]
+        
         self.DF_peak = DF_peak[cols_to_include]
 
 
@@ -368,13 +307,19 @@ class Bigelm_result(object):
         Calculate chi2 between model and observations for the model corresponding to
         the peak in the posterior.
         """
-        DF_peak = self.DF_peak
-        flux_err = DF_peak["Obs_flux"] / DF_peak["Obs_S/N"]
-        chi2_working = ( (DF_peak["Obs_flux"] - DF_peak["Model_flux"])**2
-                                     / flux_err**2  )
-        chi2 = np.sum(chi2_working.values)
+        DF = self.DF_peak # Only contains a subset of useful columns
+        # We'll need to reconstruct the error column
+        if self.deredden:
+            flux_err = DF["Obs_dered"].values / DF["Obs_S/N_dered"].values
+            chi2_working = ( (DF["Obs_dered"].values - DF["Model"].values)**2
+                                         / flux_err**2  )
+        else:
+            flux_err = DF["Obs"].values / DF["Obs_S/N"].values
+            chi2_working = ( (DF["Obs"].values - DF["Model"].values)**2
+                                         / flux_err**2  )
+        chi2 = np.sum(chi2_working)
         grid_n = self.ndim
-        dof = len(DF_peak) - grid_n # Degrees of freedom
+        dof = len(DF) - grid_n # Degrees of freedom
         chi2 /= dof # This is the reduced chi-squared
         self.chi2 = chi2
 
