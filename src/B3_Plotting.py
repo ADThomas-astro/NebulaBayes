@@ -61,14 +61,13 @@ def plot_marginalised_posteriors(out_filename, Result, Raw_grids, plot_anno=None
         ax.set_visible(False)  # Needed axes will be turned on later.
 
     # Some quantities for working with the parameters:
-    par_arr_map = Result.Grid_spec.paramName2paramValueArr
+    G = Result.Grid_spec # Interpolated grid description
+    par_arr_map = G.paramName2paramValueArr
     interp_spacing = {p : (arr[1] - arr[0]) for p,arr in par_arr_map.items()}
-    display_names  = Result.Grid_spec.param_display_names
-    double_names   = Result.Grid_spec.double_names
-    double_indices = Result.Grid_spec.double_indices
+    p_estimates = Result.DF_estimates["Estimate"] # pandas Series; index is param name
 
     # Iterate over the 2D marginalised posteriors:
-    for double_name, param_inds_double in zip(double_names, double_indices):
+    for double_name, param_inds_double in zip(G.double_names, G.double_indices):
         # We will plot an image for each marginalised posterior
         ind_y, ind_x = param_inds_double
         name_y, name_x = double_name
@@ -81,10 +80,9 @@ def plot_marginalised_posteriors(out_filename, Result, Raw_grids, plot_anno=None
         ax_i.set_visible(True)  # Turn this axis back on
 
         # Calculate the image extent:
-        extent = { "xmin" : np.min( par_arr_map[name_x] ),
-                   "xmax" : np.max( par_arr_map[name_x] ),
-                   "ymin" : np.min( par_arr_map[name_y] ),
-                   "ymax" : np.max( par_arr_map[name_y] )  }
+        x_arr, y_arr = par_arr_map[name_x], par_arr_map[name_y]
+        extent = { "xmin" : x_arr.min(), "xmax" : x_arr.max(),
+                   "ymin" : y_arr.min(), "ymax" : y_arr.max() }
         extent["xmin"] -= interp_spacing[name_x]/2.
         extent["xmax"] += interp_spacing[name_x]/2.
         extent["ymin"] -= interp_spacing[name_y]/2.
@@ -99,7 +97,8 @@ def plot_marginalised_posteriors(out_filename, Result, Raw_grids, plot_anno=None
         image_aspect = 1.0 / ( extent["yrange"] / extent["xrange"] )
 
         # Actually generate the image of the 2D marginalised posterior:
-        ax_i.imshow( Result.posteriors_marginalised_2D[double_name], vmin=0,
+        posterior_2D = Result.posteriors_marginalised_2D[double_name]
+        ax_i.imshow( posterior_2D, vmin=0,
                      origin="lower", extent=extent_list, cmap=im_cmap,
                      interpolation="spline16", aspect=image_aspect )
         # Data point [0,0] is in the bottom-left of the image; the next point
@@ -115,6 +114,21 @@ def plot_marginalised_posteriors(out_filename, Result, Raw_grids, plot_anno=None
                                                 Raw_grids.param_values_arrs[ind_y] )
         ax_i.scatter(*zip(*raw_gridpoints_iter), marker='o', s=0.3, color='0.4')
         
+        # Show best estimates (coordinates from peaks of 1D posteriors):
+        x_best_1d, y_best_1d = p_estimates[name_x], p_estimates[name_y]
+        ax_i.scatter(x_best_1d, y_best_1d, marker="o", s=12, facecolor="maroon", linewidth=0)
+        # Show peak of 2D posterior:
+        max_inds_2d = np.unravel_index(np.argmax(posterior_2D), posterior_2D.shape)
+        x_best_2d = x_arr[max_inds_2d[1]]
+        y_best_2d = y_arr[max_inds_2d[0]]
+        ax_i.scatter(x_best_2d, y_best_2d, marker="v", s=13, facecolor="none", linewidth=0.5, edgecolor="blue")
+        # Show projection of peak of full posterior:
+        max_inds_nd = np.unravel_index(np.argmax(Result.posterior), Result.posterior.shape)
+        x_best_nd = x_arr[max_inds_nd[ind_x]]
+        y_best_nd = y_arr[max_inds_nd[ind_y]]
+        ax_i.scatter(x_best_nd, y_best_nd, marker="s", s=21, facecolor="none", linewidth=0.5, edgecolor="orange")
+
+
         # Format the current axes:
         ax_i.set_xlim( extent["xmin"], extent["xmax"] )
         ax_i.set_ylim( extent["ymin"], extent["ymax"] )
@@ -123,7 +137,7 @@ def plot_marginalised_posteriors(out_filename, Result, Raw_grids, plot_anno=None
             # Generate x-axis label
             label_x = grid_bounds["right"] - axes_width * (ind_x + 0.5)
             label_y = grid_bounds["bottom"] * 0.25
-            ax_i.annotate(display_names[ind_x], (label_x, label_y),
+            ax_i.annotate(G.param_display_names[ind_x], (label_x, label_y),
                           xycoords="figure fraction", **label_kwargs)
             for tick in ax_i.get_xticklabels():  # Rotate x tick labels
                     tick.set_rotation(90)
@@ -134,7 +148,7 @@ def plot_marginalised_posteriors(out_filename, Result, Raw_grids, plot_anno=None
             # Generate y-axis label
             label_x = grid_bounds["left"] * 0.25
             label_y = grid_bounds["bottom"] + axes_height * (ind_y + 0.5)
-            ax_i.annotate(display_names[ind_y], (label_x, label_y),
+            ax_i.annotate(G.param_display_names[ind_y], (label_x, label_y),
                 xycoords="figure fraction", rotation="vertical", **label_kwargs)
             for tick in ax_i.get_yticklabels():
                     tick.set_fontsize(tick_fontsize)
@@ -144,18 +158,22 @@ def plot_marginalised_posteriors(out_filename, Result, Raw_grids, plot_anno=None
 
     # Iterate over the 1D marginalised posteriors:
     # We plot the 1D pdfs along the diagonal of the grid of plots:
-    for ind, param in enumerate(Result.Grid_spec.param_names):
+    for ind, param in enumerate(G.param_names):
         ax_i = axes[ ind, ind ]
         ax_i.set_visible(True)  # turn this axis back on
-        ax_i.plot(par_arr_map[param], Result.posteriors_marginalised_1D[param],
-                  color="black")
+        posterior_1D =  Result.posteriors_marginalised_1D[param]
+        ax_i.plot(par_arr_map[param], posterior_1D, color="black", zorder=6)
+        # Plot a vertical line to show the parameter estimate (peak of 1D posterior)
+        y_lim = ax_i.get_ylim()
+        ax_i.vlines(p_estimates[G.param_names[ind]], y_lim[0], y_lim[1],
+                    linestyles="dashed", color="maroon", lw=0.6, zorder=5)
         ax_i.set_yticks([])  # No y-ticks
         ax_i.set_xlim( np.min( par_arr_map[param] ) - interp_spacing[param]/2.,
                        np.max( par_arr_map[param] ) + interp_spacing[param]/2. )
         if ind == 0: # Last column
             label_x = grid_bounds["right"] - 0.5 * axes_width
             label_y = grid_bounds["bottom"] * 0.25
-            ax_i.annotate(display_names[ind], (label_x, label_y),
+            ax_i.annotate(G.param_display_names[ind], (label_x, label_y),
                                      xycoords="figure fraction", **label_kwargs)
             for tick in ax_i.get_xticklabels():
                     tick.set_rotation(90)  # Rotate x tick labels
@@ -163,6 +181,7 @@ def plot_marginalised_posteriors(out_filename, Result, Raw_grids, plot_anno=None
         else: # Not last column
             ax_i.set_xticklabels([]) # No x_labels
         ax_i.tick_params(direction='out', length=tick_size)
+    # raise Exception
 
 
     # Adjust spacing between and around subplots (spacing in inches):

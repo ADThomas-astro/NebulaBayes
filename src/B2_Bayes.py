@@ -15,12 +15,11 @@ from .B1_Grid_working import Grid_description
 Adam D. Thomas 2015 - 2017
 
 Code to calculate the posterior over an N-D grid, marginalise the posterior
-to 1D and 2D marginalised posteriors, and do Bayesian parameter estimation.
-
+to 1D and 2D marginalised posteriors, and generally do Bayesian parameter
+estimation.
 """
 
-# class dummy(object):
-#     pass
+
 
 class Bigelm_result(object):
     """
@@ -28,7 +27,7 @@ class Bigelm_result(object):
     """
     def __init__(self, Interpd_grids, DF_obs, deredden, log_prior_func):
         """
-        Initialise an instance of the class by performing Bayesian parameter
+        Initialise an instance of the class and perform Bayesian parameter
         estimation.
         """
         self.deredden = deredden
@@ -53,6 +52,7 @@ class Bigelm_result(object):
         # Make a table (pandas DataFrame) comparing observed to model fluxes
         # at the peak of the posterior
         self.make_posterior_peak_table(DF_obs, Interpd_grids)
+        # We've made the attribute self.DF_peak
 
         self.calculate_chi2() # Chi2 at posterior peak (self.chi2 attribute)
 
@@ -60,7 +60,7 @@ class Bigelm_result(object):
 
     def calculate_posterior(self, Interpd_grids, DF_obs, log_prior_func):
         """
-        Calculate the posterior over the entire N-D grid at once using Bayes'
+        Calculate the posterior over the entire N-D grid at once using Bayes
         Theorem.  The emission line grids are interpolated prior to calculating
         the posterior.  The input observations have already been dereddened.
         """
@@ -411,6 +411,7 @@ def make_single_parameter_estimate(param_name, val_arr, posterior_1D):
 
 
 
+
 def uniform_prior(Interpd_grids):
     """
     Return the natural logarithm of a uniform prior.
@@ -424,24 +425,35 @@ def uniform_prior(Interpd_grids):
 
 
 
-# def calculate_posterior_stats(posterior, proportions=None):
-#     """
-#     For each value k in proportions, calculate the fraction of the posterior
-#     volume that has a value higher the k times the maximum value of the posterior.
-#     proportions: sequence of floats in range [0,1]
-#     Returns a list of floats corresponding to the input proportions.
-#     """
-#     if proportions is None:
-#         proportions = np.arange(0.05, 1.02, 0.05)
+def make_He_prior(Interpd_grids, DF_obs):
+    """
+    Returns a function that calculates a prior over the N-D interpolated grid,
+    based on matching the observed HeII4686/HeI5876 ratio.
+    """
+    # From simple investigation with S7 data, the HeII4686/HeI5876 ratio appears
+    # to vary in over -1.8 < log HeII4686/HeI5876 < 0.9, which is 2.7 dex.
+    # I'll use a Gaussian with the following std to generate the prior:
+    std = 0.5
 
-#     p_max = np.max( posterior )
-#     n_posterior = posterior.size
+    obs_ratio = DF_obs.loc["HeII4686", "Flux"] / DF_obs.loc["HeI5876", "Flux"]
+    log_obs_ratio = np.log10(obs_ratio)
 
-#     results = np.zeros(proportions.size)
-#     for k in proportions:
-#         results.append( np.sum( posterior > k*p_max ) / n_posterior )
+    def calculate_He_prior(Interpd_grids):
+        # Returns the natural logarithm of the prior over the grid
+        grid_ratio = Interpd_grids.grids["HeII4686"] / Interpd_grids.grids["HeI5876"]
+        log_grid_ratio = np.log10(grid_ratio) # An array with the shape of the grid
+        log_prior = - 0.5*((log_grid_ratio - log_obs_ratio) / std)**2
+        # Note that the posterior will be normalised later
+        return log_prior
 
-#     return results
+    return calculate_He_prior
+
+
+
+
+
+
+
 
 
 
