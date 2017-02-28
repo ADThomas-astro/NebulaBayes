@@ -121,7 +121,7 @@ class Bigelm_result(object):
         # Each value P in the posterior array is differential, i.e. P*dx = (posterior)*dx
         # for a vector of parameters x.  # ???????????????? ADT - I don't understand the purpose of my own note
 
-        log_prior = log_prior_func(Interpd_grids)
+        log_prior = log_prior_func(Interpd_grids.grids)
         log_posterior = log_likelihood + log_prior  # Bayes theorem
         # "Normalise" so we can return to linear space
         log_posterior -= log_posterior.max()

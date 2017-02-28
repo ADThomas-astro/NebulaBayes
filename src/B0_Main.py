@@ -5,8 +5,9 @@ import pandas as pd
 # For interpolating an n-dimensional regular grid:
 # import itertools # For finding Cartesian product and combinatorial combinations
 from . import B1_Grid_working
-from . import B2_Bayes
-from . import B3_Plotting
+from . import B2_Prior
+from . import B3_Posterior
+from . import B4_Plotting
 
 
 """
@@ -113,16 +114,25 @@ class Bigelm_model(object):
                               Can be raw strings (i.e. r"string") in order to include e.g. Greek letters.
                               Not all of the grid parameters need to be included in param_display_names;
                               raw parameter names will be used as display names by default.
-        #priors???            NOT IMPLETMENTED: A dictionary of functions for priors for each parameter... ???
+        prior:                The prior to use when calculating the posterior.
+                              Choices are: "Uniform", "SII_ratio", "He_ratio",
+                              "SII_and_He_ratios", or a user-supplied function.
+                              The user-supplied function must take as a single
+                              parameter a dictionary which maps spectral line
+                              names to nD flux arrays over the grid; the function
+                              returns the log of the prior as an array over the grid.
+                              Default: "Uniform".
+                              See the code file "B2_Prior.py" for the details
+                              of the SII and He priors.
+        grid_error:           NOT IMPLEMENTED
 
 
-        Returns a Bigelm_container object (defined in this module), which contains
-        the following attributes...
+        Returns a Bigelm_result object (defined in this B3_Posterior.py), which
+        contains the following attributes...
 
         Other notes:
         We don't deal with measured emission-line fluxes that are provided summed for two lines.
         We ignore the possibility of including only upper bounds for emission-line fluxes
-        We currently assume uniform priors for everything
         We currently compare linear fluxes, not log fluxes...
         In calculating the likelihood we assume a systematic error on the normalised model fluxes of 0.15dex.
         In finding marginalised posteriors, we use trapezium integration - perhaps dodgy, 
@@ -174,9 +184,9 @@ class Bigelm_model(object):
             for i, custom_name in enumerate(custom_display_names):
                 param_display_names[i] = custom_name # Override default
 
-        # Deredden observed fluxes and have extra grid parameter for extinction?
+        # Deredden observed fluxes at every point in the model grid?
         deredden = kwargs.pop("deredden", True)
-        # Observed wavelengths?
+        # Observed wavelengths supplied?
         obs_wavelengths = kwargs.pop("obs_wavelengths", None)
         if deredden and (obs_wavelengths is None):
             raise ValueError("Must supply obs_wavelengths if deredden==True")
@@ -185,18 +195,8 @@ class Bigelm_model(object):
                 pass # obs_wavelengths is unnecessary; don't check or use it
             elif len(obs_wavelengths) != n_measured:
                 raise ValueError("obs_wavelengths must have same length as obs_fluxes")
-        # Output corner plot image: Default is no plotting (None)
-        image_out = kwargs.pop("image_out", None)
-        # Output parameter estimate table: Default is no plotting (None)
-        table_out = kwargs.pop("table_out", None)
 
-        # Ensure there aren't any remaining keyword arguments that we haven't used:
-        if len(kwargs) > 0:
-            raise ValueError( "Unknown or unnecessary keyword argument(s) " +
-                              str(kwargs.keys())[1:-1] )
-
-        #----------------------------------------------------------------------
-        # Form the data for the observations into a DataFrame table.
+        # Form the data from the observations into a pandas DataFrame table.
         obs_dict = OD([("Line",lines_list)])
         if obs_wavelengths is not None:
             obs_dict["Wavelength"] = obs_wavelengths
@@ -205,11 +205,28 @@ class Bigelm_model(object):
         DF_obs = pd.DataFrame(obs_dict)
         DF_obs.set_index("Line", inplace=True)
 
+        input_prior = kwargs.pop("prior", "Uniform") # Default "Uniform"
+        if callable(input_prior):
+            # The user has inputted a custom function to calculate the prior
+            log_prior_func = input_prior
+        else: # Determine the built-in function to use to calculate the prior
+            log_prior_func = B2_Prior.choose_prior_func(input_prior, DF_obs)
+
+        # Filename for output corner plot image?  Default None (no plotting)
+        image_out = kwargs.pop("image_out", None)
+        # Filename for output parameter estimate csv table?  Default None
+        table_out = kwargs.pop("table_out", None)
+
+        # Ensure there aren't any remaining keyword arguments that we haven't used:
+        if len(kwargs) > 0:
+            raise ValueError( "Unknown keyword argument(s) " +
+                              str(kwargs.keys())[1:-1] )
+
         #----------------------------------------------------------------------
         # Create a "Bigelm_result" object instance, which involves calculating
         # the posterior and parameter estimates:
-        Result = B2_Bayes.Bigelm_result(Interpd_grids, DF_obs, deredden=deredden,
-                                log_prior_func=B2_Bayes.calculate_uniform_prior)
+        Result = B3_Posterior.Bigelm_result(Interpd_grids, DF_obs, deredden=deredden,
+                                                    log_prior_func=log_prior_func)
         Result.Grid_spec.param_display_names = param_display_names
 
         # Save out results table if requested
@@ -222,7 +239,7 @@ class Bigelm_model(object):
             plot_text += "Observed fluxes vs. model fluxes at posterior peak\n"
             pd.set_option("display.precision", 4)
             plot_text += str(Result.DF_peak) # To print in a monospace font
-            B3_Plotting.plot_marginalised_posteriors(image_out, Result,
+            B4_Plotting.plot_marginalised_posteriors(image_out, Result,
                                                            Raw_grids, plot_text)
 
         print("Bigelm finished.")
