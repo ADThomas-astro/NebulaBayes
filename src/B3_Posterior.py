@@ -411,8 +411,7 @@ def make_single_parameter_estimate(param_name, val_arr, posterior_1D):
 
 
 
-
-def uniform_prior(Interpd_grids):
+def calculate_uniform_prior(Interpd_grids):
     """
     Return the natural logarithm of a uniform prior.
     Interpd_grids: Contains details of the interpolated input model grid
@@ -425,7 +424,7 @@ def uniform_prior(Interpd_grids):
 
 
 
-def make_He_prior(Interpd_grids, DF_obs):
+def make_He_prior_func(Interpd_grids, DF_obs):
     """
     Returns a function that calculates a prior over the N-D interpolated grid,
     based on matching the observed HeII4686/HeI5876 ratio.
@@ -441,7 +440,10 @@ def make_He_prior(Interpd_grids, DF_obs):
     def calculate_He_prior(Interpd_grids):
         # Returns the natural logarithm of the prior over the grid
         grid_ratio = Interpd_grids.grids["HeII4686"] / Interpd_grids.grids["HeI5876"]
-        log_grid_ratio = np.log10(grid_ratio) # An array with the shape of the grid
+        # Handle either or both lines having a flux of zero
+        bad = (grid_ratio == 0) | (~np.isfinite(grid_ratio))
+        grid_ratio[bad] = 1e-250
+        log_grid_ratio = np.log10(grid_ratio) # Array with same shape as the grid
         log_prior = - 0.5*((log_grid_ratio - log_obs_ratio) / std)**2
         # Note that the posterior will be normalised later
         return log_prior
@@ -450,8 +452,49 @@ def make_He_prior(Interpd_grids, DF_obs):
 
 
 
+def make_SII_prior_func(Interpd_grids, DF_obs):
+    """
+    Returns a function that calculates a prior over the N-D interpolated grid,
+    based on matching the observed SII6731/SII6716 ratio.
+    """
+    # Now log(SII6731/SII6716) varies between ~-0.17 (density n_e <= 10^2 cm^-3)
+    # through ~0.15 (density n_e ~10^3 cm^-3) to ~0.36 (density n_e >= 10^4 cm^-3)
+    # This is a range of approximately 0.45 dex.
+    # I'll use a Gaussian with the following std to generate the prior:
+    std = 0.1
+
+    obs_ratio = DF_obs.loc["SII6731", "Flux"] / DF_obs.loc["SII6716", "Flux"]
+    log_obs_ratio = np.log10(obs_ratio)
+
+    def calculate_SII_prior(Interpd_grids):
+        # Returns the natural logarithm of the prior over the grid
+        grid_ratio = Interpd_grids.grids["SII6731"] / Interpd_grids.grids["SII6716"]
+        # Handle either or both lines having a flux of zero
+        bad = (grid_ratio == 0) | (~np.isfinite(grid_ratio))
+        grid_ratio[bad] = 1e-250
+        log_grid_ratio = np.log10(grid_ratio) # Array with same shape as the grid
+        log_prior = - 0.5*((log_grid_ratio - log_obs_ratio) / std)**2
+        # Note that the posterior will be normalised later
+        return log_prior
+
+    return calculate_SII_prior
 
 
+def make_He_and_SII_prior_func(Interpd_grids, DF_obs):
+    """
+    Returns a function that calculates a prior over the N-D interpolated grid,
+    based on matching observed HeII4686/HeI5876 ratio and the observed
+    SII6731/SII6716 ratio.
+    """
+    calculate_He_prior  = make_He_prior_func(Interpd_grids, DF_obs)
+    calculate_SII_prior = make_SII_prior_func(Interpd_grids, DF_obs)
+
+    def calculate_He_and_SII_prior(Interpd_grids):
+        log_He_prior = calculate_He_prior(Interpd_grids)
+        log_SII_prior = calculate_SII_prior(Interpd_grids)
+        return log_He_prior + log_SII_prior
+
+    return calculate_He_and_SII_prior
 
 
 

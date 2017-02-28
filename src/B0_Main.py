@@ -209,7 +209,7 @@ class Bigelm_model(object):
         # Create a "Bigelm_result" object instance, which involves calculating
         # the posterior and parameter estimates:
         Result = B2_Bayes.Bigelm_result(Interpd_grids, DF_obs, deredden=deredden,
-                                          log_prior_func=B2_Bayes.uniform_prior)
+                                log_prior_func=B2_Bayes.calculate_uniform_prior)
         Result.Grid_spec.param_display_names = param_display_names
 
         # Save out results table if requested
