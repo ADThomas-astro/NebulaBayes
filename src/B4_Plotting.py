@@ -16,30 +16,30 @@ Adam D. Thomas 2015 - 2017
 
 
 
-def plot_marginalised_posteriors(out_filename, Result, Raw_grids, plot_anno=None):
+def plot_marginalised_ndpdf(out_filename, Bigelm_nd_pdf, Raw_grids, plot_anno=None):
     """
-    Generate a plot of all the 2D and 1D marginalised posterior pdfs.  The
+    Generate a corner plot of all the 2D and 1D marginalised pdfs for an
+    n-dimensional pdf.  This function may be used for the prior, lkelihood or
+    posterior.
     resulting "corner plot" is a triangular grid of 2-D images for each 2D
-    marginalised posterior pdf, with appropriate 1D plots of 1D marginalised
-    posteriors included along the diagonal.  This function is designed to
+    marginalised pdf, with appropriate 1D plots of 1D marginalised
+    pdfs included along the diagonal.  This function is designed to
     produce attractive plots independent of the dimensionality (axes grid size).
     out_filename: The filename for the output corner plot image file.
-    Result: An object which contains the marginalised posteriors and
-            interpolated grid information
+    Bigelm_nd_pdf: An object which contains the 1D and 1D marginalised pdfs and
+                   interpolated grid information
     Raw_grids: Object holding information about the raw grids, used in plotting
                the original (non-interpolated) grid points.
     plot_anno: Text to annotate the output image in the empty upper-triangle of
                the grid of plots. 
     """
-    print("Plotting marginalised posteriors...")
-    
     # Some configuration
     label_fontsize = 7
     tick_fontsize = 7
     tick_size = 3
     label_kwargs = {"annotation_clip":False, "horizontalalignment":"center",
                     "verticalalignment":"center", "fontsize":label_fontsize}
-    # Make a custom colourmap for the 2D marginalised posteriors - black to
+    # Make a custom colourmap for the 2D marginalised pdfs - black to
     # white through green, as in Blanc+ 2015
     # Use a list of RGB tuples (values normalised to [0,1])
     im_cmap = LinearSegmentedColormap.from_list( "cmap1", # Name unnecessary?
@@ -48,7 +48,7 @@ def plot_marginalised_posteriors(out_filename, Result, Raw_grids, plot_anno=None
     # Create a figure and a 2D-array of axes objects:
     # We keep the figure size and bounds of the axes grid the same, and change
     # only n_rows(==n_cols) for different grid dimensions.
-    n = Result.ndim
+    n = Bigelm_nd_pdf.Grid_spec.ndim
     fig_width_ht = 6, 6 # Figure width and height in inches
     grid_bounds = {"left":0.13, "bottom":0.13, "right":0.95, "top":0.95}
     axes_width = (grid_bounds["right"] - grid_bounds["left"]) / n # Figure frac
@@ -61,14 +61,14 @@ def plot_marginalised_posteriors(out_filename, Result, Raw_grids, plot_anno=None
         ax.set_visible(False)  # Needed axes will be turned on later.
 
     # Some quantities for working with the parameters:
-    G = Result.Grid_spec # Interpolated grid description
+    G = Bigelm_nd_pdf.Grid_spec # Interpolated grid description
     par_arr_map = G.paramName2paramValueArr
     interp_spacing = {p : (arr[1] - arr[0]) for p,arr in par_arr_map.items()}
-    p_estimates = Result.DF_estimates["Estimate"] # pandas Series; index is param name
+    p_estimates = Bigelm_nd_pdf.DF_estimates["Estimate"] # pandas Series; index is param name
 
-    # Iterate over the 2D marginalised posteriors:
+    # Iterate over the 2D marginalised pdfs:
     for double_name, param_inds_double in zip(G.double_names, G.double_indices):
-        # We will plot an image for each marginalised posterior
+        # We will plot an image for each 2D marginalised pdf
         ind_y, ind_x = param_inds_double
         name_y, name_x = double_name
         # The first parameter is on the y-axis; the second is on the x-axis.
@@ -96,15 +96,15 @@ def plot_marginalised_posteriors(out_filename, Result, Raw_grids, plot_anno=None
         # We use a custom image aspect to force a square subplot:
         image_aspect = 1.0 / ( extent["yrange"] / extent["xrange"] )
 
-        # Actually generate the image of the 2D marginalised posterior:
-        posterior_2D = Result.posteriors_marginalised_2D[double_name]
-        ax_i.imshow( posterior_2D, vmin=0,
+        # Actually generate the image of the 2D marginalised pdf:
+        pdf_2D = Bigelm_nd_pdf.marginalised_2D[double_name]
+        ax_i.imshow( pdf_2D, vmin=0,
                      origin="lower", extent=extent_list, cmap=im_cmap,
                      interpolation="spline16", aspect=image_aspect )
         # Data point [0,0] is in the bottom-left of the image; the next point
         # above the lower-left corner is [1,0], and the next point to the right
-        # of the lower-left corner is [0,1]; i.e. posterior array indexing is
-        # along the lines of posteriors_marginalised_2D[double_name][y_i, x_i]
+        # of the lower-left corner is [0,1]; i.e. the 2D pdf array indexing is
+        # along the lines of marginalised_2D[double_name][y_i, x_i]
         # Uncomment the following to show the x- and y- indices of the axes:
         # ax_i.annotate( "ind_y, ind_x = ({0},{1})".format(ind_y, ind_x),
         #    (0.1,0.5), color="white", xycoords="axes fraction", fontsize=4)
@@ -114,16 +114,16 @@ def plot_marginalised_posteriors(out_filename, Result, Raw_grids, plot_anno=None
                                                 Raw_grids.param_values_arrs[ind_y] )
         ax_i.scatter(*zip(*raw_gridpoints_iter), marker='o', s=0.3, color='0.4')
         
-        # Show best estimates (coordinates from peaks of 1D posteriors):
+        # Show best estimates (coordinates from peaks of 1D pdf):
         x_best_1d, y_best_1d = p_estimates[name_x], p_estimates[name_y]
         ax_i.scatter(x_best_1d, y_best_1d, marker="o", s=12, facecolor="maroon", linewidth=0)
-        # Show peak of 2D posterior:
-        max_inds_2d = np.unravel_index(np.argmax(posterior_2D), posterior_2D.shape)
+        # Show peak of 2D pdf:
+        max_inds_2d = np.unravel_index(np.argmax(pdf_2D), pdf_2D.shape)
         x_best_2d = x_arr[max_inds_2d[1]]
         y_best_2d = y_arr[max_inds_2d[0]]
         ax_i.scatter(x_best_2d, y_best_2d, marker="v", s=13, facecolor="none", linewidth=0.5, edgecolor="blue")
-        # Show projection of peak of full posterior:
-        max_inds_nd = np.unravel_index(np.argmax(Result.posterior), Result.posterior.shape)
+        # Show projection of peak of full nD pdf:
+        max_inds_nd = np.unravel_index(np.argmax(Bigelm_nd_pdf.nd_pdf), Bigelm_nd_pdf.nd_pdf.shape)
         x_best_nd = x_arr[max_inds_nd[ind_x]]
         y_best_nd = y_arr[max_inds_nd[ind_y]]
         ax_i.scatter(x_best_nd, y_best_nd, marker="s", s=21, facecolor="none", linewidth=0.5, edgecolor="orange")
@@ -156,20 +156,21 @@ def plot_marginalised_posteriors(out_filename, Result, Raw_grids, plot_anno=None
             ax_i.set_yticklabels([]) # No y_labels
 
 
-    # Iterate over the 1D marginalised posteriors:
+    # Iterate over the 1D marginalised pdfs:
     # We plot the 1D pdfs along the diagonal of the grid of plots:
     for ind, param in enumerate(G.param_names):
         ax_i = axes[ ind, ind ]
         ax_i.set_visible(True)  # turn this axis back on
-        posterior_1D =  Result.posteriors_marginalised_1D[param]
-        ax_i.plot(par_arr_map[param], posterior_1D, color="black", zorder=6)
-        # Plot a vertical line to show the parameter estimate (peak of 1D posterior)
+        pdf_1D =  Bigelm_nd_pdf.marginalised_1D[param]
+        ax_i.plot(par_arr_map[param], pdf_1D, color="black", zorder=6)
+        # Plot a vertical line to show the parameter estimate (peak of 1D pdf)
         y_lim = ax_i.get_ylim()
         ax_i.vlines(p_estimates[G.param_names[ind]], y_lim[0], y_lim[1],
                     linestyles="dashed", color="maroon", lw=0.6, zorder=5)
         ax_i.set_yticks([])  # No y-ticks
         ax_i.set_xlim( np.min( par_arr_map[param] ) - interp_spacing[param]/2.,
                        np.max( par_arr_map[param] ) + interp_spacing[param]/2. )
+        ax_i.set_ylim(y_lim)
         if ind == 0: # Last column
             label_x = grid_bounds["right"] - 0.5 * axes_width
             label_y = grid_bounds["bottom"] * 0.25

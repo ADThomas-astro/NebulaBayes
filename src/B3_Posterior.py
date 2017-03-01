@@ -8,6 +8,7 @@ from scipy.signal import argrelextrema
 # from .dereddening import deredden
 import dereddening as dr
 from .B1_Grid_working import Grid_description
+from .B2_Prior import calculate_prior
 
 
 
@@ -21,125 +22,48 @@ estimation.
 
 
 
-class Bigelm_result(object):
+class Bigelm_nd_pdf(object):
     """
-    Class to hold the posterior, marginalised posteriors and parameter estimates.
+    Class to hold an N-dimensional PDF and its 1D and 2D marginalised forms.
+    An instance of this class is used for each of the likelihood, prior and
+    posterior.
     """
-    def __init__(self, Interpd_grids, DF_obs, deredden, log_prior_func):
+    def __init__(self, nd_pdf, Bigelm_result, DF_obs, Interpd_grids):
         """
-        Initialise an instance of the class and perform Bayesian parameter
-        estimation.
+        Initialise an instance of the Bigelm_nd_pdf class.
+        nd_pdf: A numpy ndarray holding the (linear) pdf.
+        Bigelm_result: A Bigelm_result object (defined in this module)
+        DF_obs: A pandas DataFrame table holding the observed emission line
+                fluxes and errors
+        Interpd_grids: A Bigelm_grid object (defined in B1_Grid_working.py)
+                       holding the interpolated model grid fluxes and the
+                       description fo the model grid.
         """
-        self.deredden = deredden
-        self.ndim = Interpd_grids.ndim
+        self.nd_pdf = nd_pdf
+        self.Grid_spec = Bigelm_result.Grid_spec
+        # Add self.marginalised_2d and self.marginalised_1d attributes and
+        # normalise the self.nd_pdf attribute:
+        self.marginalise_pdf()
+        # Make a parameter estimate table based on this nd_pdf
+        self.make_parameter_estimate_table() # add self.DF_estimates attribute
+        # Make a table comparing model and observed fluxes at the pdf peak
+        self.make_pdf_peak_table(DF_obs, Interpd_grids, Bigelm_result)
+        # We added the self.DF_peak attribute
 
-        # Calculates the posterior (create self.posterior attribute)
-        self.calculate_posterior(Interpd_grids, DF_obs, log_prior_func)
-
-        # Store the interpolated grid description in this object as well:
-        self.Grid_spec = Grid_description(Interpd_grids.param_names,
-                           list(Interpd_grids.paramName2paramValueArr.values()))
-
-        # Normalise and marginalise the posterior
-        self.marginalise_posterior()
-        # We've created attributes self.posteriors_marginalised_2D and
-        # self.posteriors_marginalised_1D 
-
-        # Make a table (pandas DataFrame) of parameter estimate results
-        self.make_parameter_estimate_table()
-        # We've created the attribute self.DF_estimates
-
-        # Make a table (pandas DataFrame) comparing observed to model fluxes
-        # at the peak of the posterior
-        self.make_posterior_peak_table(DF_obs, Interpd_grids)
-        # We've made the attribute self.DF_peak
-
-        self.calculate_chi2() # Chi2 at posterior peak (self.chi2 attribute)
+        self.calculate_chi2(Bigelm_result.deredden) # Chi2 at pdf peak (add self.chi2 attribute)
 
 
 
-    def calculate_posterior(self, Interpd_grids, DF_obs, log_prior_func):
+    def marginalise_pdf(self):
         """
-        Calculate the posterior over the entire N-D grid at once using Bayes
-        Theorem.  The emission line grids are interpolated prior to calculating
-        the posterior.  The input observations have already been dereddened.
-        """
-        # Use systematic uncertainty in modelled fluxes, as in Blanc et al.
-        epsilon = 0.15 # dex.  Default is 0.15 dex systematic uncertainty
-        # Convert from dex to a scaling factor:
-        epsilon_2 = 10**epsilon - 1  # This gives a factor of 0.41 for epsilon=0.15 dex
-        # epsilon_2 is a scaling factor to go from a linear modelled flux to an
-        # associated systematic error
-        # Note the original from izi.pro is equivalent to:
-        # epsilon_2 = epsilon * np.log(10)
-        # This gives 0.345 for epsilon=0.15 dex. I don't understand this.
-        # Why was a log used?  And a log base e?  This is surely wrong.
-        # What is intended by this formula anyway?
-        # Note that epsilon_2 is the assumed fractional systematic error in the model
-        # fluxes already normalised to Hbeta.  In izi.pro the default is 0.15 dex,
-        # but the default is given as 0.1 dex in the Blanc+15 paper.
-
-        if self.deredden:
-            # Deredden observed fluxes at every interpolated gridpoint to match
-            # the model Balmer decrement at that gridpoint
-            grid_BD_arr = Interpd_grids.grids["Halpha"]
-            # Fluxes are normalised to Hbeta == 1, so grid_BD_arr is an array of
-            # the Balmer decrement F_Halpha / F_Hbeta over the model grid.
-            obs_flux_arrs, obs_flux_err_arrs = dr.deredden(
-                                    DF_obs["Wavelength"].values,
-                                    DF_obs["Flux"].values,
-                                    DF_obs["Flux_err"].values, BD=grid_BD_arr)
-        else: # Use the input observed fluxes, which hopefully may have
-              # already been dereddened.
-            shape = Interpd_grids.shape
-            obs_flux_arrs = [np.full(shape, f) for f in DF_obs["Flux"].values]
-            obs_flux_err_arrs = [np.full(shape, e) for e in DF_obs["Flux_err"].values]
-
-        # Now obs_flux_arrs is a list of arrays corresponding to the list
-        # of observed fluxes, where each array has the same shape as the 
-        # model grid.  The list obs_flux_err_arrs is the same, but for errors.
-        self.obs_flux_arrs = obs_flux_arrs
-        self.obs_flux_err_arrs = obs_flux_err_arrs
-
-        # Initialise likelihood with 1 everywhere (multiplictive identity)
-        log_likelihood = np.zeros(Interpd_grids.shape, dtype="float")
-        for i, line in enumerate(DF_obs.index): # Iterate over emission lines
-            # Use a log version of equation 3 on pg 4 of Blanc et al. 2015 (IZI)
-            # N.B. var is the sum of variances due to both the measured and modelled fluxes
-            # N-D array of predicted fluxes (must be non-negative):
-            pred_flux_i = Interpd_grids.grids[line]
-            obs_flux_i = obs_flux_arrs[i]
-            obs_flux_err_i = obs_flux_err_arrs[i]
-            assert obs_flux_i.shape == pred_flux_i.shape
-            var = obs_flux_err_i**2 + (epsilon_2 * pred_flux_i)**2
-            log_likelihood += ( - (( obs_flux_i - pred_flux_i )**2 / 
-                                     ( 2.0 * var ))  -  0.5*np.log( var ) )
-            # N.B. "log" is base e
-        log_likelihood += np.log(2 * np.pi)
-
-        # Note: ??????? The parameter space, space of measurements and space of predictions are all continuous.
-        # Each value P in the posterior array is differential, i.e. P*dx = (posterior)*dx
-        # for a vector of parameters x.  # ???????????????? ADT - I don't understand the purpose of my own note
-
-        log_prior = log_prior_func(Interpd_grids.grids)
-        log_posterior = log_likelihood + log_prior  # Bayes theorem
-        # "Normalise" so we can return to linear space
-        log_posterior -= log_posterior.max()
-
-        self.posterior = np.exp(log_posterior) # The linear posterior N-D array   
-
-
-
-    def marginalise_posterior(self):
-        """
-        Calculate normalised 1D and 2D posterior for all possible combinations of
-        parameters.
+        Calculate normalised 1D and 2D marginalised pdfs for all possible
+        combinations of parameters.
         """
         # The interpolated grids have uniform spacing:
         spacing = [(v[1] - v[0]) for v in self.Grid_spec.param_values_arrs]
         n = self.Grid_spec.ndim
         #--------------------------------------------------------------------------
-        # Calculate the 2D marginalised posterior pdf for every possible combination
+        # Calculate the 2D marginalised pdf for every possible combination
         # of 2 parameters
         print("Calculating 2D marginalised posteriors...")
         # List of all possible pairs of two parameter names:
@@ -155,8 +79,8 @@ class Bigelm_result(object):
         # Looks something like: [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)]
         # Note that the order of indices in each tuple is from samller to larger
         
-        # Initialise dictionary of all possible 2D marginalised posterior arrays:
-        posteriors_marginalised_2D = {}  # The dict keys will be tuples of 2 parameter names.
+        # Initialise dictionary of all possible 2D marginalised pdf arrays:
+        marginalised_2D = {}  # The dict keys will be tuples of 2 parameter names.
         # Iterate over all possible pairs of parameters:
         for double_name, param_inds_double in zip(double_names, double_indices):
             # Generate list of indices/dimensions/parameters to integrate over:
@@ -166,25 +90,25 @@ class Bigelm_result(object):
             inds_for_integration.reverse() # Ensure we integrate over higher dimensions first,
             # so dimension index numbers are still valid after each integration.
 
-            posteriors_marginalised_2D[double_name] = self.posterior.copy()  # Initialise
+            marginalised_2D[double_name] = self.nd_pdf.copy()  # Initialise
             # Keep integrating one dimension at a time until the result only has 2 dimensions:
             for param_index in inds_for_integration:
                 # Integrate over this dimension (parameter), using the trapezoidal rule
-                posteriors_marginalised_2D[double_name] = np.trapz( 
-                    posteriors_marginalised_2D[double_name], axis=param_index,
+                marginalised_2D[double_name] = np.trapz( 
+                    marginalised_2D[double_name], axis=param_index,
                     dx=spacing[param_index] )
 
         #--------------------------------------------------------------------------
-        # Calculate the 1D marginalised posterior pdf for each individual parameter
+        # Calculate the 1D marginalised pdf for each individual parameter
         print("Calculating 1D marginalised posteriors...")
-        # Initialise dictionary of all 1D marginalised posterior arrays:
-        posteriors_marginalised_1D = {}
+        # Initialise dictionary of all 1D marginalised pdf arrays:
+        marginalised_1D = {}
 
         # For the first parameter in param_names:
-        # Integrate the first 2D marginalised posterior pdf over the other
+        # Integrate the first 2D marginalised pdf over the other
         # dimension (parameter), using the trapezoidal rule:
-        posteriors_marginalised_1D[param_names[0]] = np.trapz( 
-             posteriors_marginalised_2D[double_names[0]], axis=1, dx=spacing[1])
+        marginalised_1D[param_names[0]] = np.trapz( 
+             marginalised_2D[double_names[0]], axis=1, dx=spacing[1])
 
         # For all parameters after the first in param_names:
         for double_name, param_inds_double in zip(double_names[:n-1], double_indices[:n-1]):
@@ -194,32 +118,32 @@ class Bigelm_result(object):
             assert( param_inds_double[0] == 0 )
             param = param_names[ param_inds_double[1] ]
             # Integrate over first dimension (parameter) using trapezoidal method:
-            posteriors_marginalised_1D[param] = np.trapz(
-                 posteriors_marginalised_2D[double_name], axis=0, dx=spacing[0])
+            marginalised_1D[param] = np.trapz(
+                 marginalised_2D[double_name], axis=0, dx=spacing[0])
 
         #--------------------------------------------------------------------------
-        # Calculate the 0D marginalised posterior pdf (by which I mean find
-        # the normalisation constant - the 0D marginalised posterior should be 1!)
+        # Calculate the 0D marginalised pdf (by which I mean find
+        # the normalisation constant - the 0D marginalised pdf should be 1!)
         # Then normalise the 1D and 2D marginalised posteriors:
 
         # Firstly find the integral over all n dimensions by picking
-        # any 1D marginalised posterior (we use the first) and integrating over it:
-        integral = np.trapz( posteriors_marginalised_1D[ param_names[0] ],
+        # any 1D marginalised pdf (we use the first) and integrating over it:
+        integral = np.trapz( marginalised_1D[ param_names[0] ],
                              dx=spacing[0] )
-        # print( "Integral for un-normalised full posterior is " + str(integral) )
-        # Now actually normalise each 2D and 1D marginalised posterior:
+        # print( "Integral for un-normalised full pwd is " + str(integral) )
+        # Now actually normalise each 2D and 1D marginalised pdf:
         for double_name in double_names:
             # Divide arrays in-place in memory:
-            posteriors_marginalised_2D[double_name] /= integral
+            marginalised_2D[double_name] /= integral
         for param in param_names:
             # Divide arrays in-place in memory:
-            posteriors_marginalised_1D[param] /= integral
-        # Now normalise the full posterior, since we output it and the user
-        # might want it normalised:
-        self.posterior /= integral
+            marginalised_1D[param] /= integral
+        # Now normalise the full pdf.  In the case of the likelihood and prior,
+        # this normalisation is important; for the posterior it's probably not.
+        self.nd_pdf /= integral
 
-        self.posteriors_marginalised_2D = posteriors_marginalised_2D
-        self.posteriors_marginalised_1D = posteriors_marginalised_1D
+        self.marginalised_2D = marginalised_2D
+        self.marginalised_1D = marginalised_1D
 
 
 
@@ -256,9 +180,9 @@ class Bigelm_result(object):
             DF_estimates.loc[:,col] = np.nan
         DF_estimates.loc[:,"n_local_maxima"] = -1
         
-        for p, posterior_1D in self.posteriors_marginalised_1D.items():
+        for p, pdf_1D in self.marginalised_1D.items():
             param_val_arr = self.Grid_spec.paramName2paramValueArr[p]
-            p_dict = make_single_parameter_estimate(p, param_val_arr, posterior_1D)
+            p_dict = make_single_parameter_estimate(p, param_val_arr, pdf_1D)
             for field, value in p_dict.items():
                 if field != "Parameter":
                     DF_estimates.loc[p,field] = value
@@ -267,22 +191,22 @@ class Bigelm_result(object):
 
 
 
-    def make_posterior_peak_table(self, DF_obs, Interpd_grids):
+    def make_pdf_peak_table(self, DF_obs, Interpd_grids, Bigelm_result):
         """
-        Make a pandas dataframe containing observed emission lines and model
-        fluxes for the model corresponding to the peak in the posterior.
+        Make a pandas dataframe comparing observed emission lines and model
+        fluxes for the model corresponding to the peak in the nD PDF.
         """
         DF_peak = DF_obs.copy() # Index: "Line"; columns: "Flux", "Flux_err"
         # DF_obs may also possibly have a "Wavelength" column
         DF_peak.rename(columns={"Flux":"Obs"}, inplace=True)
 
-        inds_max = np.unravel_index(self.posterior.argmax(), self.posterior.shape)
+        inds_max = np.unravel_index(self.nd_pdf.argmax(), self.nd_pdf.shape)
         grid_fluxes_max = [Interpd_grids.grids[l][inds_max] for l in DF_peak.index]
         DF_peak["Model"] = grid_fluxes_max
         
-        if self.deredden: # If we dereddened the observed fluxes at each gridpoint
-            obs_flux_dered = [arr[inds_max] for arr in self.obs_flux_arrs]
-            obs_flux_err_dered = [arr[inds_max] for arr in self.obs_flux_err_arrs]
+        if Bigelm_result.deredden: # If we dereddened the observed fluxes at each gridpoint
+            obs_flux_dered = [arr[inds_max] for arr in Bigelm_result.obs_flux_arrs]
+            obs_flux_err_dered = [arr[inds_max] for arr in Bigelm_result.obs_flux_err_arrs]
             DF_peak["Obs_dered"] = obs_flux_dered
             DF_peak["Flux_err_dered"] = obs_flux_err_dered
             DF_peak["Obs_S/N_dered"] = (DF_peak["Obs_dered"].values /
@@ -302,14 +226,16 @@ class Bigelm_result(object):
 
 
 
-    def calculate_chi2(self):
+    def calculate_chi2(self, deredden):
         """
-        Calculate chi2 between model and observations for the model corresponding to
-        the peak in the posterior.
+        Calculate chi2 between model and observations for the model
+        corresponding to the peak in the posterior.
+        deredden: Boolean.  Did we deredden the observed line fluxes to match
+                  the Balmer decrement at every interpolated model gridpoint?
         """
         DF = self.DF_peak # Only contains a subset of useful columns
         # We'll need to reconstruct the error column
-        if self.deredden:
+        if deredden: # If we dereddened the observed fluxes at each gridpoint
             flux_err = DF["Obs_dered"].values / DF["Obs_S/N_dered"].values
             chi2_working = ( (DF["Obs_dered"].values - DF["Model"].values)**2
                                          / flux_err**2  )
@@ -318,40 +244,46 @@ class Bigelm_result(object):
             chi2_working = ( (DF["Obs"].values - DF["Model"].values)**2
                                          / flux_err**2  )
         chi2 = np.sum(chi2_working)
-        grid_n = self.ndim
-        dof = len(DF) - grid_n # Degrees of freedom
+        grid_n = self.Grid_spec.ndim
+        # Degrees of freedom (Hbeta doesn't count as a data point, since it's
+        # normalised to 1)
+        dof = (len(DF) - 1) - grid_n
+        if deredden:
+            dof -= 1 # Halpha doesn't count as a data point; the obs fluxes are
+                     # dereddened to match the Balmer decrement at every gridpoint
         chi2 /= dof # This is the reduced chi-squared
         self.chi2 = chi2
 
 
 
-
-def make_single_parameter_estimate(param_name, val_arr, posterior_1D):
+def make_single_parameter_estimate(param_name, val_arr, pdf_1D):
     """
     Bayesian parameter estimate for a single parameter, including the credible
-    intervals.
+    intervals.  This function is also used to make "estimates" using the prior
+    and likelihood pdfs, which may be of interest but obviously isn't full
+    Bayesian parameter estimation.
     param_name: String giving name of the parameter.
     val_arr: 1D numpy array of parameter co-ordinate values associated with
-             the values listed in posterior_1D
-    posterior_1D: 1D numpy array of the marginalised posterior pdf for the
+             the values listed in pdf_1D
+    pdf_1D: 1D numpy array of the marginalised posterior pdf for the
              parameter param_name; the probabilities correspond to the parameter
              values listed in val_arr.
     Returns a dictionary.  See "make_parameter_estimate_table" for contents.
     """
     # Initialise and do some checks:
-    length = val_arr.size # Length of val_arr and posterior_1D
-    assert length == posterior_1D.size # Sanity check
+    length = val_arr.size # Length of val_arr and pdf_1D
+    assert length == pdf_1D.size # Sanity check
     index_array = np.arange(length)
     bool_map = {True:"Y", False:"N"}
     out_dict = {}  # To hold results for this parameter
     
     out_dict["Parameter"] = param_name
     # Calculate best estimate of parameter (location of max in posterior):
-    est_ind = np.argmax( posterior_1D )
+    est_ind = np.argmax( pdf_1D )
     out_dict["Estimate"] = val_arr[ est_ind ]
     
     # Generate posterior CDF using trapezoidal integration:
-    posterior_1D_CDF = cumtrapz( posterior_1D, x=val_arr, initial=0 )
+    posterior_1D_CDF = cumtrapz( pdf_1D, x=val_arr, initial=0 )
     # initial=0 => CDF has same length as PDF; first CDF entry will be 0,
     # last will be 1 (once normalised).  So we've assumed that the
     # posterior PDF probability value is at the RIGHT of each bin.
@@ -390,12 +322,12 @@ def make_single_parameter_estimate(param_name, val_arr, posterior_1D):
         out_dict["Est_in_"+CI_code+"?"] = bool_map[is_in_CI]
 
     # Count local maxima
-    tup_max_inds = argrelextrema( posterior_1D, np.greater )
+    tup_max_inds = argrelextrema( pdf_1D, np.greater )
     out_dict["n_local_maxima"] = tup_max_inds[0].size
     # argrelextrema doesn't pick up maxima on the ends, so check ends:
-    if posterior_1D[0] > posterior_1D[1]:
+    if pdf_1D[0] > pdf_1D[1]:
         out_dict["n_local_maxima"] += 1
-    if posterior_1D[-1] > posterior_1D[-2]:
+    if pdf_1D[-1] > pdf_1D[-2]:
         out_dict["n_local_maxima"] += 1
 
     # Now check the ends to see if the posterior is up against the bounds:
@@ -411,92 +343,116 @@ def make_single_parameter_estimate(param_name, val_arr, posterior_1D):
 
 
 
-def calculate_uniform_prior(Interpd_grids):
+class Bigelm_result(object):
     """
-    Return the natural logarithm of a uniform prior.
-    Interpd_grids: Contains details of the interpolated input model grid
-    Returns an array of the value of a uniform prior over the grid.
+    Class to hold the BIGELM results including the likelihood, prior and
+    posterior, marginalised posteriors and parameter estimates.
     """
-    ranges = [(h - l) for l, h in Interpd_grids.paramName2paramMinMax.values()]
-    prior = np.ones(Interpd_grids.shape, dtype="float")
-    prior /=  np.product( ranges )
-    return prior
+    def __init__(self, Interpd_grids, DF_obs, deredden, input_prior):
+        """
+        Initialise an instance of the class and perform Bayesian parameter
+        estimation.
+        """
+        self.deredden = deredden
+        self.ndim = Interpd_grids.ndim
+        Grid_spec = Grid_description(Interpd_grids.param_names,
+                           list(Interpd_grids.paramName2paramValueArr.values()))
+        self.Grid_spec = Grid_spec
+
+        # Calculate arrays of observed fluxes over the grid (possibly dereddening)
+        self.deredden_over_grid(DF_obs, Interpd_grids)
+
+        # Calculate the likelihood over the grid:
+        raw_likelihood = self.calculate_likelihood(Interpd_grids, DF_obs)
+        self.Likelihood = Bigelm_nd_pdf(raw_likelihood, self, DF_obs,
+                                                                  Interpd_grids)
+
+        # Calculate the prior over the grid:
+        raw_prior = calculate_prior(input_prior, DF_obs, Interpd_grids.grids)
+        self.Prior = Bigelm_nd_pdf(raw_prior, self, DF_obs, Interpd_grids)
+
+        # Calculate the posterior using Bayes' Theorem:
+        # (note that the prior and likelihood pdfs are now normalised)
+        raw_posterior = self.Likelihood.nd_pdf * self.Prior.nd_pdf
+        self.Posterior = Bigelm_nd_pdf(raw_posterior, self, DF_obs, Interpd_grids)
 
 
 
-def make_He_prior_func(Interpd_grids, DF_obs):
-    """
-    Returns a function that calculates a prior over the N-D interpolated grid,
-    based on matching the observed HeII4686/HeI5876 ratio.
-    """
-    # From simple investigation with S7 data, the HeII4686/HeI5876 ratio appears
-    # to vary in over -1.8 < log HeII4686/HeI5876 < 0.9, which is 2.7 dex.
-    # I'll use a Gaussian with the following std to generate the prior:
-    std = 0.5
+    def deredden_over_grid(self, DF_obs, Interpd_grids):
+        """
+        Make observed flux arrays covering the entire grid.
+        If requested by the user, the observed fluxes are dereddened to match
+        the Balmer decrement everywhere in the grid.
+        """
+        if self.deredden:
+            # Deredden observed fluxes at every interpolated gridpoint to match
+            # the model Balmer decrement at that gridpoint
+            grid_BD_arr = Interpd_grids.grids["Halpha"]
+            # Fluxes are normalised to Hbeta == 1, so grid_BD_arr is an array of
+            # the Balmer decrement F_Halpha / F_Hbeta over the model grid.
+            obs_flux_arrs, obs_flux_err_arrs = dr.deredden(
+                                    DF_obs["Wavelength"].values,
+                                    DF_obs["Flux"].values,
+                                    DF_obs["Flux_err"].values, BD=grid_BD_arr)
+        else: # Use the input observed fluxes, which hopefully may have
+              # already been dereddened.
+            shape = Interpd_grids.shape
+            obs_flux_arrs = [np.full(shape, f) for f in DF_obs["Flux"].values]
+            obs_flux_err_arrs = [np.full(shape, e) for e in DF_obs["Flux_err"].values]
 
-    obs_ratio = DF_obs.loc["HeII4686", "Flux"] / DF_obs.loc["HeI5876", "Flux"]
-    log_obs_ratio = np.log10(obs_ratio)
-
-    def calculate_He_prior(Interpd_grids):
-        # Returns the natural logarithm of the prior over the grid
-        grid_ratio = Interpd_grids.grids["HeII4686"] / Interpd_grids.grids["HeI5876"]
-        # Handle either or both lines having a flux of zero
-        bad = (grid_ratio == 0) | (~np.isfinite(grid_ratio))
-        grid_ratio[bad] = 1e-250
-        log_grid_ratio = np.log10(grid_ratio) # Array with same shape as the grid
-        log_prior = - 0.5*((log_grid_ratio - log_obs_ratio) / std)**2
-        # Note that the posterior will be normalised later
-        return log_prior
-
-    return calculate_He_prior
-
-
-
-def make_SII_prior_func(Interpd_grids, DF_obs):
-    """
-    Returns a function that calculates a prior over the N-D interpolated grid,
-    based on matching the observed SII6731/SII6716 ratio.
-    """
-    # Now log(SII6731/SII6716) varies between ~-0.17 (density n_e <= 10^2 cm^-3)
-    # through ~0.15 (density n_e ~10^3 cm^-3) to ~0.36 (density n_e >= 10^4 cm^-3)
-    # This is a range of approximately 0.45 dex.
-    # I'll use a Gaussian with the following std to generate the prior:
-    std = 0.1
-
-    obs_ratio = DF_obs.loc["SII6731", "Flux"] / DF_obs.loc["SII6716", "Flux"]
-    log_obs_ratio = np.log10(obs_ratio)
-
-    def calculate_SII_prior(Interpd_grids):
-        # Returns the natural logarithm of the prior over the grid
-        grid_ratio = Interpd_grids.grids["SII6731"] / Interpd_grids.grids["SII6716"]
-        # Handle either or both lines having a flux of zero
-        bad = (grid_ratio == 0) | (~np.isfinite(grid_ratio))
-        grid_ratio[bad] = 1e-250
-        log_grid_ratio = np.log10(grid_ratio) # Array with same shape as the grid
-        log_prior = - 0.5*((log_grid_ratio - log_obs_ratio) / std)**2
-        # Note that the posterior will be normalised later
-        return log_prior
-
-    return calculate_SII_prior
-
-
-def make_He_and_SII_prior_func(Interpd_grids, DF_obs):
-    """
-    Returns a function that calculates a prior over the N-D interpolated grid,
-    based on matching observed HeII4686/HeI5876 ratio and the observed
-    SII6731/SII6716 ratio.
-    """
-    calculate_He_prior  = make_He_prior_func(Interpd_grids, DF_obs)
-    calculate_SII_prior = make_SII_prior_func(Interpd_grids, DF_obs)
-
-    def calculate_He_and_SII_prior(Interpd_grids):
-        log_He_prior = calculate_He_prior(Interpd_grids)
-        log_SII_prior = calculate_SII_prior(Interpd_grids)
-        return log_He_prior + log_SII_prior
-
-    return calculate_He_and_SII_prior
+        # Now obs_flux_arrs is a list of arrays corresponding to the list
+        # of observed fluxes, where each array has the same shape as the 
+        # model grid.  The list obs_flux_err_arrs is the same, but for errors.
+        self.obs_flux_arrs = obs_flux_arrs
+        self.obs_flux_err_arrs = obs_flux_err_arrs
 
 
 
+    def calculate_likelihood(self, Interpd_grids, DF_obs):
+        """
+        Calculate the (linear) likelihood over the entire N-D grid at once.
+        The emission line grids are interpolated prior to calculating
+        the likelihood.
+        """
+        # Use systematic uncertainty in modelled fluxes, as in Blanc et al.
+        epsilon = 0.15 # dex.  Default is 0.15 dex systematic uncertainty
+        # Convert from dex to a scaling factor:
+        epsilon_2 = 10**epsilon - 1  # This gives a factor of 0.41 for epsilon=0.15 dex
+        # epsilon_2 is a scaling factor to go from a linear modelled flux to an
+        # associated systematic error
+        # Note the original from izi.pro is equivalent to:
+        # epsilon_2 = epsilon * np.log(10)
+        # This gives 0.345 for epsilon=0.15 dex. I don't understand this.
+        # Why was a log used?  And a log base e?  This is surely wrong.
+        # What is intended by this formula anyway?
+        # Note that epsilon_2 is the assumed fractional systematic error in the model
+        # fluxes already normalised to Hbeta.  In izi.pro the default is 0.15 dex,
+        # but the default is given as 0.1 dex in the Blanc+15 paper.
+
+        obs_flux_arrs = self.obs_flux_arrs
+        obs_flux_err_arrs = self.obs_flux_err_arrs
+
+        # Initialise likelihood with 1 everywhere (multiplictive identity)
+        log_likelihood = np.zeros(Interpd_grids.shape, dtype="float")
+        for i, line in enumerate(DF_obs.index): # Iterate over emission lines
+            # Use a log version of equation 3 on pg 4 of Blanc et al. 2015 (IZI)
+            # N.B. var is the sum of variances due to both the measured and modelled fluxes
+            # N-D array of predicted fluxes (must be non-negative):
+            pred_flux_i = Interpd_grids.grids[line]
+            obs_flux_i = obs_flux_arrs[i]
+            obs_flux_err_i = obs_flux_err_arrs[i]
+            assert obs_flux_i.shape == pred_flux_i.shape
+            var = obs_flux_err_i**2 + (epsilon_2 * pred_flux_i)**2
+            log_likelihood += ( - (( obs_flux_i - pred_flux_i )**2 / 
+                                     ( 2.0 * var ))  -  0.5*np.log( var ) )
+            # N.B. "log" is base e
+        log_likelihood += np.log(2 * np.pi)
+
+        # Note: ??????? The parameter space, space of measurements and space of predictions are all continuous.
+        # Each value P in the likelihood array is differential, i.e. P*dx = (likelihood)*dx
+        # for a vector of parameters x.  # ???????????????? ADT - I don't understand the purpose of my own note
+
+        log_likelihood -= log_likelihood.max()
+        return np.exp(log_likelihood) # The linear likelihood N-D array   
 
 

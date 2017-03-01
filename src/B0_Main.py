@@ -5,7 +5,7 @@ import pandas as pd
 # For interpolating an n-dimensional regular grid:
 # import itertools # For finding Cartesian product and combinatorial combinations
 from . import B1_Grid_working
-from . import B2_Prior
+# from . import B2_Prior
 from . import B3_Posterior
 from . import B4_Plotting
 
@@ -92,22 +92,19 @@ class Bigelm_model(object):
 
     def __call__(self, obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
         """
-        Run BIGELM Bayesian parameter estimation using the grids saved in this Bigelm_model object.
-        Required arguments:
+        Run BIGELM Bayesian parameter estimation using the grids saved in this
+        Bigelm_model object.
+        Required positional arguments:
         obs_fluxes:         list or array of observed emission-line fluxes
                             normalised to Hbeta
         obs_flux_errors:    list or array of corresponding measurement errors
         obs_emission_lines: a list of corresponding emission line names as strings
         
-        Optional additional keyword arguments:
+        Optional keyword arguments which affect the parameter estimation:
         deredden:             De-redden observed fluxes to match the Balmer
                               at each interpolated grid point?  Default True.
         obs_wavelengths:      If deredden=True, you must also supply a list of wavelengths (Angstroems)
                               associated with obs_fluxes.  Default None.
-        image_out:            A filename for saving out a results image of 2D and 1D marginalised posterior pdfs.
-                              The figure will only be generated and saved if this keyword parameter is specified.
-        table_out:            A filename for a csv file containing Bayesian parameter
-                              estimates for the grid.
         param_display_names:  A dictionary of display names for grid parameters, for plotting purposes.
                               A dictionary key is the parameter name in the grid file, and the corresponding
                               value its display name.
@@ -120,14 +117,24 @@ class Bigelm_model(object):
                               The user-supplied function must take as a single
                               parameter a dictionary which maps spectral line
                               names to nD flux arrays over the grid; the function
-                              returns the log of the prior as an array over the grid.
-                              Default: "Uniform".
+                              returns the log of the prior as an array over the
+                              grid.  Default: "Uniform".
                               See the code file "B2_Prior.py" for the details
                               of the SII and He priors.
         grid_error:           NOT IMPLEMENTED
+        
+        Optional additional keyword arguments regarding outputs:
+        posterior_plot:   A filename for saving out a results image of 2D and 1D marginalised posterior pdfs.
+                          The figure will only be generated and saved if this keyword parameter is specified.
+        prior_plot:       A filename
+        likelihood_plot:  A filename
+        estimate_table:   A filename for a csv file containing Bayesian parameter
+                          estimates for the grid.
+        best_model_table: A filename for a csv file which will compare observed
+                          and model fluxes at the point defined by the parameter estimates.
+        table_on_plots:   Include flux comparison table on corner plots? Default True
 
-
-        Returns a Bigelm_result object (defined in this B3_Posterior.py), which
+        Returns a Bigelm_result object (defined in B3_Posterior.py), which
         contains the following attributes...
 
         Other notes:
@@ -206,42 +213,69 @@ class Bigelm_model(object):
         DF_obs.set_index("Line", inplace=True)
 
         input_prior = kwargs.pop("prior", "Uniform") # Default "Uniform"
-        if callable(input_prior):
-            # The user has inputted a custom function to calculate the prior
-            log_prior_func = input_prior
-        else: # Determine the built-in function to use to calculate the prior
-            log_prior_func = B2_Prior.choose_prior_func(input_prior, DF_obs)
+        # if callable(input_prior):
+        #     # The user has inputted a custom function to calculate the prior
+        #     log_prior_func = input_prior
+        # elif isinstance(input_prior, str):
+        #     # Determine the built-in function to use to calculate the prior
+        #     log_prior_func = B2_Prior.choose_prior_func(input_prior, DF_obs)
+        # else:
+        #     raise TypeError("The input 'prior' must be one of the permitted "
+        #                     "strings or a callable")
 
-        # Filename for output corner plot image?  Default None (no plotting)
-        image_out = kwargs.pop("image_out", None)
-        # Filename for output parameter estimate csv table?  Default None
-        table_out = kwargs.pop("table_out", None)
+        # Include text "best model" table on posterior corner plots?
+        table_on_plots = kwargs.pop("table_on_plots", True) # Default True
+        # Filenames for output corner plot images?  Default None (no plotting)
+        likelihood_plot = kwargs.pop("likelihood_plot", None)
+        prior_plot      = kwargs.pop("prior_plot",      None)
+        posterior_plot  = kwargs.pop("posterior_plot",  None)
 
-        # Ensure there aren't any remaining keyword arguments that we haven't used:
+        # Filename for output csv tables?  Default None (don't write out table)
+        estimate_table   = kwargs.pop("estimate_table",   None)
+        best_model_table = kwargs.pop("best_model_table", None)
+
+        # Are there any remaining keyword arguments that weren't used?
         if len(kwargs) > 0:
-            raise ValueError( "Unknown keyword argument(s) " +
-                              str(kwargs.keys())[1:-1] )
+            raise ValueError("Unknown keyword argument(s) " +
+                                      ", ".join(str(k) for k in kwargs.keys()) )
 
         #----------------------------------------------------------------------
         # Create a "Bigelm_result" object instance, which involves calculating
-        # the posterior and parameter estimates:
+        # the prior, likelihood and posterior, along with parameter estimates:
         Result = B3_Posterior.Bigelm_result(Interpd_grids, DF_obs, deredden=deredden,
-                                                    log_prior_func=log_prior_func)
-        Result.Grid_spec.param_display_names = param_display_names
+                                                      input_prior=input_prior)
 
-        # Save out results table if requested
-        if table_out is not None:
-            Result.DF_estimates.to_csv(table_out, index=True, float_format='%.5f')
+        #----------------------------------------------------------------------
+        # Outputs
+        if estimate_table is not None: # Save parameter estimates table?
+            Result.Posterior.DF_estimates.to_csv(estimate_table, index=True,
+                                                            float_format='%.5f')
+        if best_model_table is not None: # Save flux comparison table?
+            Result.Posterior.DF_peak.to_csv(best_model_table, index=True,
+                                                            float_format='%.5f')
 
-        # Plot a corner plot if requested
-        if image_out != None: # Only do plotting if an image name was specified:
-            plot_text = "chi^2_r at posterior peak = {0:.2f}\n\n\n".format(Result.chi2)
-            plot_text += "Observed fluxes vs. model fluxes at posterior peak\n"
-            pd.set_option("display.precision", 4)
-            plot_text += str(Result.DF_peak) # To print in a monospace font
-            B4_Plotting.plot_marginalised_posteriors(image_out, Result,
-                                                           Raw_grids, plot_text)
+        # Plot corner plots if requested:
+        pdf_map = { "likelihood" : (likelihood_plot, Result.Likelihood),
+                    "prior"      : (prior_plot,      Result.Prior     ),
+                    "posterior"  : (posterior_plot,  Result.Posterior )  }
+        for pdf_name, (out_image_name, Bigelm_nd_pdf) in pdf_map.items():
+            if out_image_name == None:
+                continue # Only do plotting if an image name was specified:
+            if table_on_plots is True: # Include a fixed-width text table on image
+                pd.set_option("display.precision", 4)
+                plot_anno = "chi^2_r at {0} peak = {1:.2f}\n\n\n".format(
+                                                   pdf_name, Bigelm_nd_pdf.chi2)
+                plot_anno += ("Observed fluxes vs. model fluxes at the gridpoint of"
+                              "\nparameter best estimates in the "+pdf_name+"\n")
+                plot_anno += str(Bigelm_nd_pdf.DF_peak)
+            else:
+                plot_anno = None
+            Bigelm_nd_pdf.Grid_spec.param_display_names = param_display_names
+            print("Plotting corner plot for the", pdf_name, "...")
+            B4_Plotting.plot_marginalised_ndpdf(out_image_name, Bigelm_nd_pdf,
+                                                Raw_grids, plot_anno)
 
+        
         print("Bigelm finished.")
         return Result
 
