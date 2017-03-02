@@ -40,7 +40,7 @@ class Bigelm_model(object):
     with a grid and then call the instance to run Bayesian parameter estimation.
     """
 
-    def __init__(self, grid_file, grid_params, lines_list, interpd_grid_shape=None):
+    def __init__(self, grid_file, grid_params, lines_list, **kwargs):
         """
         Initialise an instance of the Bigelm_model class.
 
@@ -70,21 +70,32 @@ class Bigelm_model(object):
                               may have a major impact on the speed of the program.
                               This keyword may only be supplied if the "Grid_container" keyword is not used.
                               Will be passed to function initialise_grids.
+        grid_error:           The systematic relative error on grid fluxes, as a
+                              linear proportion.  Default is 0.35 (average of
+                              errors of 0.15 dex above and below a value).
         """
         # Initialise and do some checks...
         print("Initialising BIGELM model...")
 
         # Determine if a custom interpolated grid shape was specified:
-        if interpd_grid_shape is not None:
-            if len(interpd_grid_shape) != len(grid_params):
-                raise ValueError("interpd_grid_shape should contain exactly "
-                                 "one integer for each parameter" )
-        else:
-            interpd_grid_shape = [15]*len(grid_params) # Default 
+        interpd_grid_shape = kwargs.pop("interpd_grid_shape", [15]*len(grid_params))
+        if len(interpd_grid_shape) != len(grid_params):
+            raise ValueError("interpd_grid_shape should contain exactly "
+                             "one integer for each parameter" )
+
+        grid_rel_error = kwargs.pop("grid_error", 0.35)
+        assert grid_rel_error > 0
+
+        # Are there any remaining keyword arguments that weren't used?
+        if len(kwargs) > 0:
+            raise ValueError("Unknown keyword argument(s) " +
+                                      ", ".join(str(k) for k in kwargs.keys()) )
 
         # Call grid initialisation:
         Raw_grids, Interpd_grids = B1_Grid_working.initialise_grids(grid_file,
                                     grid_params, lines_list, interpd_grid_shape)
+        Raw_grids.grid_rel_error = grid_rel_error
+        Interpd_grids.grid_rel_error = grid_rel_error
         self.Raw_grids = Raw_grids
         self.Interpd_grids = Interpd_grids
 
@@ -121,7 +132,6 @@ class Bigelm_model(object):
                               grid.  Default: "Uniform".
                               See the code file "B2_Prior.py" for the details
                               of the SII and He priors.
-        grid_error:           NOT IMPLEMENTED
         
         Optional additional keyword arguments regarding outputs:
         posterior_plot:   A filename for saving out a results image of 2D and 1D marginalised posterior pdfs.
@@ -213,15 +223,6 @@ class Bigelm_model(object):
         DF_obs.set_index("Line", inplace=True)
 
         input_prior = kwargs.pop("prior", "Uniform") # Default "Uniform"
-        # if callable(input_prior):
-        #     # The user has inputted a custom function to calculate the prior
-        #     log_prior_func = input_prior
-        # elif isinstance(input_prior, str):
-        #     # Determine the built-in function to use to calculate the prior
-        #     log_prior_func = B2_Prior.choose_prior_func(input_prior, DF_obs)
-        # else:
-        #     raise TypeError("The input 'prior' must be one of the permitted "
-        #                     "strings or a callable")
 
         # Include text "best model" table on posterior corner plots?
         table_on_plots = kwargs.pop("table_on_plots", True) # Default True

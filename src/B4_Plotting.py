@@ -164,13 +164,13 @@ def plot_marginalised_ndpdf(out_filename, Bigelm_nd_pdf, Raw_grids, plot_anno=No
         pdf_1D =  Bigelm_nd_pdf.marginalised_1D[param]
         ax_i.plot(par_arr_map[param], pdf_1D, color="black", zorder=6)
         # Plot a vertical line to show the parameter estimate (peak of 1D pdf)
-        y_lim = ax_i.get_ylim()
+        y_lim = (0, 1.14*pdf_1D.max())
         ax_i.vlines(p_estimates[G.param_names[ind]], y_lim[0], y_lim[1],
                     linestyles="dashed", color="maroon", lw=0.6, zorder=5)
         ax_i.set_yticks([])  # No y-ticks
         ax_i.set_xlim( np.min( par_arr_map[param] ) - interp_spacing[param]/2.,
                        np.max( par_arr_map[param] ) + interp_spacing[param]/2. )
-        ax_i.set_ylim(y_lim)
+        ax_i.set_ylim(y_lim[0], y_lim[1])
         if ind == 0: # Last column
             label_x = grid_bounds["right"] - 0.5 * axes_width
             label_y = grid_bounds["bottom"] * 0.25
@@ -195,7 +195,7 @@ def plot_marginalised_ndpdf(out_filename, Bigelm_nd_pdf, Raw_grids, plot_anno=No
                     horizontalalignment="left", verticalalignment="top", 
                     family="monospace", fontsize=5)
 
-    print("Saving figure...")
+    # print("Saving figure...")
     fig.savefig(out_filename)
     plt.close(fig)
 

@@ -15,9 +15,10 @@ from .B2_Prior import calculate_prior
 """
 Adam D. Thomas 2015 - 2017
 
-Code to calculate the posterior over an N-D grid, marginalise the posterior
-to 1D and 2D marginalised posteriors, and generally do Bayesian parameter
+Code to calculate the likelihood and posterior over an N-D grid, marginalise
+pdfs to 1D and 2D marginalised pdfs, and generally do Bayesian parameter
 estimation.
+This module defines two classes: Bigelm_nd_pdf and Bigelm_result.
 """
 
 
@@ -50,7 +51,7 @@ class Bigelm_nd_pdf(object):
         self.make_pdf_peak_table(DF_obs, Interpd_grids, Bigelm_result)
         # We added the self.DF_peak attribute
 
-        self.calculate_chi2(Bigelm_result.deredden) # Chi2 at pdf peak (add self.chi2 attribute)
+        self.calculate_chi2(Bigelm_result.deredden) # chi2 at pdf peak (add self.chi2 attribute)
 
 
 
@@ -260,7 +261,7 @@ def make_single_parameter_estimate(param_name, val_arr, pdf_1D):
     """
     Bayesian parameter estimate for a single parameter, including the credible
     intervals.  This function is also used to make "estimates" using the prior
-    and likelihood pdfs, which may be of interest but obviously isn't full
+    and likelihood pdfs, which may be of interest but obviously this isn't full
     Bayesian parameter estimation.
     param_name: String giving name of the parameter.
     val_arr: 1D numpy array of parameter co-ordinate values associated with
@@ -353,14 +354,14 @@ class Bigelm_result(object):
         Initialise an instance of the class and perform Bayesian parameter
         estimation.
         """
-        self.deredden = deredden
+        self.deredden = deredden # Boolean
         self.ndim = Interpd_grids.ndim
         Grid_spec = Grid_description(Interpd_grids.param_names,
                            list(Interpd_grids.paramName2paramValueArr.values()))
         self.Grid_spec = Grid_spec
 
         # Calculate arrays of observed fluxes over the grid (possibly dereddening)
-        self.deredden_over_grid(DF_obs, Interpd_grids)
+        self.make_obs_flux_arrays(DF_obs, Interpd_grids)
 
         # Calculate the likelihood over the grid:
         raw_likelihood = self.calculate_likelihood(Interpd_grids, DF_obs)
@@ -368,7 +369,8 @@ class Bigelm_result(object):
                                                                   Interpd_grids)
 
         # Calculate the prior over the grid:
-        raw_prior = calculate_prior(input_prior, DF_obs, Interpd_grids.grids)
+        raw_prior = calculate_prior(input_prior, DF_obs, Interpd_grids.grids,
+                                                   Interpd_grids.grid_rel_error)
         self.Prior = Bigelm_nd_pdf(raw_prior, self, DF_obs, Interpd_grids)
 
         # Calculate the posterior using Bayes' Theorem:
@@ -378,7 +380,7 @@ class Bigelm_result(object):
 
 
 
-    def deredden_over_grid(self, DF_obs, Interpd_grids):
+    def make_obs_flux_arrays(self, DF_obs, Interpd_grids):
         """
         Make observed flux arrays covering the entire grid.
         If requested by the user, the observed fluxes are dereddened to match
@@ -414,20 +416,21 @@ class Bigelm_result(object):
         The emission line grids are interpolated prior to calculating
         the likelihood.
         """
-        # Use systematic uncertainty in modelled fluxes, as in Blanc et al.
-        epsilon = 0.15 # dex.  Default is 0.15 dex systematic uncertainty
-        # Convert from dex to a scaling factor:
-        epsilon_2 = 10**epsilon - 1  # This gives a factor of 0.41 for epsilon=0.15 dex
-        # epsilon_2 is a scaling factor to go from a linear modelled flux to an
-        # associated systematic error
-        # Note the original from izi.pro is equivalent to:
-        # epsilon_2 = epsilon * np.log(10)
-        # This gives 0.345 for epsilon=0.15 dex. I don't understand this.
-        # Why was a log used?  And a log base e?  This is surely wrong.
-        # What is intended by this formula anyway?
-        # Note that epsilon_2 is the assumed fractional systematic error in the model
-        # fluxes already normalised to Hbeta.  In izi.pro the default is 0.15 dex,
-        # but the default is given as 0.1 dex in the Blanc+15 paper.
+        # # Use systematic uncertainty in modelled fluxes, as in Blanc et al.
+        # epsilon = 0.15 # dex.  Default is 0.15 dex systematic uncertainty
+        # # Convert from dex to a scaling factor:
+        # epsilon_2 = 10**epsilon - 1  # This gives a factor of 0.41 for epsilon=0.15 dex
+        # # epsilon_2 is a scaling factor to go from a linear modelled flux to an
+        # # associated systematic error
+        # # Note the original from izi.pro is equivalent to:
+        # # epsilon_2 = epsilon * np.log(10)
+        # # This gives 0.345 for epsilon=0.15 dex. I don't understand this.
+        # # Why was a log used?  And a log base e?  This is surely wrong.
+        # # What is intended by this formula anyway?
+        # # Note that epsilon_2 is the assumed fractional systematic error in the model
+        # # fluxes already normalised to Hbeta.  In izi.pro the default is 0.15 dex,
+        # # but the default is given as 0.1 dex in the Blanc+15 paper.
+        pred_flux_rel_err = Interpd_grids.grid_rel_error
 
         obs_flux_arrs = self.obs_flux_arrs
         obs_flux_err_arrs = self.obs_flux_err_arrs
@@ -442,11 +445,11 @@ class Bigelm_result(object):
             obs_flux_i = obs_flux_arrs[i]
             obs_flux_err_i = obs_flux_err_arrs[i]
             assert obs_flux_i.shape == pred_flux_i.shape
-            var = obs_flux_err_i**2 + (epsilon_2 * pred_flux_i)**2
+            var = obs_flux_err_i**2 + (pred_flux_rel_err * pred_flux_i)**2
             log_likelihood += ( - (( obs_flux_i - pred_flux_i )**2 / 
                                      ( 2.0 * var ))  -  0.5*np.log( var ) )
             # N.B. "log" is base e
-        log_likelihood += np.log(2 * np.pi)
+        # log_likelihood += np.log(2 * np.pi)
 
         # Note: ??????? The parameter space, space of measurements and space of predictions are all continuous.
         # Each value P in the likelihood array is differential, i.e. P*dx = (likelihood)*dx
