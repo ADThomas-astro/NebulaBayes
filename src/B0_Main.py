@@ -45,34 +45,36 @@ class Bigelm_model(object):
         Initialise an instance of the Bigelm_model class.
 
         Required arguments to initialise the Bigelm_model instance:
-        grid_file:      the filename of an ASCII csv table containing photoionisation model
-                        grid data in the form of a database table.
-                        Each gridpoint (point in parameter space) is a row in this table.
-                        The values of the grid parameters for each row are defined in a column
-                        for each parameter.
-                        No assumptions are made about the order of the gridpoints (rows) in the table.
-                        Spacing of grid values along an axis may be uneven, 
-                        but the full grid is required to a be a regular, n-dimensional rectangular grid.
-                        There is a column of fluxes for each modelled emission line, and model fluxes
-                        are assumed to be normalised to Hbeta
-                        Any non-finite fluxes (e.g. nans) will be set to zero.
-        grid_params:    List of the unique names of the grid parameters as strings.
-                        The order is the order of the grid dimensions, i.e. the order
-                        in which arrays in bigelm will be indexed.
-        lines_list:     List of column names from grid_file corresponding to the
-                        emission lines we'll be using in this Bigelm_model instance.
+        grid_file: The filename of an ASCII csv table containing photoionisation
+                   model grid data in the form of a database table. Each
+                   gridpoint (point in parameter space) is a row in this table.
+                   The values of the grid parameters for each row are defined in
+                   a column for each parameter.
+                   No assumptions are made about the order of the gridpoints
+                   (rows) in the table.  Spacing of grid values along an axis
+                   may be uneven, but the full grid is required to a be a
+                   regular, n-dimensional rectangular grid.  There is a column
+                   of fluxes for each modelled emission line, and model fluxes
+                   are assumed to be normalised to Hbeta
+                   Any non-finite fluxes (e.g. nans) will be set to zero.
+        grid_params: List of the unique names of the grid parameters as strings.
+                     The order is the order of the grid dimensions, i.e. the
+                     order in which arrays in bigelm will be indexed.
+        lines_list: List of column names from grid_file corresponding to the
+                    emission lines we'll be using in this Bigelm_model instance.
 
         Optional additional keyword arguments:
-        interpd_grid_shape:   A tuple of integers, giving the size of each dimension of the interpolated
-                              grid.  The order of the integers corresponds to the order of parameters in grid_params.
-                              The default is 15 gridpoints along each dimension.  Note that the number of
-                              interpolated gridpoints entered in interpd_grid_shape
-                              may have a major impact on the speed of the program.
-                              This keyword may only be supplied if the "Grid_container" keyword is not used.
-                              Will be passed to function initialise_grids.
-        grid_error:           The systematic relative error on grid fluxes, as a
-                              linear proportion.  Default is 0.35 (average of
-                              errors of 0.15 dex above and below a value).
+        interpd_grid_shape: A tuple of integers, giving the size of each
+                            dimension of the interpolated flux grids.  The order
+                            of the integers corresponds to the order of
+                            parameters in grid_params.
+                            The default is 15 gridpoints along each dimension.
+                            Note that the values entered in interpd_grid_shape
+                            have a major impact on the speed of the grid
+                            interpolation.
+        grid_error:         The systematic relative error on grid fluxes, as a
+                            linear proportion.  Default is 0.35 (average of
+                            errors of 0.15 dex above and below a value).
         """
         # Initialise and do some checks...
         print("Initialising BIGELM model...")
@@ -109,121 +111,87 @@ class Bigelm_model(object):
         obs_fluxes:         list or array of observed emission-line fluxes
                             normalised to Hbeta
         obs_flux_errors:    list or array of corresponding measurement errors
-        obs_emission_lines: a list of corresponding emission line names as strings
+        obs_emission_lines: list of corresponding emission line names as strings
         
         Optional keyword arguments which affect the parameter estimation:
-        deredden:             De-redden observed fluxes to match the Balmer
-                              at each interpolated grid point?  Default True.
-        obs_wavelengths:      If deredden=True, you must also supply a list of wavelengths (Angstroems)
-                              associated with obs_fluxes.  Default None.
-        param_display_names:  A dictionary of display names for grid parameters, for plotting purposes.
-                              A dictionary key is the parameter name in the grid file, and the corresponding
-                              value its display name.
-                              Can be raw strings (i.e. r"string") in order to include e.g. Greek letters.
-                              Not all of the grid parameters need to be included in param_display_names;
-                              raw parameter names will be used as display names by default.
-        prior:                The prior to use when calculating the posterior.
-                              Choices are: "Uniform", "SII_ratio", "He_ratio",
-                              "SII_and_He_ratios", or a user-supplied function.
-                              The user-supplied function must take as a single
-                              parameter a dictionary which maps spectral line
-                              names to nD flux arrays over the grid; the function
-                              returns the log of the prior as an array over the
-                              grid.  Default: "Uniform".
-                              See the code file "B2_Prior.py" for the details
-                              of the SII and He priors.
+        deredden:        De-redden observed fluxes to match the Balmer decrement
+                         at each interpolated grid point?  Default True.
+        obs_wavelengths: If deredden=True, you must also supply a list of
+                         wavelengths (Angstroems) associated with obs_fluxes.
+                         Default None.
+        prior:           The prior to use when calculating the posterior.
+                         Choices are: "Uniform", "SII_ratio", "He_ratio",
+                         "SII_and_He_ratios", or a user-supplied function.
+                         Default: "Uniform".
+                         See the code file "B2_Prior.py" for the details
+                         of the SII and He priors and to see the required inputs
+                         and outputs for a user-defined function.
         
         Optional additional keyword arguments regarding outputs:
-        posterior_plot:   A filename for saving out a results image of 2D and 1D marginalised posterior pdfs.
-                          The figure will only be generated and saved if this keyword parameter is specified.
-        prior_plot:       A filename
-        likelihood_plot:  A filename
-        estimate_table:   A filename for a csv file containing Bayesian parameter
-                          estimates for the grid.
+        param_display_names:  A dictionary of parameter display names for grid
+                              parameters, for plotting purposes.  The dictionary
+                              keys are parameter names in the grid file, and the
+                              corresponding values are the "display" names.  The
+                              display names can be raw strings (e.g. r"$\alpha$")
+                              in order to include e.g. Greek letters.
+                              Not all of the grid parameters need to be included 
+                              in param_display_names; raw parameter names will
+                              be used by default.
+        posterior_plot:   A filename for saving out a results image of 2D and
+                          1D marginalised posterior pdfs.  The figure will only
+                          be generated and saved if this keyword is specified.
+        prior_plot:       A filename; as for posterior_plot but for the prior
+        likelihood_plot:  A filename; as for posterior_plot but for the likelihood
+        estimate_table:   A filename for a csv file containing Bayesian
+                          parameter estimates for the grid parameters.
         best_model_table: A filename for a csv file which will compare observed
-                          and model fluxes at the point defined by the parameter estimates.
-        table_on_plots:   Include flux comparison table on corner plots? Default True
+                          and model fluxes at the point defined by the Bayesian
+                          parameter estimates.
+        table_on_plots:   Include a flux comparison table on the corner plots?
+                          Default: True
 
         Returns a Bigelm_result object (defined in B3_Posterior.py), which
-        contains the following attributes...
+        contains all of the data relevant to the Bayesian parameter estimation
+        as attributes.
 
+        ################
         Other notes:
         We don't deal with measured emission-line fluxes that are provided summed for two lines.
         We ignore the possibility of including only upper bounds for emission-line fluxes
         We currently compare linear fluxes, not log fluxes...
-        In calculating the likelihood we assume a systematic error on the normalised model fluxes of 0.15dex.
         In finding marginalised posteriors, we use trapezium integration - perhaps dodgy, 
         but I think we have too few dimensions for Monte Carlo methods and I don't think it's
         worth doing higher-order numerical integration.
         At the moment zero model flux => zero systematic error on the flux. Wrong!
+        ################
         """
         print("Running BIGELM...")
-        # Params = self.Grid_container.Params
-        # Interpd_grids = self.Grid_container.Interpd_grids
+
         Raw_grids = self.Raw_grids
         Interpd_grids = self.Interpd_grids
 
+        deredden = kwargs.pop("deredden", True) # Default True
+        assert isinstance(deredden, bool)
+        obs_wavelengths = kwargs.pop("obs_wavelengths", None) # Default None
+        if deredden and (obs_wavelengths is None):
+            raise ValueError("Must supply obs_wavelengths if deredden==True")
+        if (obs_wavelengths is not None) and not deredden:
+            pass # obs_wavelengths is unnecessary but will be checked anyway.
+        # Process the input observed data; DF_obs is a pandas DataFrame table
+        # where the emission line names index the rows:
+        DF_obs = process_observed_data(obs_fluxes, obs_flux_errors,
+                                            obs_emission_lines, obs_wavelengths)
 
-        # Check types??
+        input_prior = kwargs.pop("prior", "Uniform") # Default "Uniform"
 
-        # Check measure data inputs all have the same length:
-        n_measured = len(obs_emission_lines)
-        if (n_measured != len(obs_fluxes) or n_measured != len(obs_flux_errors)):    
-            raise ValueError("Input arrays obs_fluxes, obs_flux_errors " + 
-                             "and obs_emission_lines don't have the same length.")
-        obs_fluxes = np.array(obs_fluxes) # Ensure numpy array
-        obs_flux_errors = np.array(obs_flux_errors)
-
-        # We'll consider only the emission lines in the input measured fluxes,
-        # and ignore any other emission lines provided in the model grid:
-        lines_list = obs_emission_lines # Emission lines to work with
-
-        # Some checks on the input measured fluxes:
-        # Check that all flux values are finite:
-        if np.sum( np.logical_not( np.isfinite( obs_fluxes ) ) ) != 0:
-            raise ValueError("The measured flux for an emission line isn't finite.")
-        # Check that all flux values are positive:
-        if np.sum( obs_fluxes < 0 ) != 0:
-            raise ValueError("The measured flux for an emission line is negative.")
-        
-        # Some checks on the input measured flux errors:
-        # Check that all errors are finite:
-        if np.sum( np.logical_not( np.isfinite( obs_flux_errors ) ) ) != 0:
-            raise ValueError("The flux error for an emission line isn't finite.")
-        # Check that all errors are positive:
-        if np.sum( obs_flux_errors < 0 ) != 0:
-            raise ValueError("The flux error for an emission line is negative.")
-
+        #----------------------------------------------------------------------
+        # Handle options for BIGELM outputs:
         # Determine the list of parameter display names to use for plotting:
         param_display_names = Interpd_grids.param_names.copy() # Default
         if "param_display_names" in kwargs:
             custom_display_names = kwargs.pop("param_display_names")
             for i, custom_name in enumerate(custom_display_names):
                 param_display_names[i] = custom_name # Override default
-
-        # Deredden observed fluxes at every point in the model grid?
-        deredden = kwargs.pop("deredden", True)
-        # Observed wavelengths supplied?
-        obs_wavelengths = kwargs.pop("obs_wavelengths", None)
-        if deredden and (obs_wavelengths is None):
-            raise ValueError("Must supply obs_wavelengths if deredden==True")
-        if obs_wavelengths is not None:
-            if not deredden:
-                pass # obs_wavelengths is unnecessary; don't check or use it
-            elif len(obs_wavelengths) != n_measured:
-                raise ValueError("obs_wavelengths must have same length as obs_fluxes")
-
-        # Form the data from the observations into a pandas DataFrame table.
-        obs_dict = OD([("Line",lines_list)])
-        if obs_wavelengths is not None:
-            obs_dict["Wavelength"] = obs_wavelengths
-        obs_dict["Flux"] = obs_fluxes
-        obs_dict["Flux_err"] = obs_flux_errors
-        DF_obs = pd.DataFrame(obs_dict)
-        DF_obs.set_index("Line", inplace=True)
-
-        input_prior = kwargs.pop("prior", "Uniform") # Default "Uniform"
-
         # Include text "best model" table on posterior corner plots?
         table_on_plots = kwargs.pop("table_on_plots", True) # Default True
         # Filenames for output corner plot images?  Default None (no plotting)
@@ -231,14 +199,14 @@ class Bigelm_model(object):
         prior_plot      = kwargs.pop("prior_plot",      None)
         posterior_plot  = kwargs.pop("posterior_plot",  None)
 
-        # Filename for output csv tables?  Default None (don't write out table)
+        # Filenames for output csv tables?  Default None (don't write out table)
         estimate_table   = kwargs.pop("estimate_table",   None)
         best_model_table = kwargs.pop("best_model_table", None)
 
         # Are there any remaining keyword arguments that weren't used?
         if len(kwargs) > 0:
-            raise ValueError("Unknown keyword argument(s) " +
-                                      ", ".join(str(k) for k in kwargs.keys()) )
+            raise ValueError("Unknown keyword argument(s): " +
+                             ", ".join("'{0}'".format(k) for k in kwargs.keys()))
 
         #----------------------------------------------------------------------
         # Create a "Bigelm_result" object instance, which involves calculating
@@ -279,5 +247,54 @@ class Bigelm_model(object):
         
         print("Bigelm finished.")
         return Result
+
+
+
+
+def process_observed_data(obs_fluxes, obs_flux_errors, obs_emission_lines,
+                                                               obs_wavelengths):
+    """
+    Error check the input observed emission line data, and form it into a pandas
+    DataFrame table.
+    """
+    obs_fluxes = np.asarray(obs_fluxes, dtype=float) # Ensure numpy array
+    obs_flux_errors = np.asarray(obs_flux_errors, dtype=float)
+    # Check measured data inputs all have the same length:
+    n_measured = len(obs_emission_lines)
+    if (obs_fluxes.size != n_measured) or (obs_flux_errors.size != n_measured):    
+        raise ValueError("Input arrays obs_fluxes, obs_flux_errors and " 
+                         "obs_emission_lines don't all have the same length.")
+    if obs_wavelengths is not None:
+        obs_wavelengths = np.asarray(obs_wavelengths, dtype=float)
+        if obs_wavelengths.size != n_measured:
+            raise ValueError("obs_wavelengths must have same length as obs_fluxes")
+        # Some checks on the input wavelengths:
+        if np.sum( ~np.isfinite(obs_wavelengths) ) > 0: # Any non-finite?
+            raise ValueError("The wavelength for an emission line isn't finite.")
+        if np.sum( obs_wavelengths <= 0 ) != 0: # All positive?
+            raise ValueError("The wavelength for an emission line not positive.")
+
+    # Some checks on the input measured fluxes:
+    if np.sum( ~np.isfinite(obs_fluxes) ) > 0: # Any non-finite?
+        raise ValueError("The measured flux for an emission line isn't finite.")
+    if np.sum( obs_fluxes < 0 ) != 0: # Are all flux values are non-negative?
+        raise ValueError("The measured flux for an emission line is negative.")
+    
+    # Some checks on the input measured flux errors:
+    if np.sum( ~np.isfinite(obs_flux_errors) ) > 0: # Any non-finite?
+        raise ValueError("The flux error for an emission line isn't finite.")
+    if np.sum( obs_flux_errors <= 0 ) != 0: # All positive?
+        raise ValueError("The flux error for an emission line is not positive.")
+
+    # Form the data from the observations into a pandas DataFrame table.
+    obs_dict = OD([("Line",obs_emission_lines)])
+    if obs_wavelengths is not None:
+        obs_dict["Wavelength"] = obs_wavelengths
+    obs_dict["Flux"] = obs_fluxes
+    obs_dict["Flux_err"] = obs_flux_errors
+    DF_obs = pd.DataFrame(obs_dict)
+    DF_obs.set_index("Line", inplace=True) # Row index is the emission line name
+
+    return DF_obs
 
 
