@@ -1,5 +1,4 @@
 from __future__ import print_function, division
-# from collections import OrderedDict as OD
 import numpy as np  # Core numerical library
 import matplotlib.pyplot as plt  # Plotting
 # For generating a custom colourmap:

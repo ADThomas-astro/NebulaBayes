@@ -1,11 +1,8 @@
 from __future__ import print_function, division
 from collections import OrderedDict as OD
 import numpy as np  # Core numerical library
-import pandas as pd
-# For interpolating an n-dimensional regular grid:
-# import itertools # For finding Cartesian product and combinatorial combinations
+import pandas as pd # For tables
 from . import B1_Grid_working
-# from . import B2_Prior
 from . import B3_Posterior
 from . import B4_Plotting
 

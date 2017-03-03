@@ -1,13 +1,9 @@
 from __future__ import print_function, division
 from collections import OrderedDict as OD
-# import sys
 import numpy as np
 import pandas as pd
-# from scipy import ndimage
 # For interpolating an n-dimensional regular grid:
 from scipy.interpolate import RegularGridInterpolator as siRGI
-# from scipy.interpolate import interp1d
-# from scipy.interpolate import Akima1DInterpolator#, RectBivariateSpline
 import itertools # For Cartesian product
 
 
@@ -75,39 +71,6 @@ class Bigelm_grid(Grid_description):
 
 
 
-# class Bigelm_grid(object):
-#     """
-#         Simple class to hold n_dimensional grid arrays,
-#         along with corresponding lists of values of the grid parameters.
-#         Will hold an grid of the same shape for each emission line.
-#     """
-#     def __init__(self, val_arrs):
-#         """
-#         Initialise the list of arrays listing the grid
-#         parameters, as well as some other useful quantities
-#         including the dictionary to hold the actual grids.
-#         """
-#         self.val_arrs = val_arrs # List of arrs of gridpoint vals for each param
-#         self.p_minmax = [(a.min(), a.max()) for a in val_arrs]
-#         self.par_indices = []
-#         for a in self.val_arrs:
-#             self.par_indices.append( {val:j for j,val in enumerate(a)} )
-#         # So self.par_indices[j][v] will give the index along axis j of a grid
-#         # that corresponds to parameter j having value v.
-#         # Calculate shape of each grid (length of each dimension):
-#         self.shape = tuple( [len(val_arr) for val_arr in self.val_arrs ] )
-#         self.ndim = len( self.shape )
-#         # Calculate the number of gridpoints (assuming a rectangular grid):
-#         self.n_gridpoints = np.product( self.shape )
-#         # Initialise a dictionary to hold the n-dimensional
-#         # model grid for each emission line:
-#         self.grids = OD()
-
-
-# class dummy(object):
-#     pass
-
-
 def initialise_grids(grid_file, grid_params, lines_list, interpd_grid_shape):
     """
     Initialise grids and return a simple object, which will have
@@ -165,12 +128,6 @@ def initialise_grids(grid_file, grid_params, lines_list, interpd_grid_shape):
             raise ValueError("A flux value for modelled emission line " +
                              line + " is negative.")
 
-    # Initialise a custom class instance to hold parameter names and related
-    # lists for both the raw and interpolated grids:
-    # Params = dummy()
-    # Params.names = grid_params
-    # Params.n_params = len(grid_params)
-
     #--------------------------------------------------------------------------
     # Construct raw flux grids
     Raw_grids = construct_raw_grids(DF_grid, grid_params, lines_list)
@@ -178,13 +135,6 @@ def initialise_grids(grid_file, grid_params, lines_list, interpd_grid_shape):
     #--------------------------------------------------------------------------
     # Interpolate flux grids
     Interpd_grids = interpolate_flux_arrays(Raw_grids, interpd_grid_shape)
-
-    #--------------------------------------------------------------------------
-    # Combine and return results...
-    # Container1 = dummy()  # Initialise container object
-    # Container1.Params = Params
-    # Container1.Raw_grids = Raw_grids
-    # Container1.Interpd_grids = Interpd_grids
 
     return Raw_grids, Interpd_grids
 
@@ -310,179 +260,5 @@ def interpolate_flux_arrays(Raw_grids, interpd_shape):
         a[a < 0] = 0
 
     return Interpd_grids
-
-
-
-# def interpolate_Akima_nD(data_grid, val_arrs, interpd_shape):
-#     """
-#     Interpolate data on an n-dimensional rectangular grid to a higher
-#     resolution, regular grid using repeated 1D Akima spline interpolation.
-#     data_grid: nD numpy array - the input pre-interpolation grid
-#     val_arrs: list of 1D numpy arrays - the co-ordinate values corresponding
-#             to each of the dimensions in data_grid.  Note
-#             that these coordinate values do not need to be uniformly spaced.
-#     Returns an n_d numpy array with shape interpd_shape, and a list of arrays
-#     specifying the new parameter values along each dimension.  Note that the
-#     corner points of the grid remain the same after interpolation.
-#     THIS IS TOO SLOW TO BE USABLE AND ALSO INCORRECT, BECAUSE IT IS ONLY
-#     A SPLINE IN ONE DIRECTION.
-#     """
-#     raw_shape = data_grid.shape
-#     n_dims = len(raw_shape)
-#     assert len(val_arrs) == n_dims and len(interpd_shape) == n_dims
-#     assert all(a.size == n for a,n in zip(val_arrs, raw_shape))
-#     interpd_shape = tuple(interpd_shape) # Ensure tuple not list
-#     val_arrs_out = [np.linspace(a[0],a[-1],n) for a,n in zip(val_arrs,interpd_shape)]
-
-#     intermediate_grid_old = data_grid
-#     print("Dimension:", end=" ")
-#     for k in range(n_dims): # Iterate over dimensions
-#         print(k, end=" ")
-#         sys.stdout.flush()
-#         # We interpolate the kth dimension
-#         intermediate_shape = interpd_shape[:k+1] + raw_shape[k+1:]
-#         intermediate_grid_new = np.zeros(intermediate_shape) + np.nan
-#         in_par_vals_k, out_par_vals_k = val_arrs[k], val_arrs_out[k]
-
-#         temp_shape = [n for n in intermediate_shape]
-#         temp_shape[k] = 1 # Don't include this dimension in Cartesian product
-#         # Iterate over all 1D-slices along dimension k
-#         for ind_tuple in it_product(*[list(range(n)) for n in temp_shape]):
-#             index_list = list(ind_tuple)
-#             index_list[k] = slice(None) # slice(None) means ":" (slice along this dimension)
-#             y = intermediate_grid_old[index_list].ravel() # 1D array
-#             Interpolator = Akima1DInterpolator(in_par_vals_k, y)
-#             # Now find the interpolated values for this 1D array
-#             intermediate_grid_new[index_list] = Interpolator(out_par_vals_k)
-
-#         intermediate_grid_old = intermediate_grid_new
-#     print()
-
-#     interpolated_grid = intermediate_grid_new
-
-#     # Ensure corner points the same!
-#     for ind_tuple in it_product(*[(0,-1) for m in range(n_dims)]):
-#         assert np.isclose(data_grid[ind_tuple], interpolated_grid[ind_tuple])
-
-#     return interpolated_grid, val_arrs_out
-
-
-
-# def interpolate_Akima_2D(data_grid, xvals_in, yvals_in, ninterp_x, ninterp_y):
-#     """
-#     Interpolate a 2D grid to a higher resolution, regular grid using repeated 1D
-#     Akima spline interpolation.
-#     data_grid: 2D numpy array - the input grid
-#     xvals_in, yvals_in: 1D numpy arrays - the co-ordinate values corresponding
-#         to the 0th and 1st dimensions respectively in data_grid.  Note
-#         that these coordinate values do not need to be uniformly spaced.
-#     Returns a 2d numpy array with shape (ninterp_x, ninterp_y).  The corner
-#     points of the grid remain the same.
-#     This function isn't used except in testing interpolate_Akima_nD.
-#     THIS IS INCORRECT BECAUSE IT ISN'T A PROPER 2D SPLINE.
-#     """
-#     nx_in, ny_in = data_grid.shape  # Indexing is y first, then x.
-#     assert xvals_in.size == nx_in and yvals_in.size == ny_in
-#     xvals_out = np.linspace(xvals_in[0], xvals_in[-1], ninterp_x)
-#     yvals_out = np.linspace(yvals_in[0], yvals_in[-1], ninterp_y)
-#     interpolated_grid = np.zeros((ninterp_x, ninterp_y)) + np.nan
-#     intermediate_grid = np.zeros((nx_in, ninterp_y)) + np.nan
-#     # The intermediate grid will have interpolated rows, which are at the
-#     # x-positions of the rows in the input grid, not at the x-positions of the
-#     # interpolated grid.
-#     for i in range(nx_in):
-#         # For each x-value fit an Akima spline to the corresponding y-values (row)
-#         Col_interpolator = Akima1DInterpolator(yvals_in, data_grid[i,:])
-#         # Now find the interpolated y-values for this row
-#         intermediate_grid[i,:] = Col_interpolator(yvals_out)
-
-#     for j in range(ninterp_y):
-#         # For each y-value fit an Akima spline to the corresponding x-values (column)
-#         Row_interpolator = Akima1DInterpolator(xvals_in, intermediate_grid[:,j])
-#         # Now fill in the output grid for this columns
-#         interpolated_grid[:,j] = Row_interpolator(xvals_out)
-
-#     for i,j in [(0,0), (0,-1), (-1,0), (-1,-1)]: # Ensure corner points the same!
-#         assert np.isclose(data_grid[i,j], interpolated_grid[i,j])
-
-#     return interpolated_grid
-
-
-
-# def setup_interpolators(Raw_grids, interp="Linear"):
-#     """
-#     Raw_grids: Contains details of the input model grid
-#     interp: can be "Linear", "Spline"
-#     Returns a dictionary mapping emission line names to callable "interpolators"
-#     """
-
-#     # Some preparation for using the "Spline" method
-#     p_index_interpolators = []
-#     for a in Raw_grids.val_arrs: # Setup linear interpolator for each param
-#         interpolator = interp1d(x=a, y=np.arange(len(a)), bounds_error=False,
-#                                 fill_value=(0,len(a)-1))
-#         p_index_interpolators.append(interpolator)
-#     # So p_index_interpolators[j][f] will give the interpolated "index"
-#     # corresponding to the value f along the j axis (i.e. to parameter j having
-#     # value f).  We're converting the actual value of the parameter to a "pixel"
-#     # coordinate.
-
-#     # Iterate over emission lines, storing an "interpolator" for each:
-#     line_interpolators = {} # Keys are emisison line names
-#     for line, flux_grid in Raw_grids.grids.items():
-
-#         # LinearGridInterpolator = RegularGridInterpolator(Raw_grids.val_arrs,
-#         #     flux_grid, method="linear", bounds_error=False, fill_value=None)
-#         # LinearGridInterpolator = RegularGridInterpolator(Raw_grids.val_arrs,
-#         #     flux_grid, method="linear", bounds_error=False, fill_value=1e55) # Return massive flux if outside range!
-#         LinearGridInterpolator = RegularGridInterpolator(Raw_grids.val_arrs,
-#             flux_grid, method="linear", bounds_error=True, fill_value=1e55) # Return massive flux if outside range!
-#         # def line_interpolator_linear(p_vector):
-#         #     """
-#         #     A wrapper around RegularGridInterpolator - necessary because I 
-#         #     don't like the options for values outside the parameter space.
-#         #     """
-#         #     # Move values outside the bounds onto the boundaries
-#         #     p_new = []
-#         #     for i,(p,(p_min,p_max)) in enumerate(zip(p_vector, Raw_grids.p_minmax)):
-#         #         p_new.append( max(p_min, min(p, p_max)) )
-
-#         #     return LinearGridInterpolator( p_new )
-
-
-#         def line_interpolator_spline(p_vector):
-#             """
-#             Function for interpolating the value of an emission line, given a
-#             list of parameter values.
-#             """
-#             # http://stackoverflow.com/questions/6238250/multivariate-spline-interpolation-in-python-scipy
-#             # Firstly convert the parameter values to pixel coordinates:
-#             coords = [p_index_interpolators[i](f) for i,f in enumerate(p_vector)]
-#             coords = np.array(coords)[:,np.newaxis] # Need transpose
-#             # Now interpolate in the flux grid using the pixel coordinates:
-#             flux = ndimage.map_coordinates(flux_grid, coords, order=3)
-#             return flux[0] # Return as a float, not a numpy array
-#             # In the coords array, each column is a point to be interpolated/
-#             # Here we have only one column.
-#             # We use 3rd-order (cubic) spline interpolation.
-#             # Interpolating outside the grid will just give "nearest" grid
-#             # edge values
-
-#             # Lingering questions:
-#             # - Could there be an issue with the spline interpolation
-#             # returning negative flux values?
-#             # - Is this too slow because the array is being copied in memory
-#             # on each interpolation?
-#             # - Does this naive spline interpolation (not Akima spline) behave
-#             # poorly with "outliers" in the model grid data?
-
-#         if interp == "Linear":
-#             line_interpolators[line] = LinearGridInterpolator#line_interpolator_linear
-#         elif interp == "Spline":
-#             line_interpolators[line] = line_interpolator_spline
-#         else:
-#             raise ValueError("Unknown value given for keyword 'interp'")
-
-#     return line_interpolators
 
 

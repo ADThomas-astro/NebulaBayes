@@ -5,7 +5,6 @@ import numpy as np  # Core numerical library
 import pandas as pd
 from scipy.integrate import cumtrapz
 from scipy.signal import argrelextrema
-# from .dereddening import deredden
 from .dereddening import deredden as do_dereddening
 from .B1_Grid_working import Grid_description
 from .B2_Prior import calculate_prior
