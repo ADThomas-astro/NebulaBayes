@@ -1,12 +1,12 @@
 """
-    BIGELM: Bayesian comparison of photoIonisation model Grids to Emission Line
+    BIGELM: Bayesian Inference with photoionisation model Grids and Emission Line
             Measurements
             (Compulsory contrived acronym, as is the norm in modern astronomy)
 
     This function performs Bayesian parameter estimation.  The data are a set
     of emission line flux measurements with associated errors.  The model
-    is a photoionisation model, varied over n=2 or more parameters, input as
-    an n-dimensional grid of predicted emission line fluxes.  The measured
+    is a photoionisation model, varied in a grid over n=2 or more parameters,
+    input as n-dimensional grids of fluxes for each emission line.  The measured
     and modelled emission line fluxes are compared to calculate a "likelihood"
     probability distribution, before Bayes' Theroem is applied to produce an
     n-dimensional "posterior" probability distribution for the values of the

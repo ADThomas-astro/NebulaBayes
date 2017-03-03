@@ -14,7 +14,7 @@ from . import B4_Plotting
 Adam D. Thomas 2015 - 2017
 
 
-BIGELM: Bayesian comparison of photoIonisation model Grids to Emission Line
+BIGELM: Bayesian Inference with photoionisation model Grids and Emission Line
         Measurements
         (Compulsory contrived acronym, as is the norm in modern astronomy)
 
@@ -187,7 +187,7 @@ class Bigelm_model(object):
         #----------------------------------------------------------------------
         # Handle options for BIGELM outputs:
         # Determine the list of parameter display names to use for plotting:
-        param_display_names = Interpd_grids.param_names.copy() # Default
+        param_display_names = list(Interpd_grids.param_names) # Default
         if "param_display_names" in kwargs:
             custom_display_names = kwargs.pop("param_display_names")
             for i, custom_name in enumerate(custom_display_names):

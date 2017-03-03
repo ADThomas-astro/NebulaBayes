@@ -6,7 +6,7 @@ import pandas as pd
 from scipy.integrate import cumtrapz
 from scipy.signal import argrelextrema
 # from .dereddening import deredden
-import dereddening as dr
+from .dereddening import deredden as do_dereddening
 from .B1_Grid_working import Grid_description
 from .B2_Prior import calculate_prior
 
@@ -392,7 +392,7 @@ class Bigelm_result(object):
             grid_BD_arr = Interpd_grids.grids["Halpha"]
             # Fluxes are normalised to Hbeta == 1, so grid_BD_arr is an array of
             # the Balmer decrement F_Halpha / F_Hbeta over the model grid.
-            obs_flux_arrs, obs_flux_err_arrs = dr.deredden(
+            obs_flux_arrs, obs_flux_err_arrs = do_dereddening(
                                     DF_obs["Wavelength"].values,
                                     DF_obs["Flux"].values,
                                     DF_obs["Flux_err"].values, BD=grid_BD_arr)

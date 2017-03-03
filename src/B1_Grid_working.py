@@ -142,8 +142,7 @@ def initialise_grids(grid_file, grid_params, lines_list, interpd_grid_shape):
     """
     print("Loading input grid table...")
     # Load database csv table containing the model grid output
-    DF_grid = pd.read_csv(grid_file, delimiter=",", header=0, engine="python")
-    # The python engine is slower than the C engine, but it works!
+    DF_grid = pd.read_table(grid_file, header=0, delimiter=",")
     print("Cleaning input grid table...")
     # Remove any whitespace from column names
     DF_grid.rename(inplace=True, columns={c:c.strip() for c in DF_grid.columns})
@@ -268,7 +267,7 @@ def interpolate_flux_arrays(Raw_grids, interpd_shape):
     for p, n in zip(Raw_grids.param_names, interpd_shape):
         p_min, p_max = Raw_grids.paramName2paramMinMax[p]
         val_arrs_interp.append( np.linspace(p_min, p_max, n) )
-    Interpd_grids = Bigelm_grid(Raw_grids.param_names.copy(), val_arrs_interp)
+    Interpd_grids = Bigelm_grid(list(Raw_grids.param_names), val_arrs_interp)
 
     # A list of all parameter value combinations in the
     # interpolated grid in the form of a numpy array:
