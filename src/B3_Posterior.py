@@ -387,16 +387,17 @@ class Bigelm_result(object):
         """
         if self.deredden:
             # Deredden observed fluxes at every interpolated gridpoint to match
-            # the model Balmer decrement at that gridpoint
-            grid_BD_arr = Interpd_grids.grids["Halpha"]
-            # Fluxes are normalised to Hbeta == 1, so grid_BD_arr is an array of
-            # the Balmer decrement F_Halpha / F_Hbeta over the model grid.
+            # the model Balmer decrement at that gridpoint.
+            # Array of Balmer decrements across the grid:
+            grid_BD_arr = Interpd_grids.grids["Halpha"] / Interpd_grids.grids["Hbeta"]
+            # Fluxes should be normalised to Hbeta == 1, but I did the division
+            # here explicitly just in case...
             obs_flux_arrs, obs_flux_err_arrs = do_dereddening(
-                                    DF_obs["Wavelength"].values,
-                                    DF_obs["Flux"].values,
-                                    DF_obs["Flux_err"].values, BD=grid_BD_arr)
-        else: # Use the input observed fluxes, which hopefully may have
-              # already been dereddened.
+                        DF_obs["Wavelength"].values, DF_obs["Flux"].values,
+                        DF_obs["Flux_err"].values, BD=grid_BD_arr, normalise=True)
+            # The output fluxes and errors are normalised to Hbeta == 1.
+        else: # Use the input observed fluxes, which hopefully have already
+              # been dereddened if necessary.
             shape = Interpd_grids.shape
             obs_flux_arrs = [np.full(shape, f) for f in DF_obs["Flux"].values]
             obs_flux_err_arrs = [np.full(shape, e) for e in DF_obs["Flux_err"].values]
