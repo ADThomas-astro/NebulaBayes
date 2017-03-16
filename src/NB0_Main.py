@@ -1,10 +1,10 @@
 from __future__ import print_function, division
 from collections import OrderedDict as OD
 import numpy as np  # Core numerical library
-import pandas as pd # For tables
-from . import B1_Grid_working
-from . import B3_Posterior
-from . import B4_Plotting
+import pandas as pd # For tables ("DataFrame"s)
+from . import NB1_Grid_working
+from . import NB3_Bayes
+from . import NB4_Plotting
 
 
 """
@@ -93,7 +93,7 @@ class NB_Model(object):
                                       ", ".join(str(k) for k in kwargs.keys()) )
 
         # Call grid initialisation:
-        Raw_grids, Interpd_grids = B1_Grid_working.initialise_grids(grid_file,
+        Raw_grids, Interpd_grids = NB1_Grid_working.initialise_grids(grid_file,
                                     grid_params, lines_list, interpd_grid_shape)
         Raw_grids.grid_rel_error = grid_rel_error
         Interpd_grids.grid_rel_error = grid_rel_error
@@ -209,7 +209,7 @@ class NB_Model(object):
         #----------------------------------------------------------------------
         # Create a "NB_Result" object instance, which involves calculating
         # the prior, likelihood and posterior, along with parameter estimates:
-        Result = B3_Posterior.NB_Result(Interpd_grids, DF_obs, deredden=deredden,
+        Result = NB3_Bayes.NB_Result(Interpd_grids, DF_obs, deredden=deredden,
                                                       input_prior=input_prior)
 
         #----------------------------------------------------------------------
@@ -239,7 +239,7 @@ class NB_Model(object):
                 plot_anno = None
             NB_nd_pdf.Grid_spec.param_display_names = param_display_names
             print("Plotting corner plot for the", pdf_name, "...")
-            B4_Plotting.plot_marginalised_ndpdf(out_image_name, NB_nd_pdf,
+            NB4_Plotting.plot_marginalised_ndpdf(out_image_name, NB_nd_pdf,
                                                 Raw_grids, plot_anno)
 
         
@@ -292,6 +292,15 @@ def process_observed_data(obs_fluxes, obs_flux_errors, obs_emission_lines,
     obs_dict["Flux_err"] = obs_flux_errors
     DF_obs = pd.DataFrame(obs_dict)
     DF_obs.set_index("Line", inplace=True) # Row index is the emission line name
+
+    # If Hbeta was included in the line list, let's make sure its flux is 1:
+    DF_obs2 = DF_obs.copy()
+    DF_obs2["LINE"] = [l.upper() for l in DF_obs2.index] # Uppercase line names
+    DF_obs2.set_index("LINE", inplace=True)
+    if "HBETA" in DF_obs2.index:
+        if not np.isclose(DF_obs2.loc["HBETA","Flux"], 1.0):
+            raise ValueError("Hbeta was supplied as an observed emission line, "
+                             "but wasn't normalised to 1.")
 
     return DF_obs
 

@@ -1,13 +1,13 @@
 from __future__ import print_function, division
-import itertools
 from collections import OrderedDict as OD
+import itertools    # For combinatorial combinations
 import numpy as np  # Core numerical library
-import pandas as pd
+import pandas as pd # For tables ("DataFrame"s)
 from scipy.integrate import cumtrapz
 from scipy.signal import argrelextrema
 from .dereddening import deredden as do_dereddening
-from .B1_Grid_working import Grid_description
-from .B2_Prior import calculate_prior
+from .NB1_Grid_working import Grid_description
+from .NB2_Prior import calculate_prior
 
 
 
@@ -60,13 +60,14 @@ class NB_nd_pdf(object):
         Calculate normalised 1D and 2D marginalised pdfs for all possible
         combinations of parameters.
         """
+        print("Calculating 2D and 1D marginalised pdfs...")
+
         # The interpolated grids have uniform spacing:
         spacing = [(v[1] - v[0]) for v in self.Grid_spec.param_values_arrs]
         n = self.Grid_spec.ndim
         #--------------------------------------------------------------------------
         # Calculate the 2D marginalised pdf for every possible combination
         # of 2 parameters
-        print("Calculating 2D marginalised posteriors...")
         # List of all possible pairs of two parameter names:
         param_names = self.Grid_spec.param_names
         double_names = list(itertools.combinations(param_names, 2))
@@ -101,7 +102,6 @@ class NB_nd_pdf(object):
 
         #--------------------------------------------------------------------------
         # Calculate the 1D marginalised pdf for each individual parameter
-        print("Calculating 1D marginalised posteriors...")
         # Initialise dictionary of all 1D marginalised pdf arrays:
         marginalised_1D = {}
 

@@ -1,7 +1,7 @@
 from __future__ import print_function, division
 from collections import OrderedDict as OD
-import numpy as np
-import pandas as pd
+import numpy as np  # Core numerical library
+import pandas as pd # For tables ("DataFrame"s)
 # For interpolating an n-dimensional regular grid:
 from scipy.interpolate import RegularGridInterpolator as siRGI
 import itertools # For Cartesian product
