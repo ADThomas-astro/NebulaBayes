@@ -299,8 +299,9 @@ def process_observed_data(obs_fluxes, obs_flux_errors, obs_emission_lines,
     DF_obs2.set_index("LINE", inplace=True)
     if "HBETA" in DF_obs2.index:
         if not np.isclose(DF_obs2.loc["HBETA","Flux"], 1.0):
-            raise ValueError("Hbeta was supplied as an observed emission line, "
-                             "but wasn't normalised to 1.")
+            raise ValueError("Hbeta was supplied as an observed emission line,"
+                             " but wasn't normalised to 1 (Hbeta flux is"
+                             " {0:.6f})".format(DF_obs2.loc["HBETA","Flux"])   )
 
     return DF_obs
 
