@@ -30,7 +30,7 @@ class Grid_description(object):
         param_names: List of parameter names as strings
         param_value_arrs: List of lists of parameter values over the grid,
                           where sublists correspond to param_names.
-        Note that BIGELM code relies on the dictionaries below being ordered.
+        Note that NebulaBayes code relies on the dictionaries below being ordered.
         """
         assert len(param_names) == len(param_value_arrs)
         # Record some basic info
@@ -58,7 +58,7 @@ class Grid_description(object):
 
 
 
-class Bigelm_grid(Grid_description):
+class NB_Grid(Grid_description):
     """
     Simple class to hold n_dimensional grid arrays, along with a description of
     the grid.
@@ -66,7 +66,7 @@ class Bigelm_grid(Grid_description):
     """
     def __init__(self, param_names, param_value_arrs):
         """ Initialise """
-        super(Bigelm_grid, self).__init__(param_names, param_value_arrs)
+        super(NB_Grid, self).__init__(param_names, param_value_arrs)
         self.grids = OD()
 
 
@@ -76,9 +76,9 @@ def initialise_grids(grid_file, grid_params, lines_list, interpd_grid_shape):
     Initialise grids and return a simple object, which will have
     attributes Params, Raw_grids and Interpd_grids.
     The returned object 
-    contains all necessary grid information for bigelm, and may be used as an 
-    input to repeated bigelm runs to avoid recalculation of grid data in each run.
-    The Raw_grids and Interpd_grids attributes are instances of the Bigelm_grid
+    contains all necessary grid information for NebulaBayes, and may be used as an 
+    input to repeated NebulaBayes runs to avoid recalculation of grid data in each run.
+    The Raw_grids and Interpd_grids attributes are instances of the NB_Grid
     class defined in this module.  The Params attribute is an instance of the
     Grid_parameters class defined in this module.
     grid_file:  the filename of an ASCII csv table containing photoionisation model
@@ -94,7 +94,7 @@ def initialise_grids(grid_file, grid_params, lines_list, interpd_grid_shape):
                 Any non-finite fluxes (e.g. nans) will be set to zero.
     grid_params: List of the unique names of the grid parameters as strings.
                  The order is the order of the grid dimensions, i.e. the order
-                 in which arrays in bigelm will be indexed.
+                 in which arrays in NebulaBayes will be indexed.
     interpd_grid_shape: A tuple of integers, giving the size of each dimension
                         of the interpolated grid.  The order of the integers
                         corresponds to the order of parameters in grid_params.
@@ -157,7 +157,7 @@ def construct_raw_grids(DF_grid, grid_params, lines_list):
         # Ensure we have a sorted list of unique values for each parameter:
         param_val_arrs_raw.append( np.sort( np.unique( DF_grid[p].values ) ) )
     # Initialise a grid object to hold the raw grids:
-    Raw_grids = Bigelm_grid(grid_params, param_val_arrs_raw)
+    Raw_grids = NB_Grid(grid_params, param_val_arrs_raw)
 
     # Check that the input database table is the right length:
     # (This is equivalent to checking that we have a rectangular grid, e.g.
@@ -212,12 +212,12 @@ def interpolate_flux_arrays(Raw_grids, interpd_shape):
     print("Interpolating model emission line flux grids to shape {0}...".format(
                                                           tuple(interpd_shape)))
 
-    # Initialise Bigelm_grid object for interpolated arrays
+    # Initialise NB_Grid object for interpolated arrays
     val_arrs_interp = []
     for p, n in zip(Raw_grids.param_names, interpd_shape):
         p_min, p_max = Raw_grids.paramName2paramMinMax[p]
         val_arrs_interp.append( np.linspace(p_min, p_max, n) )
-    Interpd_grids = Bigelm_grid(list(Raw_grids.param_names), val_arrs_interp)
+    Interpd_grids = NB_Grid(list(Raw_grids.param_names), val_arrs_interp)
 
     # A list of all parameter value combinations in the
     # interpolated grid in the form of a numpy array:

@@ -15,7 +15,7 @@ Adam D. Thomas 2015 - 2017
 
 
 
-def plot_marginalised_ndpdf(out_filename, Bigelm_nd_pdf, Raw_grids, plot_anno=None):
+def plot_marginalised_ndpdf(out_filename, NB_nd_pdf, Raw_grids, plot_anno=None):
     """
     Generate a corner plot of all the 2D and 1D marginalised pdfs for an
     n-dimensional pdf.  This function may be used for the prior, lkelihood or
@@ -25,7 +25,7 @@ def plot_marginalised_ndpdf(out_filename, Bigelm_nd_pdf, Raw_grids, plot_anno=No
     pdfs included along the diagonal.  This function is designed to
     produce attractive plots independent of the dimensionality (axes grid size).
     out_filename: The filename for the output corner plot image file.
-    Bigelm_nd_pdf: An object which contains the 1D and 1D marginalised pdfs and
+    NB_nd_pdf: An object which contains the 1D and 1D marginalised pdfs and
                    interpolated grid information
     Raw_grids: Object holding information about the raw grids, used in plotting
                the original (non-interpolated) grid points.
@@ -47,7 +47,7 @@ def plot_marginalised_ndpdf(out_filename, Bigelm_nd_pdf, Raw_grids, plot_anno=No
     # Create a figure and a 2D-array of axes objects:
     # We keep the figure size and bounds of the axes grid the same, and change
     # only n_rows(==n_cols) for different grid dimensions.
-    n = Bigelm_nd_pdf.Grid_spec.ndim
+    n = NB_nd_pdf.Grid_spec.ndim
     fig_width_ht = 6, 6 # Figure width and height in inches
     grid_bounds = {"left":0.13, "bottom":0.13, "right":0.95, "top":0.95}
     axes_width = (grid_bounds["right"] - grid_bounds["left"]) / n # Figure frac
@@ -60,10 +60,10 @@ def plot_marginalised_ndpdf(out_filename, Bigelm_nd_pdf, Raw_grids, plot_anno=No
         ax.set_visible(False)  # Needed axes will be turned on later.
 
     # Some quantities for working with the parameters:
-    G = Bigelm_nd_pdf.Grid_spec # Interpolated grid description
+    G = NB_nd_pdf.Grid_spec # Interpolated grid description
     par_arr_map = G.paramName2paramValueArr
     interp_spacing = {p : (arr[1] - arr[0]) for p,arr in par_arr_map.items()}
-    p_estimates = Bigelm_nd_pdf.DF_estimates["Estimate"] # pandas Series; index is param name
+    p_estimates = NB_nd_pdf.DF_estimates["Estimate"] # pandas Series; index is param name
 
     # Iterate over the 2D marginalised pdfs:
     for double_name, param_inds_double in zip(G.double_names, G.double_indices):
@@ -96,7 +96,7 @@ def plot_marginalised_ndpdf(out_filename, Bigelm_nd_pdf, Raw_grids, plot_anno=No
         image_aspect = 1.0 / ( extent["yrange"] / extent["xrange"] )
 
         # Actually generate the image of the 2D marginalised pdf:
-        pdf_2D = Bigelm_nd_pdf.marginalised_2D[double_name]
+        pdf_2D = NB_nd_pdf.marginalised_2D[double_name]
         ax_i.imshow( pdf_2D, vmin=0,
                      origin="lower", extent=extent_list, cmap=im_cmap,
                      interpolation="spline16", aspect=image_aspect )
@@ -122,7 +122,7 @@ def plot_marginalised_ndpdf(out_filename, Bigelm_nd_pdf, Raw_grids, plot_anno=No
         y_best_2d = y_arr[max_inds_2d[0]]
         ax_i.scatter(x_best_2d, y_best_2d, marker="v", s=13, facecolor="none", linewidth=0.5, edgecolor="blue")
         # Show projection of peak of full nD pdf:
-        max_inds_nd = np.unravel_index(np.argmax(Bigelm_nd_pdf.nd_pdf), Bigelm_nd_pdf.nd_pdf.shape)
+        max_inds_nd = np.unravel_index(np.argmax(NB_nd_pdf.nd_pdf), NB_nd_pdf.nd_pdf.shape)
         x_best_nd = x_arr[max_inds_nd[ind_x]]
         y_best_nd = y_arr[max_inds_nd[ind_y]]
         ax_i.scatter(x_best_nd, y_best_nd, marker="s", s=21, facecolor="none", linewidth=0.5, edgecolor="orange")
@@ -160,7 +160,7 @@ def plot_marginalised_ndpdf(out_filename, Bigelm_nd_pdf, Raw_grids, plot_anno=No
     for ind, param in enumerate(G.param_names):
         ax_i = axes[ ind, ind ]
         ax_i.set_visible(True)  # turn this axis back on
-        pdf_1D =  Bigelm_nd_pdf.marginalised_1D[param]
+        pdf_1D =  NB_nd_pdf.marginalised_1D[param]
         ax_i.plot(par_arr_map[param], pdf_1D, color="black", zorder=6)
         # Plot a vertical line to show the parameter estimate (peak of 1D pdf)
         y_lim = (0, 1.14*pdf_1D.max())

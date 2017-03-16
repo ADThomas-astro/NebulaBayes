@@ -17,40 +17,41 @@ Adam D. Thomas 2015 - 2017
 Code to calculate the likelihood and posterior over an N-D grid, marginalise
 pdfs to 1D and 2D marginalised pdfs, and generally do Bayesian parameter
 estimation.
-This module defines two classes: Bigelm_nd_pdf and Bigelm_result.
+This module defines two custom NebulaBayes classes: NB_nd_pdf and NB_Result.
 """
 
 
 
-class Bigelm_nd_pdf(object):
+class NB_nd_pdf(object):
     """
     Class to hold an N-dimensional PDF and its 1D and 2D marginalised forms.
     An instance of this class is used for each of the likelihood, prior and
     posterior.
     """
-    def __init__(self, nd_pdf, Bigelm_result, DF_obs, Interpd_grids):
+    def __init__(self, nd_pdf, NB_Result, DF_obs, Interpd_grids):
         """
-        Initialise an instance of the Bigelm_nd_pdf class.
+        Initialise an instance of the NB_nd_pdf class.
         nd_pdf: A numpy ndarray holding the (linear) pdf.
-        Bigelm_result: A Bigelm_result object (defined in this module)
+        NB_Result: A NB_Result object (defined in this module)
         DF_obs: A pandas DataFrame table holding the observed emission line
                 fluxes and errors
-        Interpd_grids: A Bigelm_grid object (defined in B1_Grid_working.py)
+        Interpd_grids: A NB_Grid object (defined in NB1_Grid_working.py)
                        holding the interpolated model grid fluxes and the
                        description fo the model grid.
         """
         self.nd_pdf = nd_pdf
-        self.Grid_spec = Bigelm_result.Grid_spec
+        self.Grid_spec = NB_Result.Grid_spec
         # Add self.marginalised_2d and self.marginalised_1d attributes and
         # normalise the self.nd_pdf attribute:
         self.marginalise_pdf()
         # Make a parameter estimate table based on this nd_pdf
         self.make_parameter_estimate_table() # add self.DF_estimates attribute
         # Make a table comparing model and observed fluxes at the pdf peak
-        self.make_pdf_peak_table(DF_obs, Interpd_grids, Bigelm_result)
+        self.make_pdf_peak_table(DF_obs, Interpd_grids, NB_Result)
         # We added the self.DF_peak attribute
 
-        self.calculate_chi2(Bigelm_result.deredden) # chi2 at pdf peak (add self.chi2 attribute)
+        # Calculate chi2 at pdf peak (add self.chi2 attribute)
+        self.calculate_chi2(NB_Result.deredden)
 
 
 
@@ -191,7 +192,7 @@ class Bigelm_nd_pdf(object):
 
 
 
-    def make_pdf_peak_table(self, DF_obs, Interpd_grids, Bigelm_result):
+    def make_pdf_peak_table(self, DF_obs, Interpd_grids, NB_Result):
         """
         Make a pandas dataframe comparing observed emission lines and model
         fluxes for the model corresponding to the peak in the nD PDF.
@@ -204,9 +205,9 @@ class Bigelm_nd_pdf(object):
         grid_fluxes_max = [Interpd_grids.grids[l][inds_max] for l in DF_peak.index]
         DF_peak["Model"] = grid_fluxes_max
         
-        if Bigelm_result.deredden: # If we dereddened the observed fluxes at each gridpoint
-            obs_flux_dered = [arr[inds_max] for arr in Bigelm_result.obs_flux_arrs]
-            obs_flux_err_dered = [arr[inds_max] for arr in Bigelm_result.obs_flux_err_arrs]
+        if NB_Result.deredden: # If we dereddened the observed fluxes at each gridpoint
+            obs_flux_dered = [arr[inds_max] for arr in NB_Result.obs_flux_arrs]
+            obs_flux_err_dered = [arr[inds_max] for arr in NB_Result.obs_flux_err_arrs]
             DF_peak["Obs_dered"] = obs_flux_dered
             DF_peak["Flux_err_dered"] = obs_flux_err_dered
             DF_peak["Obs_S/N_dered"] = (DF_peak["Obs_dered"].values /
@@ -343,9 +344,9 @@ def make_single_parameter_estimate(param_name, val_arr, pdf_1D):
 
 
 
-class Bigelm_result(object):
+class NB_Result(object):
     """
-    Class to hold the BIGELM results including the likelihood, prior and
+    Class to hold the NebulaBayes results including the likelihood, prior and
     posterior, marginalised posteriors and parameter estimates.
     """
     def __init__(self, Interpd_grids, DF_obs, deredden, input_prior):
@@ -364,18 +365,18 @@ class Bigelm_result(object):
 
         # Calculate the likelihood over the grid:
         raw_likelihood = self.calculate_likelihood(Interpd_grids, DF_obs)
-        self.Likelihood = Bigelm_nd_pdf(raw_likelihood, self, DF_obs,
+        self.Likelihood = NB_nd_pdf(raw_likelihood, self, DF_obs,
                                                                   Interpd_grids)
 
         # Calculate the prior over the grid:
         raw_prior = calculate_prior(input_prior, DF_obs, Interpd_grids.grids,
                                                    Interpd_grids.grid_rel_error)
-        self.Prior = Bigelm_nd_pdf(raw_prior, self, DF_obs, Interpd_grids)
+        self.Prior = NB_nd_pdf(raw_prior, self, DF_obs, Interpd_grids)
 
         # Calculate the posterior using Bayes' Theorem:
         # (note that the prior and likelihood pdfs are now normalised)
         raw_posterior = self.Likelihood.nd_pdf * self.Prior.nd_pdf
-        self.Posterior = Bigelm_nd_pdf(raw_posterior, self, DF_obs, Interpd_grids)
+        self.Posterior = NB_nd_pdf(raw_posterior, self, DF_obs, Interpd_grids)
 
 
 

@@ -8,40 +8,41 @@ from . import B4_Plotting
 
 
 """
-Adam D. Thomas 2015 - 2017
+NebulaBayes
+Adam D. Thomas
+Research School of Astronomy and Astrophysics
+Australian National University
+2015 - 2017
 
-
-BIGELM: Bayesian Inference with photoionisation model Grids and Emission Line
-        Measurements
-        (Compulsory contrived acronym, as is the norm in modern astronomy)
-
-The Bigelm_model class is designed for performing Bayesian parameter estimation.
-The observed data are a set of emission line flux measurements with associated
-errors.  The model data is a photoionisation model, varied over n=2 or more
-parameters, input as
-an n-dimensional grid of predicted emission line fluxes.  The measured
+The NB_Model class in this module is the entry point for performing Bayesian
+parameter estimation.  The data are a
+set of emission line flux measurements with associated errors.  The model
+is a photoionisation model, varied in a grid over n=2 or more parameters,
+input as n-dimensional grids of fluxes for each emission line.  The model is
+for an HII region or AGN Narrow Line Region, for example.  The measured
 and modelled emission line fluxes are compared to calculate a "likelihood"
 probability distribution, before Bayes' Theroem is applied to produce an
 n-dimensional "posterior" probability distribution for the values of the
-parameters.
+parameters.  The parameter values are estimated from 1D marginalised
+posteriors.
 
-Bigelm is heavily based on IZI (Blanc+2015).
+NebulaBayes is heavily based on IZI (Blanc+2015).
 
 """
 
 
 
-class Bigelm_model(object):
+class NB_Model(object):
     """
-    Primary class for working with Bigelm.  To use, initialise a class instance
+    Primary class for working with NebulaBayes.  To use, initialise a class instance
     with a grid and then call the instance to run Bayesian parameter estimation.
     """
 
     def __init__(self, grid_file, grid_params, lines_list, **kwargs):
         """
-        Initialise an instance of the Bigelm_model class.
+        Initialise an instance of the NB_Model class.
 
-        Required arguments to initialise the Bigelm_model instance:
+        Required arguments to initialise the NB_Model instance:
         grid_file: The filename of an ASCII csv table containing photoionisation
                    model grid data in the form of a database table. Each
                    gridpoint (point in parameter space) is a row in this table.
@@ -52,13 +53,14 @@ class Bigelm_model(object):
                    may be uneven, but the full grid is required to a be a
                    regular, n-dimensional rectangular grid.  There is a column
                    of fluxes for each modelled emission line, and model fluxes
-                   are assumed to be normalised to Hbeta
+                   are assumed to be normalised to Hbeta == 1.
                    Any non-finite fluxes (e.g. nans) will be set to zero.
         grid_params: List of the unique names of the grid parameters as strings.
-                     The order is the order of the grid dimensions, i.e. the
-                     order in which arrays in bigelm will be indexed.
+                     This list sets the order of the grid dimensions, i.e. the
+                     order in which arrays in NebulaBayes will be indexed.  The
+                     names must each match a column header in grid_file.
         lines_list: List of column names from grid_file corresponding to the
-                    emission lines we'll be using in this Bigelm_model instance.
+                    emission lines we'll be using in this NB_Model instance.
 
         Optional additional keyword arguments:
         interpd_grid_shape: A tuple of integers, giving the size of each
@@ -71,10 +73,10 @@ class Bigelm_model(object):
                             interpolation.
         grid_error:         The systematic relative error on grid fluxes, as a
                             linear proportion.  Default is 0.35 (average of
-                            errors of 0.15 dex above and below a value).
+                            errors of 0.15 dex above and below).
         """
         # Initialise and do some checks...
-        print("Initialising BIGELM model...")
+        print("Initialising NebulaBayes model...")
 
         # Determine if a custom interpolated grid shape was specified:
         interpd_grid_shape = kwargs.pop("interpd_grid_shape", [15]*len(grid_params))
@@ -102,11 +104,11 @@ class Bigelm_model(object):
 
     def __call__(self, obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
         """
-        Run BIGELM Bayesian parameter estimation using the grids saved in this
-        Bigelm_model object.
+        Run NebulaBayes Bayesian parameter estimation using the grids stored in
+        this NB_Model object.
         Required positional arguments:
         obs_fluxes:         list or array of observed emission-line fluxes
-                            normalised to Hbeta
+                            normalised to Hbeta == 1
         obs_flux_errors:    list or array of corresponding measurement errors
         obs_emission_lines: list of corresponding emission line names as strings
         
@@ -120,7 +122,7 @@ class Bigelm_model(object):
                          Choices are: "Uniform", "SII_ratio", "He_ratio",
                          "SII_and_He_ratios", or a user-supplied function.
                          Default: "Uniform".
-                         See the code file "B2_Prior.py" for the details
+                         See the code file "src/NB2_Prior.py" for the details
                          of the SII and He priors and to see the required inputs
                          and outputs for a user-defined function.
         
@@ -147,9 +149,8 @@ class Bigelm_model(object):
         table_on_plots:   Include a flux comparison table on the corner plots?
                           Default: True
 
-        Returns a Bigelm_result object (defined in B3_Posterior.py), which
-        contains all of the data relevant to the Bayesian parameter estimation
-        as attributes.
+        Returns a NB_Result object (defined in NB3_Bayes.py), which contains all
+        of the data relevant to the Bayesian parameter estimation as attributes.
 
         ################
         Other notes:
@@ -162,7 +163,7 @@ class Bigelm_model(object):
         At the moment zero model flux => zero systematic error on the flux. Wrong!
         ################
         """
-        print("Running BIGELM...")
+        print("Running NebulaBayes...")
 
         Raw_grids = self.Raw_grids
         Interpd_grids = self.Interpd_grids
@@ -182,7 +183,7 @@ class Bigelm_model(object):
         input_prior = kwargs.pop("prior", "Uniform") # Default "Uniform"
 
         #----------------------------------------------------------------------
-        # Handle options for BIGELM outputs:
+        # Handle options for NebulaBayes outputs:
         # Determine the list of parameter display names to use for plotting:
         param_display_names = list(Interpd_grids.param_names) # Default
         if "param_display_names" in kwargs:
@@ -206,9 +207,9 @@ class Bigelm_model(object):
                              ", ".join("'{0}'".format(k) for k in kwargs.keys()))
 
         #----------------------------------------------------------------------
-        # Create a "Bigelm_result" object instance, which involves calculating
+        # Create a "NB_Result" object instance, which involves calculating
         # the prior, likelihood and posterior, along with parameter estimates:
-        Result = B3_Posterior.Bigelm_result(Interpd_grids, DF_obs, deredden=deredden,
+        Result = B3_Posterior.NB_Result(Interpd_grids, DF_obs, deredden=deredden,
                                                       input_prior=input_prior)
 
         #----------------------------------------------------------------------
@@ -224,25 +225,25 @@ class Bigelm_model(object):
         pdf_map = { "likelihood" : (likelihood_plot, Result.Likelihood),
                     "prior"      : (prior_plot,      Result.Prior     ),
                     "posterior"  : (posterior_plot,  Result.Posterior )  }
-        for pdf_name, (out_image_name, Bigelm_nd_pdf) in pdf_map.items():
+        for pdf_name, (out_image_name, NB_nd_pdf) in pdf_map.items():
             if out_image_name == None:
                 continue # Only do plotting if an image name was specified:
             if table_on_plots is True: # Include a fixed-width text table on image
                 pd.set_option("display.precision", 4)
                 plot_anno = "chi^2_r at {0} peak = {1:.2f}\n\n\n".format(
-                                                   pdf_name, Bigelm_nd_pdf.chi2)
+                                                   pdf_name, NB_nd_pdf.chi2)
                 plot_anno += ("Observed fluxes vs. model fluxes at the gridpoint of"
                               "\nparameter best estimates in the "+pdf_name+"\n")
-                plot_anno += str(Bigelm_nd_pdf.DF_peak)
+                plot_anno += str(NB_nd_pdf.DF_peak)
             else:
                 plot_anno = None
-            Bigelm_nd_pdf.Grid_spec.param_display_names = param_display_names
+            NB_nd_pdf.Grid_spec.param_display_names = param_display_names
             print("Plotting corner plot for the", pdf_name, "...")
-            B4_Plotting.plot_marginalised_ndpdf(out_image_name, Bigelm_nd_pdf,
+            B4_Plotting.plot_marginalised_ndpdf(out_image_name, NB_nd_pdf,
                                                 Raw_grids, plot_anno)
 
         
-        print("Bigelm finished.")
+        print("NebulaBayes finished.")
         return Result
 
 
