@@ -71,23 +71,25 @@ def calculate_prior(user_input, DF_obs, grids_dict, grid_rel_err):
     """
     if callable(user_input):
         prior = user_input(DF_obs, grids_dict, grid_rel_err)
-    elif user_input == "Uniform":
-        prior = calculate_uniform_prior(grids_dict)
-    elif user_input == "SII_ratio":
-        prior = calculate_line_ratio_prior(DF_obs, grids_dict, grid_rel_err, 
-                                                           "SII6731", "SII6716")
-    elif user_input == "He_ratio":
-        prior = calculate_line_ratio_prior(DF_obs, grids_dict, grid_rel_err, 
-                                                           "HeII4686", "HeI5876")
-    elif user_input == "SII_and_He_ratios":
-        SII_prior = calculate_line_ratio_prior(DF_obs, grids_dict, grid_rel_err, 
-                                                           "SII6731", "SII6716")
-        He_prior = calculate_line_ratio_prior(DF_obs, grids_dict, grid_rel_err, 
-                                                           "HeII4686", "HeI5876")
-        prior = SII_prior * He_prior
     else:
-        raise ValueError("The input 'prior' must be one of the permitted "
-                         "strings or a callable")
+        user_input = user_input.upper() # Upper case, so input is case-insensitive
+        if user_input == "UNIFORM":
+            prior = calculate_uniform_prior(grids_dict)
+        elif user_input == "SII_RATIO":
+            prior = calculate_line_ratio_prior(DF_obs, grids_dict, grid_rel_err, 
+                                               "SII6731", "SII6716")
+        elif user_input == "HE_RATIO":
+            prior = calculate_line_ratio_prior(DF_obs, grids_dict, grid_rel_err, 
+                                               "HeII4686", "HeI5876")
+        elif user_input == "SII_AND_HE_RATIOS":
+            SII_prior = calculate_line_ratio_prior(DF_obs, grids_dict, grid_rel_err, 
+                                                   "SII6731", "SII6716")
+            He_prior = calculate_line_ratio_prior(DF_obs, grids_dict, grid_rel_err, 
+                                                  "HeII4686", "HeI5876")
+            prior = SII_prior * He_prior
+        else:
+            raise ValueError("The input 'prior' must be one of the permitted "
+                             "strings (not case-sensitive) or a callable")
     # Return linear prior, which will be normalised later
     return prior
 

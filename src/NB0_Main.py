@@ -302,6 +302,8 @@ def process_observed_data(obs_fluxes, obs_flux_errors, obs_emission_lines,
             raise ValueError("Hbeta was supplied as an observed emission line,"
                              " but wasn't normalised to 1 (Hbeta flux is"
                              " {0:.6f})".format(DF_obs2.loc["HBETA","Flux"])   )
+    # Note that we can't just normalise to Hbeta, because the user didn't
+    # necessarily supply Hbeta fluxes.
 
     return DF_obs
 
