@@ -218,7 +218,7 @@ class NB_Model(object):
             Result.Posterior.DF_estimates.to_csv(estimate_table, index=True,
                                                             float_format='%.5f')
         if best_model_table is not None: # Save flux comparison table?
-            Result.Posterior.DF_peak.to_csv(best_model_table, index=True,
+            Result.Posterior.DF_best.to_csv(best_model_table, index=True,
                                                             float_format='%.5f')
 
         # Plot corner plots if requested:
@@ -234,7 +234,7 @@ class NB_Model(object):
                                                    pdf_name, NB_nd_pdf.chi2)
                 plot_anno += ("Observed fluxes vs. model fluxes at the gridpoint of"
                               "\nparameter best estimates in the "+pdf_name+"\n")
-                plot_anno += str(NB_nd_pdf.DF_peak)
+                plot_anno += str(NB_nd_pdf.DF_best)
             else:
                 plot_anno = None
             NB_nd_pdf.Grid_spec.param_display_names = param_display_names

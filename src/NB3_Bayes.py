@@ -46,11 +46,11 @@ class NB_nd_pdf(object):
         self.marginalise_pdf()
         # Make a parameter estimate table based on this nd_pdf
         self.make_parameter_estimate_table() # add self.DF_estimates attribute
-        # Make a table comparing model and observed fluxes at the pdf peak
-        self.make_pdf_peak_table(DF_obs, Interpd_grids, NB_Result)
-        # We added the self.DF_peak attribute
+        # Make a table comparing model and observed fluxes for the 'best' model
+        self.make_best_model_table(DF_obs, Interpd_grids, NB_Result)
+        # We added the self.DF_best attribute
 
-        # Calculate chi2 at pdf peak (add self.chi2 attribute)
+        # Calculate chi2 for the 'best' model (add self.chi2 attribute)
         self.calculate_chi2(NB_Result.deredden)
 
 
@@ -60,7 +60,7 @@ class NB_nd_pdf(object):
         Calculate normalised 1D and 2D marginalised pdfs for all possible
         combinations of parameters.
         """
-        print("Calculating 2D and 1D marginalised pdfs...")
+        #print("Calculating 2D and 1D marginalised pdfs...")
 
         # The interpolated grids have uniform spacing:
         spacing = [(v[1] - v[0]) for v in self.Grid_spec.param_values_arrs]
@@ -158,7 +158,7 @@ class NB_nd_pdf(object):
                         values taken by the parameter in the grid.
         Creates a pandas DataFrame with a row for each parameter.
         """
-        print("Calculating parameter estimates...")
+        #print("Calculating parameter estimates...")
         # Initialise DataFrame to hold results
         # DataFrame columns and types:
         columns = [("Parameter", np.str),  ("Estimate", np.float),
@@ -192,38 +192,43 @@ class NB_nd_pdf(object):
 
 
 
-    def make_pdf_peak_table(self, DF_obs, Interpd_grids, NB_Result):
+    def make_best_model_table(self, DF_obs, Interpd_grids, NB_Result):
         """
-        Make a pandas dataframe comparing observed emission lines and model
-        fluxes for the model corresponding to the peak in the nD PDF.
+        Make a pandas dataframe comparing observed emission line fluxes with
+        model fluxes for the model corresponding to the parameter estimates (the
+        'best' model).  The parameter estimates are derived from the 1D
+        mariginalised PDF, so note that this 'best' point in the parameter space
+        does not necessarily correspond to the peak of any 2D marginalised pdf
+        nor to any projection of the peak of the ND pdf to a lower parameter
+        space.
         """
-        DF_peak = DF_obs.copy() # Index: "Line"; columns: "Flux", "Flux_err"
+        DF_best = DF_obs.copy() # Index: "Line"; columns: "Flux", "Flux_err"
         # DF_obs may also possibly have a "Wavelength" column
-        DF_peak.rename(columns={"Flux":"Obs"}, inplace=True)
+        DF_best.rename(columns={"Flux":"Obs"}, inplace=True)
 
         inds_max = np.unravel_index(self.nd_pdf.argmax(), self.nd_pdf.shape)
-        grid_fluxes_max = [Interpd_grids.grids[l][inds_max] for l in DF_peak.index]
-        DF_peak["Model"] = grid_fluxes_max
+        grid_fluxes_max = [Interpd_grids.grids[l][inds_max] for l in DF_best.index]
+        DF_best["Model"] = grid_fluxes_max
         
         if NB_Result.deredden: # If we dereddened the observed fluxes at each gridpoint
             obs_flux_dered = [arr[inds_max] for arr in NB_Result.obs_flux_arrs]
             obs_flux_err_dered = [arr[inds_max] for arr in NB_Result.obs_flux_err_arrs]
-            DF_peak["Obs_dered"] = obs_flux_dered
-            DF_peak["Flux_err_dered"] = obs_flux_err_dered
-            DF_peak["Obs_S/N_dered"] = (DF_peak["Obs_dered"].values /
-                                        DF_peak["Flux_err_dered"].values   )
-            DF_peak["Delta_(SDs)"] = ((DF_peak["Model"].values - DF_peak["Obs_dered"].values)
-                                        / DF_peak["Flux_err_dered"].values )
+            DF_best["Obs_dered"] = obs_flux_dered
+            DF_best["Flux_err_dered"] = obs_flux_err_dered
+            DF_best["Obs_S/N_dered"] = (DF_best["Obs_dered"].values /
+                                        DF_best["Flux_err_dered"].values   )
+            DF_best["Delta_(SDs)"] = ((DF_best["Model"].values - DF_best["Obs_dered"].values)
+                                        / DF_best["Flux_err_dered"].values )
             # Columns to include in output and their order (index is "Line"):
             cols_to_include = ["Model", "Obs_dered", "Obs_S/N_dered", "Delta_(SDs)"]
         else:
-            DF_peak["Obs_S/N"] = DF_peak["Obs"].values / DF_peak["Flux_err"].values
-            DF_peak["Delta_(SDs)"] = ((DF_peak["Model"].values - DF_peak["Obs"].values)
-                                        / DF_peak["Flux_err"].values )
+            DF_best["Obs_S/N"] = DF_best["Obs"].values / DF_best["Flux_err"].values
+            DF_best["Delta_(SDs)"] = ((DF_best["Model"].values - DF_best["Obs"].values)
+                                        / DF_best["Flux_err"].values )
             # Columns to include in output and their order (index is "Line"):
             cols_to_include = ["Model", "Obs", "Obs_S/N", "Delta_(SDs)"]
         
-        self.DF_peak = DF_peak[cols_to_include]
+        self.DF_best = DF_best[cols_to_include]
 
 
 
@@ -234,7 +239,7 @@ class NB_nd_pdf(object):
         deredden: Boolean.  Did we deredden the observed line fluxes to match
                   the Balmer decrement at every interpolated model gridpoint?
         """
-        DF = self.DF_peak # Only contains a subset of useful columns
+        DF = self.DF_best # Only contains a subset of useful columns
         # We'll need to reconstruct the error column
         if deredden: # If we dereddened the observed fluxes at each gridpoint
             flux_err = DF["Obs_dered"].values / DF["Obs_S/N_dered"].values
@@ -364,18 +369,21 @@ class NB_Result(object):
         self.make_obs_flux_arrays(DF_obs, Interpd_grids)
 
         # Calculate the likelihood over the grid:
+        print("Calculating likelihood...")
         raw_likelihood = self.calculate_likelihood(Interpd_grids, DF_obs)
         self.Likelihood = NB_nd_pdf(raw_likelihood, self, DF_obs,
                                                                   Interpd_grids)
 
         # Calculate the prior over the grid:
+        print("Calculating prior...")
         raw_prior = calculate_prior(input_prior, DF_obs, Interpd_grids.grids,
                                                    Interpd_grids.grid_rel_error)
         self.Prior = NB_nd_pdf(raw_prior, self, DF_obs, Interpd_grids)
 
         # Calculate the posterior using Bayes' Theorem:
         # (note that the prior and likelihood pdfs are now normalised)
-        raw_posterior = self.Likelihood.nd_pdf * self.Prior.nd_pdf
+        print("Calculating posterior using Bayes' Theorem...")
+        raw_posterior = self.Likelihood.nd_pdf * self.Prior.nd_pdf # Bayes' theorem
         self.Posterior = NB_nd_pdf(raw_posterior, self, DF_obs, Interpd_grids)
 
 
@@ -392,11 +400,21 @@ class NB_Result(object):
             # Array of Balmer decrements across the grid:
             grid_BD_arr = Interpd_grids.grids["Halpha"] / Interpd_grids.grids["Hbeta"]
             # Fluxes should be normalised to Hbeta == 1, but I did the division
-            # here explicitly just in case...
+            # here explicitly just in case.
+            if not np.all(np.isfinite(grid_BD_arr)): # Sanity check
+                raise ValueError("Something went wrong - the array of predicted"
+                                 " Balmer decrements over the grid contains a"
+                                 " non-finite value!")
+            if not np.all(grid_BD_arr > 0): # Sanity check
+                raise ValueError("Something went wrong - the array of predicted"
+                                 " Balmer decrements over the grid contains at"
+                                 " least one non-positive value!")
+
             obs_flux_arrs, obs_flux_err_arrs = do_dereddening(
                         DF_obs["Wavelength"].values, DF_obs["Flux"].values,
                         DF_obs["Flux_err"].values, BD=grid_BD_arr, normalise=True)
             # The output fluxes and errors are normalised to Hbeta == 1.
+        
         else: # Use the input observed fluxes, which hopefully have already
               # been dereddened if necessary.
             shape = Interpd_grids.shape

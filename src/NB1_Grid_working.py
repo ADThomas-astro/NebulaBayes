@@ -163,7 +163,7 @@ def construct_raw_grids(DF_grid, grid_params, lines_list):
     # (This is equivalent to checking that we have a rectangular grid, e.g.
     # without missing values.  The spacing does not need to be uniform.)
     if Raw_grids.n_gridpoints != len(DF_grid):
-        raise ValueError("The input model grid table does not" + 
+        raise ValueError("The input model grid table does not " + 
                          "have a consistent length.")
 
     #--------------------------------------------------------------------------
