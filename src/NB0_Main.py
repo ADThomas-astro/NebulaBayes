@@ -21,7 +21,7 @@ is a photoionisation model, varied in a grid over n=2 or more parameters,
 input as n-dimensional grids of fluxes for each emission line.  The model is
 for an HII region or AGN Narrow Line Region, for example.  The measured
 and modelled emission line fluxes are compared to calculate a "likelihood"
-probability distribution, before Bayes' Theroem is applied to produce an
+probability distribution, before Bayes' Theorem is applied to produce an
 n-dimensional "posterior" probability distribution for the values of the
 parameters.  The parameter values are estimated from 1D marginalised
 posteriors.
@@ -139,6 +139,7 @@ class NB_Model(object):
         posterior_plot:   A filename for saving out a results image of 2D and
                           1D marginalised posterior pdfs.  The figure will only
                           be generated and saved if this keyword is specified.
+                          The image file type is specified by the file extension.
         prior_plot:       A filename; as for posterior_plot but for the prior
         likelihood_plot:  A filename; as for posterior_plot but for the likelihood
         estimate_table:   A filename for a csv file containing Bayesian
@@ -230,11 +231,10 @@ class NB_Model(object):
                 continue # Only do plotting if an image name was specified:
             if table_on_plots is True: # Include a fixed-width text table on image
                 pd.set_option("display.precision", 4)
-                plot_anno = "chi^2_r at {0} peak = {1:.2f}\n\n\n".format(
-                                                   pdf_name, NB_nd_pdf.chi2)
-                plot_anno += ("Observed fluxes vs. model fluxes at the gridpoint of"
-                              "\nparameter best estimates in the "+pdf_name+"\n")
-                plot_anno += str(NB_nd_pdf.DF_best)
+                plot_anno = ("Observed fluxes vs. model fluxes at the gridpoint of"
+                             "\nparameter best estimates in the "+pdf_name+"\n")
+                plot_anno += str(NB_nd_pdf.DF_best) + "\n\n"
+                plot_anno += r"$\chi^2_r$ = {0:.1f}".format(NB_nd_pdf.chi2)
             else:
                 plot_anno = None
             NB_nd_pdf.Grid_spec.param_display_names = param_display_names

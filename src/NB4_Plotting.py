@@ -33,6 +33,7 @@ def plot_marginalised_ndpdf(out_filename, NB_nd_pdf, Raw_grids, plot_anno=None):
                the grid of plots. 
     """
     # Some configuration
+    fs1 = 4.5 # Fontsize of annotation table (if shown) and legend
     label_fontsize = 7
     tick_fontsize = 7
     tick_size = 3
@@ -77,6 +78,7 @@ def plot_marginalised_ndpdf(out_filename, NB_nd_pdf, Raw_grids, plot_anno=None):
         # ind_x ranges from 1 to n - 1.
         ax_i = axes[ ind_y, ind_x ]
         ax_i.set_visible(True)  # Turn this axis back on
+        plt.sca(ax_i)
 
         # Calculate the image extent:
         x_arr, y_arr = par_arr_map[name_x], par_arr_map[name_y]
@@ -115,18 +117,20 @@ def plot_marginalised_ndpdf(out_filename, NB_nd_pdf, Raw_grids, plot_anno=None):
         
         # Show best estimates (coordinates from peaks of 1D pdf):
         x_best_1d, y_best_1d = p_estimates[name_x], p_estimates[name_y]
-        ax_i.scatter(x_best_1d, y_best_1d, marker="o", s=12, facecolor="maroon", linewidth=0)
+        plt.scatter(x_best_1d, y_best_1d, marker="o", s=12, facecolor="maroon",
+            linewidth=0, label="Model defined by parameter estimates")
         # Show peak of 2D pdf:
         max_inds_2d = np.unravel_index(np.argmax(pdf_2D), pdf_2D.shape)
         x_best_2d = x_arr[max_inds_2d[1]]
         y_best_2d = y_arr[max_inds_2d[0]]
-        ax_i.scatter(x_best_2d, y_best_2d, marker="v", s=13, facecolor="none", linewidth=0.5, edgecolor="blue")
+        plt.scatter(x_best_2d, y_best_2d, marker="v", s=13, facecolor="none",
+            linewidth=0.5, edgecolor="blue", label="Peak of 2D marginalised pdf")
         # Show projection of peak of full nD pdf:
         max_inds_nd = np.unravel_index(np.argmax(NB_nd_pdf.nd_pdf), NB_nd_pdf.nd_pdf.shape)
         x_best_nd = x_arr[max_inds_nd[ind_x]]
         y_best_nd = y_arr[max_inds_nd[ind_y]]
-        ax_i.scatter(x_best_nd, y_best_nd, marker="s", s=21, facecolor="none", linewidth=0.5, edgecolor="orange")
-
+        plt.scatter(x_best_nd, y_best_nd, marker="s", s=21, facecolor="none",
+            linewidth=0.5, edgecolor="orange", label="Projected peak of full ND pdf")
 
         # Format the current axes:
         ax_i.set_xlim( extent["xmin"], extent["xmax"] )
@@ -154,34 +158,44 @@ def plot_marginalised_ndpdf(out_filename, NB_nd_pdf, Raw_grids, plot_anno=None):
         else: # Not first column
             ax_i.set_yticklabels([]) # No y_labels
 
-
     # Iterate over the 1D marginalised pdfs:
     # We plot the 1D pdfs along the diagonal of the grid of plots:
     for ind, param in enumerate(G.param_names):
-        ax_i = axes[ ind, ind ]
-        ax_i.set_visible(True)  # turn this axis back on
+        ax_k = axes[ ind, ind ]
+        ax_k.set_visible(True)  # turn this axis back on
+        plt.sca(ax_k)
         pdf_1D =  NB_nd_pdf.marginalised_1D[param]
-        ax_i.plot(par_arr_map[param], pdf_1D, color="black", zorder=6)
+        ax_k.plot(par_arr_map[param], pdf_1D, color="black", zorder=6)
         # Plot a vertical line to show the parameter estimate (peak of 1D pdf)
         y_lim = (0, 1.14*pdf_1D.max())
-        ax_i.vlines(p_estimates[G.param_names[ind]], y_lim[0], y_lim[1],
-                    linestyles="dashed", color="maroon", lw=0.6, zorder=5)
-        ax_i.set_yticks([])  # No y-ticks
-        ax_i.set_xlim( np.min( par_arr_map[param] ) - interp_spacing[param]/2.,
+        plt.plot([p_estimates[G.param_names[ind]]]*2, y_lim, lw=0.6,
+                    linestyle='--', dashes=(3, 1.4), color="maroon", zorder=5,
+                    label="Parameter estimate: peak of 1D marginalised pdf")
+        ax_k.set_yticks([])  # No y-ticks
+        ax_k.set_xlim( np.min( par_arr_map[param] ) - interp_spacing[param]/2.,
                        np.max( par_arr_map[param] ) + interp_spacing[param]/2. )
-        ax_i.set_ylim(y_lim[0], y_lim[1])
+        ax_k.set_ylim(y_lim[0], y_lim[1])
         if ind == 0: # Last column
             label_x = grid_bounds["right"] - 0.5 * axes_width
             label_y = grid_bounds["bottom"] * 0.25
-            ax_i.annotate(G.param_display_names[ind], (label_x, label_y),
+            ax_k.annotate(G.param_display_names[ind], (label_x, label_y),
                                      xycoords="figure fraction", **label_kwargs)
-            for tick in ax_i.get_xticklabels():
+            for tick in ax_k.get_xticklabels():
                     tick.set_rotation(90)  # Rotate x tick labels
                     tick.set_fontsize(tick_fontsize)
         else: # Not last column
-            ax_i.set_xticklabels([]) # No x_labels
-        ax_i.tick_params(direction='out', length=tick_size)
-    # raise Exception
+            ax_k.set_xticklabels([]) # No x_labels
+        ax_k.tick_params(direction='out', length=tick_size)
+
+    # Add legend
+    lh1, ll1 = ax_k.get_legend_handles_labels()
+    lh2, ll2 = ax_i.get_legend_handles_labels()
+    lgd = plt.legend(lh1+lh2, ll1+ll2, loc='lower left', scatterpoints=1,
+                  bbox_to_anchor=(grid_bounds["left"]+((n+1)//2)*axes_width+0.02,
+                                  grid_bounds["bottom"]+(n//2)*axes_height+0.01),
+                    bbox_transform=plt.gcf().transFigure, # figure fraction coords
+                    fontsize=fs1, borderpad=1)
+    lgd.get_frame().set_linewidth(0.5)
 
 
     # Adjust spacing between and around subplots (spacing in inches):
@@ -189,10 +203,10 @@ def plot_marginalised_ndpdf(out_filename, NB_nd_pdf, Raw_grids, plot_anno=None):
                                                       wspace=0.04, hspace=0.04)
 
     if plot_anno is not None: # Add text including chisquared and fluxes table
-        plt.annotate(plot_anno, (grid_bounds["left"]+n//2*axes_width+0.03, 0.94),
+        plt.annotate(plot_anno, (grid_bounds["left"]+n//2*axes_width+0.03, 0.95),
                     xycoords="figure fraction", annotation_clip=False, 
                     horizontalalignment="left", verticalalignment="top", 
-                    family="monospace", fontsize=5)
+                    family="monospace", fontsize=fs1)
 
     # print("Saving figure...")
     fig.savefig(out_filename)
