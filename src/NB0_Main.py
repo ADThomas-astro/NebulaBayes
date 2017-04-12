@@ -85,7 +85,7 @@ class NB_Model(object):
                              "one integer for each parameter" )
 
         grid_rel_error = kwargs.pop("grid_error", 0.35)
-        assert grid_rel_error > 0
+        assert 0 < grid_rel_error < 1
 
         # Are there any remaining keyword arguments that weren't used?
         if len(kwargs) > 0:

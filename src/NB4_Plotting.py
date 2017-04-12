@@ -170,7 +170,7 @@ def plot_marginalised_ndpdf(out_filename, NB_nd_pdf, Raw_grids, plot_anno=None):
         y_lim = (0, 1.14*pdf_1D.max())
         plt.plot([p_estimates[G.param_names[ind]]]*2, y_lim, lw=0.6,
                     linestyle='--', dashes=(3, 1.4), color="maroon", zorder=5,
-                    label="Parameter estimate: peak of 1D marginalised pdf")
+                    label="Parameter estimate: peak of 1D\nmarginalised pdf")
         ax_k.set_yticks([])  # No y-ticks
         ax_k.set_xlim( np.min( par_arr_map[param] ) - interp_spacing[param]/2.,
                        np.max( par_arr_map[param] ) + interp_spacing[param]/2. )
