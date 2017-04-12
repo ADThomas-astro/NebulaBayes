@@ -118,13 +118,16 @@ class NB_Model(object):
         obs_wavelengths: If deredden=True, you must also supply a list of
                          wavelengths (Angstroems) associated with obs_fluxes.
                          Default None.
-        prior:           The prior to use when calculating the posterior.
-                         Choices are: "Uniform", "SII_ratio", "He_ratio",
-                         "SII_and_He_ratios", or a user-supplied function.
-                         Default: "Uniform".
-                         See the code file "src/NB2_Prior.py" for the details
-                         of the SII and He priors and to see the required inputs
-                         and outputs for a user-defined function.
+        prior:  The prior to use when calculating the posterior.  Either a
+                user-defined function, the string "Uniform", or a list of length
+                at least one. The entries in the list are tuples such as
+                ("SII6716","SII6731") to indicate a line ratio to use as a prior.
+                The listed line-ratio priors will all be multiplied together
+                (weighted equally) and then normalised before being used in
+                Bayes' Theorem.  See the code file "src/NB2_Prior.py" for the
+                details of the prior calculations, including to see the required
+                inputs and output for a user-defined prior function.
+                Default: "Uniform"
         
         Optional additional keyword arguments regarding outputs:
         param_display_names:  A dictionary of parameter display names for grid
