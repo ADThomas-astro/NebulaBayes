@@ -44,7 +44,7 @@ class NB_Model(object):
 
         Required arguments to initialise the NB_Model instance:
         grid_file: The filename of an ASCII csv table containing photoionisation
-                   model grid data in the form of a database table. Each
+                   model grid fluxes in the form of a database table. Each
                    gridpoint (point in parameter space) is a row in this table.
                    The values of the grid parameters for each row are defined in
                    a column for each parameter.
@@ -111,6 +111,7 @@ class NB_Model(object):
                             normalised to Hbeta == 1
         obs_flux_errors:    list or array of corresponding measurement errors
         obs_emission_lines: list of corresponding emission line names as strings
+                            (must match names in header of input grid flux table)
         
         Optional keyword arguments which affect the parameter estimation:
         deredden:        De-redden observed fluxes to match the Balmer decrement
@@ -155,17 +156,6 @@ class NB_Model(object):
 
         Returns a NB_Result object (defined in NB3_Bayes.py), which contains all
         of the data relevant to the Bayesian parameter estimation as attributes.
-
-        ################
-        Other notes:
-        We don't deal with measured emission-line fluxes that are provided summed for two lines.
-        We ignore the possibility of including only upper bounds for emission-line fluxes
-        We currently compare linear fluxes, not log fluxes...
-        In finding marginalised posteriors, we use trapezium integration - perhaps dodgy, 
-        but I think we have too few dimensions for Monte Carlo methods and I don't think it's
-        worth doing higher-order numerical integration.
-        At the moment zero model flux => zero systematic error on the flux. Wrong!
-        ################
         """
         print("Running NebulaBayes...")
 

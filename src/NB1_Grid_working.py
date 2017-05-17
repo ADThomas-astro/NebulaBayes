@@ -73,24 +73,19 @@ class NB_Grid(Grid_description):
 
 def initialise_grids(grid_file, grid_params, lines_list, interpd_grid_shape):
     """
-    Initialise grids and return a simple object, which will have
-    attributes Params, Raw_grids and Interpd_grids.
-    The returned object 
-    contains all necessary grid information for NebulaBayes, and may be used as an 
-    input to repeated NebulaBayes runs to avoid recalculation of grid data in each run.
-    The Raw_grids and Interpd_grids attributes are instances of the NB_Grid
-    class defined in this module.  The Params attribute is an instance of the
-    Grid_parameters class defined in this module.
-    grid_file:  the filename of an ASCII csv table containing photoionisation model
-                grid data in the form of a database table.
+    Initialise grids and return Raw_grids and Interpd_grids.
+    The Raw_grids and Interpd_grids objects are instances of the NB_Grid class
+    defined above.
+    grid_file:  the filename of an ASCII csv table containing photoionisation
+                model grid data in the form of a database table.
                 Each gridpoint (point in parameter space) is a row in this table.
-                The values of the grid parameters for each row are defined in a column
-                for each parameter.
+                The values of the grid parameters for each row are defined in a
+                column for each parameter.
                 No assumptions are made about the order of the gridpoints (rows) in the table.
                 Spacing of grid values along an axis may be uneven, 
                 but the full grid is required to a be a regular, n-dimensional rectangular grid.
                 There is a column of fluxes for each modelled emission line, and model fluxes
-                are assumed to be normalised to Hbeta
+                are assumed to be normalised to Hbeta.
                 Any non-finite fluxes (e.g. nans) will be set to zero.
     grid_params: List of the unique names of the grid parameters as strings.
                  The order is the order of the grid dimensions, i.e. the order
