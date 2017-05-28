@@ -92,7 +92,7 @@ def calculate_prior(user_input, DF_obs, grids_dict, grid_rel_err):
             prior = calculate_uniform_prior(grids_dict)
         else:
             raise ValueError("The only string accepted for the 'prior' keyword"
-                             "is 'Uniform'")
+                             " is 'Uniform'")
     elif isinstance(user_input, list):
         assert len(user_input) > 0
         if not all((isinstance(t, tuple) and len(t) == 2) for t in user_input):

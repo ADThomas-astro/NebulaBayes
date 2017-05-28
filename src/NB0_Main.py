@@ -135,7 +135,7 @@ class NB_Model(object):
                               parameters, for plotting purposes.  The dictionary
                               keys are parameter names in the grid file, and the
                               corresponding values are the "display" names.  The
-                              display names can be raw strings (e.g. r"$\alpha$")
+                              display names can use markup (e.g. r"$\alpha$")
                               in order to include e.g. Greek letters.
                               Not all of the grid parameters need to be included 
                               in param_display_names; raw parameter names will
@@ -151,8 +151,8 @@ class NB_Model(object):
         best_model_table: A filename for a csv file which will compare observed
                           and model fluxes at the point defined by the Bayesian
                           parameter estimates.
-        table_on_plots:   Include a flux comparison table on the corner plots?
-                          Default: True
+        table_on_plots:   Include a "best model" flux comparison table on the
+                          corner plots? Default: True
 
         Returns a NB_Result object (defined in NB3_Bayes.py), which contains all
         of the data relevant to the Bayesian parameter estimation as attributes.
