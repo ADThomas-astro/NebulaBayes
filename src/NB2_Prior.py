@@ -3,10 +3,10 @@ import numpy as np # Core numerical library
 
 
 """
-Adam D. Thomas 2017
-
 Code to calculate the prior over an N-D grid, as part of Bayesian parameter
 estimation.
+
+Adam D. Thomas 2017
 """
 
 

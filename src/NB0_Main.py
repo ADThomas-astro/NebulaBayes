@@ -4,7 +4,7 @@ import numpy as np  # Core numerical library
 import pandas as pd # For tables ("DataFrame"s)
 from . import NB1_Grid_working
 from . import NB3_Bayes
-from . import NB4_Plotting
+from .NB4_Plotting import ND_PDF_Plotter
 
 
 """
@@ -115,7 +115,7 @@ class NB_Model(object):
         
         Optional keyword arguments which affect the parameter estimation:
         deredden:        De-redden observed fluxes to match the Balmer decrement
-                         at each interpolated grid point?  Default True.
+                         at each interpolated grid point?  Default False.
         obs_wavelengths: If deredden=True, you must also supply a list of
                          wavelengths (Angstroems) associated with obs_fluxes.
                          Default None.
@@ -130,39 +130,41 @@ class NB_Model(object):
                 inputs and output for a user-defined prior function.
                 Default: "Uniform"
         
-        Optional additional keyword arguments regarding outputs:
+        Optional additional keyword arguments regarding outputs (an output is
+        only produced if a value is provided for the relevant keyword):
         param_display_names:  A dictionary of parameter display names for grid
-                              parameters, for plotting purposes.  The dictionary
-                              keys are parameter names in the grid file, and the
-                              corresponding values are the "display" names.  The
-                              display names can use markup (e.g. r"$\alpha$")
-                              in order to include e.g. Greek letters.
-                              Not all of the grid parameters need to be included 
-                              in param_display_names; raw parameter names will
-                              be used by default.
+                          parameters, for plotting purposes.  The dictionary
+                          keys are parameter names from the grid file, and the
+                          corresponding values are the "display" names.  The
+                          display names can use markup (e.g. r"$\alpha$") in
+                          order to include e.g. Greek letters.  Not all of the
+                          grid parameters need to be in param_display_names;
+                          raw parameter names will be used by default.
         posterior_plot:   A filename for saving out a results image of 2D and
-                          1D marginalised posterior pdfs.  The figure will only
-                          be generated and saved if this keyword is specified.
-                          The image file type is specified by the file extension.
+                          1D marginalised posterior pdfs. The image file type is
+                          specified by the file extension.
         prior_plot:       A filename; as for posterior_plot but for the prior
         likelihood_plot:  A filename; as for posterior_plot but for the likelihood
-        estimate_table:   A filename for a csv file containing Bayesian
-                          parameter estimates for the grid parameters.
+        estimate_table:   A filename for a csv file providing Bayesian parameter
+                          estimates for the grid parameters
         best_model_table: A filename for a csv file which will compare observed
                           and model fluxes at the point defined by the Bayesian
                           parameter estimates.
         table_on_plots:   Include a "best model" flux comparison table on the
                           corner plots? Default: True
+        line_plot_dir:    A directory; Plots showing the ND PDFs for each line
+                          (the PDFs which contribute to the likelihood) are
+                          saved here.  Saving these plots is quite quite slow.
 
-        Returns a NB_Result object (defined in NB3_Bayes.py), which contains all
-        of the data relevant to the Bayesian parameter estimation as attributes.
+        Returns a NB_Result object (defined in src/NB3_Bayes.py), which contains
+        the data relevant to the Bayesian parameter estimation.
         """
         print("Running NebulaBayes...")
 
         Raw_grids = self.Raw_grids
         Interpd_grids = self.Interpd_grids
 
-        deredden = kwargs.pop("deredden", True) # Default True
+        deredden = kwargs.pop("deredden", False) # Default False
         assert isinstance(deredden, bool)
         obs_wavelengths = kwargs.pop("obs_wavelengths", None) # Default None
         if deredden and (obs_wavelengths is None):
@@ -184,12 +186,15 @@ class NB_Model(object):
             custom_display_names = kwargs.pop("param_display_names")
             for i, custom_name in enumerate(custom_display_names):
                 param_display_names[i] = custom_name # Override default
+        Interpd_grids.param_display_names = param_display_names
         # Include text "best model" table on posterior corner plots?
         table_on_plots = kwargs.pop("table_on_plots", True) # Default True
         # Filenames for output corner plot images?  Default None (no plotting)
         likelihood_plot = kwargs.pop("likelihood_plot", None)
         prior_plot      = kwargs.pop("prior_plot",      None)
         posterior_plot  = kwargs.pop("posterior_plot",  None)
+        # Directory name for individual line PDF plots?
+        line_plot_dir  = kwargs.pop("line_plot_dir", None)
 
         # Filenames for output csv tables?  Default None (don't write out table)
         estimate_table   = kwargs.pop("estimate_table",   None)
@@ -201,10 +206,13 @@ class NB_Model(object):
                              ", ".join("'{0}'".format(k) for k in kwargs.keys()))
 
         #----------------------------------------------------------------------
+        # Creat a ND_PDF_Plotter instance to plot corner plots
+        ND_PDF_Plotter_1 = ND_PDF_Plotter(Raw_grids.paramName2paramValueArr)
         # Create a "NB_Result" object instance, which involves calculating
         # the prior, likelihood and posterior, along with parameter estimates:
-        Result = NB3_Bayes.NB_Result(Interpd_grids, DF_obs, deredden=deredden,
-                                                      input_prior=input_prior)
+        Result = NB3_Bayes.NB_Result(Interpd_grids, DF_obs, ND_PDF_Plotter_1,
+                                     deredden=deredden, input_prior=input_prior,
+                                     line_plot_dir=line_plot_dir)
 
         #----------------------------------------------------------------------
         # Outputs
@@ -232,8 +240,7 @@ class NB_Model(object):
                 plot_anno = None
             NB_nd_pdf.Grid_spec.param_display_names = param_display_names
             print("Plotting corner plot for the", pdf_name, "...")
-            NB4_Plotting.plot_marginalised_ndpdf(out_image_name, NB_nd_pdf,
-                                                Raw_grids, plot_anno)
+            Result.Plotter(NB_nd_pdf, out_image_name, plot_anno)
 
         
         print("NebulaBayes finished.")
@@ -245,7 +252,7 @@ class NB_Model(object):
 def process_observed_data(obs_fluxes, obs_flux_errors, obs_emission_lines,
                                                                obs_wavelengths):
     """
-    Error check the input observed emission line data, and form it into a pandas
+    Error-check the input observed emission line data, and form it into a pandas
     DataFrame table.
     """
     obs_fluxes = np.asarray(obs_fluxes, dtype=float) # Ensure numpy array

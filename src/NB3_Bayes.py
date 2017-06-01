@@ -2,22 +2,22 @@ from __future__ import print_function, division
 from collections import OrderedDict as OD
 import itertools    # For combinatorial combinations
 import numpy as np  # Core numerical library
+import os.path
 import pandas as pd # For tables ("DataFrame"s)
-from scipy.integrate import cumtrapz
+from scipy.integrate import cumtrapz, simps
 from scipy.signal import argrelextrema
 from .dereddening import deredden as do_dereddening
 from .NB1_Grid_working import Grid_description
 from .NB2_Prior import calculate_prior
 
 
-
 """
-Adam D. Thomas 2015 - 2017
-
 Code to calculate the likelihood and posterior over an N-D grid, marginalise
 pdfs to 1D and 2D marginalised pdfs, and generally do Bayesian parameter
 estimation.
 This module defines two custom NebulaBayes classes: NB_nd_pdf and NB_Result.
+
+Adam D. Thomas 2015 - 2017
 """
 
 
@@ -25,8 +25,12 @@ This module defines two custom NebulaBayes classes: NB_nd_pdf and NB_Result.
 class NB_nd_pdf(object):
     """
     Class to hold an N-dimensional PDF and its 1D and 2D marginalised forms.
+    Methods on this class marginalise the PDF and perform parameter estimation.
     An instance of this class is used for each of the likelihood, prior and
     posterior.
+    The actual nd_pdf array (an attribute of instances of this class) represents
+    a probability distribution, i.e. dP = PDF(x) * dx, where the nd_pdf is an
+    array of samples of the PDF.
     """
     def __init__(self, nd_pdf, NB_Result, DF_obs, Interpd_grids):
         """
@@ -37,7 +41,8 @@ class NB_nd_pdf(object):
                 fluxes and errors
         Interpd_grids: A NB_Grid object (defined in NB1_Grid_working.py)
                        holding the interpolated model grid fluxes and the
-                       description fo the model grid.
+                       description of the model grid.
+        The nd_pdf will be normalised.
         """
         self.nd_pdf = nd_pdf
         self.Grid_spec = NB_Result.Grid_spec
@@ -70,16 +75,17 @@ class NB_nd_pdf(object):
         # of 2 parameters
         # List of all possible pairs of two parameter names:
         param_names = self.Grid_spec.param_names
+        p2ind = self.Grid_spec.paramName2ind
         double_names = list(itertools.combinations(param_names, 2))
         self.Grid_spec.double_names = double_names
         # Looks something like: [('BBBP','Gamma'), ('BBBP','NT_frac'),
         #                        ('BBBP','UH_at_r_inner'), ('Gamma','NT_frac'),
         #                        ('Gamma','UH_at_r_inner'), ('NT_frac','UH_at_r_inner')]
         # Corresponding list of possible combinations of two parameter indices:
-        double_indices = list(itertools.combinations(np.arange(n), 2))
+        double_indices = [(p2ind[p1], p2ind[p2]) for p1,p2 in double_names]
         self.Grid_spec.double_indices = double_indices
         # Looks something like: [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)]
-        # Note that the order of indices in each tuple is from samller to larger
+        # Note that the order of indices in each tuple is from smaller to larger
         
         # Initialise dictionary of all possible 2D marginalised pdf arrays:
         marginalised_2D = {}  # The dict keys will be tuples of 2 parameter names.
@@ -92,35 +98,40 @@ class NB_nd_pdf(object):
             inds_for_integration.reverse() # Ensure we integrate over higher dimensions first,
             # so dimension index numbers are still valid after each integration.
 
-            marginalised_2D[double_name] = self.nd_pdf.copy()  # Initialise
-            # Keep integrating one dimension at a time until the result only has 2 dimensions:
+            working_arr = self.nd_pdf.copy()  # Working array - we'll integrate
+            # out the dimensions of this array one dimension at a time.  Keep
+            # integrating until the result only has two dimensions:
             for param_index in inds_for_integration:
                 # Integrate over this dimension (parameter), using the trapezoidal rule
-                marginalised_2D[double_name] = np.trapz( 
-                    marginalised_2D[double_name], axis=param_index,
-                    dx=spacing[param_index] )
+                working_arr = np.trapz(working_arr, axis=param_index,
+                                                        dx=spacing[param_index])
+            marginalised_2D[double_name] = working_arr # Store result
 
         #--------------------------------------------------------------------------
         # Calculate the 1D marginalised pdf for each individual parameter
         # Initialise dictionary of all 1D marginalised pdf arrays:
         marginalised_1D = {}
 
-        # For the first parameter in param_names:
-        # Integrate the first 2D marginalised pdf over the other
-        # dimension (parameter), using the trapezoidal rule:
-        marginalised_1D[param_names[0]] = np.trapz( 
-             marginalised_2D[double_names[0]], axis=1, dx=spacing[1])
+        # For the first parameter in param_names, integrate the first 2D
+        # marginalised pdf over the other dimension (parameter), using Simpson's
+        # rule:
+        marginalised_1D[param_names[0]] = simps(marginalised_2D[double_names[0]],
+                                                        axis=1, dx=spacing[1])
+        #    np.trapz(marginalised_2D[double_names[0]], axis=1, dx=spacing[1])
 
         # For all parameters after the first in param_names:
         for double_name, param_inds_double in zip(double_names[:n-1], double_indices[:n-1]):
             # For each pair of parameters we take the second parameter, and integrate 
             # over the first parameter of the pair (which by construction is always the
             # first parameter in param_names).
-            assert( param_inds_double[0] == 0 )
-            param = param_names[ param_inds_double[1] ]
-            # Integrate over first dimension (parameter) using trapezoidal method:
-            marginalised_1D[param] = np.trapz(
-                 marginalised_2D[double_name], axis=0, dx=spacing[0])
+            assert param_inds_double[0] == 0 
+            param = param_names[param_inds_double[1]]
+            # Integrate over first dimension (parameter) using Simpson's rule:
+            marginalised_1D[param] = simps(marginalised_2D[double_name], axis=0,
+                                                                  dx=spacing[0])
+            # marginalised_1D[param] = np.trapz(marginalised_2D[double_name],
+            #                                             axis=0, dx=spacing[0])
+
 
         #--------------------------------------------------------------------------
         # Calculate the 0D marginalised pdf (by which I mean find
@@ -129,9 +140,9 @@ class NB_nd_pdf(object):
 
         # Firstly find the integral over all n dimensions by picking
         # any 1D marginalised pdf (we use the first) and integrating over it:
-        integral = np.trapz( marginalised_1D[ param_names[0] ],
-                             dx=spacing[0] )
-        # print( "Integral for un-normalised full pwd is " + str(integral) )
+        # integral = np.trapz( marginalised_1D[ param_names[0] ],
+        #                      dx=spacing[0] )
+        integral = simps(marginalised_1D[param_names[0]], dx=spacing[0])
         # Now actually normalise each 2D and 1D marginalised pdf:
         for double_name in double_names:
             # Divide arrays in-place in memory:
@@ -289,7 +300,7 @@ def make_single_parameter_estimate(param_name, val_arr, pdf_1D):
     out_dict["Estimate"] = val_arr[ est_ind ]
     
     # Generate posterior CDF using trapezoidal integration:
-    posterior_1D_CDF = cumtrapz( pdf_1D, x=val_arr, initial=0 )
+    posterior_1D_CDF = cumtrapz(pdf_1D, x=val_arr, initial=0)
     # initial=0 => CDF has same length as PDF; first CDF entry will be 0,
     # last will be 1 (once normalised).  So we've assumed that the
     # posterior PDF probability value is at the RIGHT of each bin.
@@ -353,26 +364,30 @@ class NB_Result(object):
     """
     Class to hold the NebulaBayes results including the likelihood, prior and
     posterior, marginalised posteriors and parameter estimates.
+    An instance of this class is returned to the user each time NebulaBayes is
+    run.
     """
-    def __init__(self, Interpd_grids, DF_obs, deredden, input_prior):
+    def __init__(self, Interpd_grids, DF_obs, ND_PDF_Plotter_1, deredden,
+                                                    input_prior, line_plot_dir):
         """
         Initialise an instance of the class and perform Bayesian parameter
         estimation.
         """
-        self.deredden = deredden # Boolean
-        self.ndim = Interpd_grids.ndim
+        self.DF_obs = DF_obs
+        self.Plotter = ND_PDF_Plotter_1 # To plot ND PDFs
+        self.deredden = deredden # Boolean - dereddeden obs fluxes over whole grid?
+        self._line_plot_dir = line_plot_dir
         Grid_spec = Grid_description(Interpd_grids.param_names,
                            list(Interpd_grids.paramName2paramValueArr.values()))
         self.Grid_spec = Grid_spec
 
         # Calculate arrays of observed fluxes over the grid (possibly dereddening)
-        self.make_obs_flux_arrays(DF_obs, Interpd_grids)
+        self._make_obs_flux_arrays(Interpd_grids)
 
         # Calculate the likelihood over the grid:
         print("Calculating likelihood...")
-        raw_likelihood = self.calculate_likelihood(Interpd_grids, DF_obs)
-        self.Likelihood = NB_nd_pdf(raw_likelihood, self, DF_obs,
-                                                                  Interpd_grids)
+        raw_likelihood = self._calculate_likelihood(Interpd_grids)
+        self.Likelihood = NB_nd_pdf(raw_likelihood, self, DF_obs, Interpd_grids)
 
         # Calculate the prior over the grid:
         print("Calculating prior...")
@@ -388,12 +403,14 @@ class NB_Result(object):
 
 
 
-    def make_obs_flux_arrays(self, DF_obs, Interpd_grids):
+    def _make_obs_flux_arrays(self, Interpd_grids):
         """
         Make observed flux arrays covering the entire grid.
         If requested by the user, the observed fluxes are dereddened to match
-        the Balmer decrement everywhere in the grid.
+        the Balmer decrement everywhere in the grid.  Otherwise the flux value
+        for a line is uniform over the n-D grid.
         """
+        DF_obs = self.DF_obs
         if self.deredden:
             # Deredden observed fluxes at every interpolated gridpoint to match
             # the model Balmer decrement at that gridpoint.
@@ -429,52 +446,60 @@ class NB_Result(object):
 
 
 
-    def calculate_likelihood(self, Interpd_grids, DF_obs):
+    def _calculate_likelihood(self, Interpd_grids):
         """
         Calculate the (linear) likelihood over the entire N-D grid at once.
-        The emission line grids are interpolated prior to calculating
-        the likelihood.
+        The likelihood is not yet normalised - this will be done later.
+        The emission line grids are interpolated prior to being inputted into
+        this method.  The likelihood is a product of PDFs, one for each
+        contributing emission line.  We save out a plot of the PDF for each line
+        if the uses wishes.
         """
-        # # Use systematic uncertainty in modelled fluxes, as in Blanc et al.
-        # epsilon = 0.15 # dex.  Default is 0.15 dex systematic uncertainty
-        # # Convert from dex to a scaling factor:
-        # epsilon_2 = 10**epsilon - 1  # This gives a factor of 0.41 for epsilon=0.15 dex
-        # # epsilon_2 is a scaling factor to go from a linear modelled flux to an
-        # # associated systematic error
-        # # Note the original from izi.pro is equivalent to:
-        # # epsilon_2 = epsilon * np.log(10)
-        # # This gives 0.345 for epsilon=0.15 dex. I don't understand this.
-        # # Why was a log used?  And a log base e?  This is surely wrong.
-        # # What is intended by this formula anyway?
-        # # Note that epsilon_2 is the assumed fractional systematic error in the model
-        # # fluxes already normalised to Hbeta.  In izi.pro the default is 0.15 dex,
-        # # but the default is given as 0.1 dex in the Blanc+15 paper.
+        # Systematic relative error in normalised grid fluxes as a linear
+        # proportion:
         pred_flux_rel_err = Interpd_grids.grid_rel_error
 
+        # Arrays of observed fluxes over the whole grid (may have been
+        # dereddened at every point in the grid)
         obs_flux_arrs = self.obs_flux_arrs
         obs_flux_err_arrs = self.obs_flux_err_arrs
 
-        # Initialise likelihood with 1 everywhere (multiplictive identity)
+        # Initialise log likelihood with 0 everywhere
         log_likelihood = np.zeros(Interpd_grids.shape, dtype="float")
-        for i, line in enumerate(DF_obs.index): # Iterate over emission lines
-            # Use a log version of equation 3 on pg 4 of Blanc et al. 2015 (IZI)
-            # N.B. var is the sum of variances due to both the measured and modelled fluxes
-            # N-D array of predicted fluxes (must be non-negative):
+        # # Initialise linear likelihood with 1 everywhere
+        # likelihood = np.ones(Interpd_grids.shape, dtype="float")
+        for i, line in enumerate(self.DF_obs.index):
             pred_flux_i = Interpd_grids.grids[line]
             obs_flux_i = obs_flux_arrs[i]
             obs_flux_err_i = obs_flux_err_arrs[i]
             assert obs_flux_i.shape == pred_flux_i.shape
+            
+            # Use a log version of equation 3 on pg 4 of Blanc et al. 2015 (IZI)
+            # N.B. var is the sum of variances due to both the measured and
+            # modelled fluxes
             var = obs_flux_err_i**2 + (pred_flux_rel_err * pred_flux_i)**2
-            log_likelihood += ( - (( obs_flux_i - pred_flux_i )**2 / 
+            line_contribution = ( - (( obs_flux_i - pred_flux_i )**2 / 
                                      ( 2.0 * var ))  -  0.5*np.log( var ) )
+            log_likelihood += line_contribution
             # N.B. "log" is base e
+            # # Linear version:
+            # line_contribution = ((1./np.sqrt(var)) *
+            #         np.exp( -(( obs_flux_i - pred_flux_i )**2 / ( 2.0 * var )))  
+            # log_likelihood *= line_contribution
+
+            # Plot the ND PDF for each line if requested:
+            if self._line_plot_dir is not None:
+                # Assume we're using the log version of the likelihood equation
+                line_pdf = np.exp(line_contribution - line_contribution.max())
+                outname = os.path.join(self._line_plot_dir,
+                                    line + "_PDF_contributes_to_likelihood.pdf")
+                Line_PDF = NB_nd_pdf(line_pdf, self, self.DF_obs, Interpd_grids)
+                Line_PDF.Grid_spec.param_display_names = Interpd_grids.param_display_names
+                print("Plotting pdf for line {0}...".format(line))
+                self.Plotter(Line_PDF, outname)
+
         # log_likelihood += np.log(2 * np.pi)
-
-        # Note: ??????? The parameter space, space of measurements and space of predictions are all continuous.
-        # Each value P in the likelihood array is differential, i.e. P*dx = (likelihood)*dx
-        # for a vector of parameters x.  # ???????????????? ADT - I don't understand the purpose of my own note
-
-        log_likelihood -= log_likelihood.max()
+        log_likelihood -= log_likelihood.max() # Ensure max is 0 (log space); 1 (linear)
         return np.exp(log_likelihood) # The linear likelihood N-D array   
 
 

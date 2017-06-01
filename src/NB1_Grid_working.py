@@ -1,18 +1,18 @@
 from __future__ import print_function, division
 from collections import OrderedDict as OD
+import itertools # For Cartesian product
 import numpy as np  # Core numerical library
 import pandas as pd # For tables ("DataFrame"s)
 # For interpolating an n-dimensional regular grid:
 from scipy.interpolate import RegularGridInterpolator as siRGI
-import itertools # For Cartesian product
+# from scipy.interpolate import CloughTocher2DInterpolator as CT2DI
 
 
 """
 This module contains functions to load the model grid database table, constuct
 model flux arrays, and interpolate those arrays to higher resolution.
 
-ADT 2015 - 2017
-
+Adam D. Thomas 2015 - 2017
 """
 
 
@@ -199,24 +199,36 @@ def construct_raw_grids(DF_grid, grid_params, lines_list):
 
 def interpolate_flux_arrays(Raw_grids, interpd_shape):
     """
-    Interpolate emission line grids.  Negative values arising from
-    interpolation are set to zero (but use of the Akima splines should prevent
-    bad "overshoots" in interpolation).
-
+    Interpolate emission line grids, using linear interpolation, and in 
+    arbitrary dimensions.
+    Note that we require that the spacing in the interpolated grids is uniform,
+    becuase we'll be assuming this when integrating to marginalise PDFs, and
+    also we'll be using matplotlib.pyplot.imshow to show an image of PDFs on the
+    interpolated array, and imshow (as you would expect) assumes "evenly-spaced"
+    pixels.
     """
     print("Interpolating model emission line flux grids to shape {0}...".format(
                                                           tuple(interpd_shape)))
 
     # Initialise NB_Grid object for interpolated arrays
+    # First we find the interpolated values of the parameters
     val_arrs_interp = []
-    for p, n in zip(Raw_grids.param_names, interpd_shape):
+    for i, (p, n) in enumerate(zip(Raw_grids.param_names, interpd_shape)):
         p_min, p_max = Raw_grids.paramName2paramMinMax[p]
         val_arrs_interp.append( np.linspace(p_min, p_max, n) )
+    
     Interpd_grids = NB_Grid(list(Raw_grids.param_names), val_arrs_interp)
+    
+    # Check that the interpolated grid has uniform spacing in each dimension:
+    for arr in Interpd_grids.param_values_arrs:
+        arr_diff = np.diff(arr)
+        assert np.allclose(arr_diff, arr_diff[0])
 
-    # A list of all parameter value combinations in the
-    # interpolated grid in the form of a numpy array:
+    # A list of all parameter value combinations in the interpolated grid in the
+    # form of a numpy array:
     param_combos = np.array( list( itertools.product( *val_arrs_interp ) ) )
+
+    # # For a different interpolation approach, using numpy fancy indexing:
     # # A list of all index combinations for the
     # # interpolated grid, corresponding to param_combos:
     # param_index_combos = np.array( list(
@@ -228,21 +240,44 @@ def interpolate_flux_arrays(Raw_grids, interpd_shape):
     #         [ param_index_combos[:,i] for i in np.arange(Params.n_params) ] )
     # # This will be used to take advantage of numpy's fancy indexing capability.
 
+    # # We can try doing the interpolation with respect to raw grid indices
+    # # instead of parameter values.  There should only be a difference is we
+    # # do "nearest neighbour" interpolation, which we're not doing...
+    # # Find interpolated gridpoints positions with repect to raw grid indices:
+    # interp_val_raw_inds = []
+    # for n_r, n_i in zip(Raw_grids.shape, interpd_shape):
+    #     interp_val_raw_inds.append( np.linspace(0, n_r - 1, n_i) )
+    # all_interp_raw_inds = tuple( np.array(list(itertools.product(
+    #                                         *interp_val_raw_inds)) ).T.tolist() )
+
+    # # For a different approach (using a 2D only CloughTocher2DInterpolator):
+    # raw_p_combos = np.array( list( itertools.product( *Raw_grids.param_values_arrs ) ) )
+    # inds = tuple( np.array(list(itertools.product(
+    #                     *[np.arange(n) for n in Raw_grids.shape])) ).T.tolist() )
+
     for emission_line, raw_flux_arr in Raw_grids.grids.items():
         print("Interpolating for {0}...".format(emission_line))
-        # Interpd_grids.grids[emission_line], val_arrs_interp = interpolate_Akima_nD(raw_flux_arr,
-        #                                                 val_arrs, interpd_shape)
-
-        # Create new (emission_line, flux_array) item in dictionary of interpolated grid arrays:
-        # Interpd_grids.grids[emission_line] = np.zeros( interpd_shape )
         # Create function for carrying out the interpolation:
-        interp_fn = siRGI(tuple(Raw_grids.param_values_arrs),
-                          Raw_grids.grids[emission_line], method="linear")
-        # Fill the interpolated fluxes into the final grid structure, using "fancy indexing":
-        # Interpd_grids.grids[emission_line][param_fancy_index] = interp_fn( param_combos )
-        Interpd_grids.grids[emission_line] = interp_fn(param_combos).reshape(interpd_shape)
-        # I'm gambling here that "reshape" works the way I want... seems like it does!
-        # But the fancy indexing seems to be faster...
+        Interpolator = siRGI(tuple(Raw_grids.param_values_arrs),
+                             Raw_grids.grids[emission_line], method="linear") #"nearest")
+        Interpd_grids.grids[emission_line] = Interpolator(param_combos).reshape(interpd_shape)
+        # The numpy fancy indexing method might be faster, but is more complex...
+
+        # # Using the fancy indexing method:
+        # # Create new (emission_line, flux_array) item in dictionary of interpolated grid arrays:
+        # Interpd_grids.grids[emission_line] = np.zeros( interpd_shape )
+        # # Fill the interpolated fluxes into the final grid structure, using "fancy indexing":
+        # Interpd_grids.grids[emission_line][param_fancy_index] = Interpolator(param_combos)
+
+        # # Using "raw index" coords, so assuming square raw grid cells
+        # Interpolator = siRGI(tuple([np.arange(s) for s in Raw_grids.shape]),
+        #                      Raw_grids.grids[emission_line], method="linear") #"nearest")
+        # Interpd_grids.grids[emission_line] = Interpolator(all_interp_raw_inds).reshape(interpd_shape)
+
+        # # Using another (polynomial) method (2D only):
+        # Interpolator = CT2DI(raw_p_combos, Raw_grids.grids[emission_line][inds])
+        # Interpd_grids.grids[emission_line] = Interpolator(param_combos).reshape(interpd_shape)
+
 
     n_lines = len(Interpd_grids.grids)
     line_0, arr_0 = list(Interpd_grids.grids.items())[0]
@@ -250,7 +285,8 @@ def interpolate_flux_arrays(Raw_grids, interpd_shape):
     {1} total for all {2} lines""".format( arr_0.nbytes, arr_0.nbytes*n_lines,
                                                                       n_lines ) )
 
-    # Set negative values to zero:
+    # Set negative values to zero: (there shouldn't be any, since we're using
+    # linear interpolation)
     for a in Interpd_grids.grids.values():
         a[a < 0] = 0
 
