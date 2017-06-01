@@ -118,7 +118,7 @@ class ND_PDF_Plotter(object):
                 raise ValueError("The 2D PDF {0} has a negative value!".format(double_name))
             ax_i.imshow( pdf_2D, vmin=0,
                          origin="lower", extent=extent_list, cmap=self.im_cmap,
-                         interpolation="bilinear", aspect=image_aspect )
+                         interpolation="spline16", aspect=image_aspect )
             # Data point [0,0] is in the bottom-left of the image; the next point
             # above the lower-left corner is [1,0], and the next point to the right
             # of the lower-left corner is [0,1]; i.e. the 2D pdf array indexing
