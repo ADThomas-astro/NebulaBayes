@@ -116,7 +116,8 @@ class NB_Model(object):
                        that are actually ratios to this line, the choice may
                        affect parameter estimation.  Default: "Hbeta"
         deredden:      De-redden observed fluxes to match the Balmer decrement
-                       at each interpolated grid point?  Default False.
+                       at each interpolated grid point?  Only supported for
+                       norm_line = "Hbeta".  Default: False
         obs_wavelengths: If deredden=True, you must also supply a list of
                        wavelengths (Angstroems) associated with obs_fluxes.
                        Default: None
