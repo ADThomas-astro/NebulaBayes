@@ -114,13 +114,12 @@ def initialise_grids(grid_file, grid_params, lines_list, interpd_grid_shape):
         if not line in DF_grid.columns:
             raise ValueError("Measured emission line " + line +
                              " was not found in the model data.")
-        # Set any non-finite model fluxes to zero:
-        ####### Dodgy?!?!
+        # Set any non-finite model fluxes to zero.  Is this the wrong thing to
+        # do?  It's documented at least, in NB0_Main.py.
         DF_grid.loc[~np.isfinite(DF_grid[line].values), line] = 0
-        # pandas complains about DF_grid[line][ ~np.isfinite( DF_grid[line].values ) ] = 0
         # Check that all model flux values are non-negative:
-        if np.sum( DF_grid[line].values < 0 ) != 0:
-            raise ValueError("A flux value for modelled emission line " +
+        if np.sum(DF_grid[line].values < 0) != 0:
+            raise ValueError("A model flux value for emission line " +
                              line + " is negative.")
 
     #--------------------------------------------------------------------------
