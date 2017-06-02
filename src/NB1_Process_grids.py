@@ -277,6 +277,8 @@ def interpolate_flux_arrays(Raw_grids, interpd_shape):
         # Interpolator = CT2DI(raw_p_combos, Raw_grids.grids[emission_line][inds])
         # Interpd_grids.grids[emission_line] = Interpolator(param_combos).reshape(interpd_shape)
 
+        # The interpolation should result in an entirely finite grid:
+        assert np.all(np.isfinite(Interpd_grids.grids[emission_line]))
 
     n_lines = len(Interpd_grids.grids)
     line_0, arr_0 = list(Interpd_grids.grids.items())[0]

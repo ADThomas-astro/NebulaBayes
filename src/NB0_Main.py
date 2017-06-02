@@ -166,6 +166,9 @@ class NB_Model(object):
         Raw_grids = self.Raw_grids
         Interpd_grids = self.Interpd_grids
 
+        if "norm_line" not in kwargs and "Hbeta" not in obs_emission_lines:
+            raise ValueError("Can't normalise by default line 'Hbeta': not "
+                             "found in obs_emission_lines line names")
         norm_line = kwargs.pop("norm_line", "Hbeta") # Default "Hbeta"
         deredden = kwargs.pop("deredden", False) # Default False
         assert isinstance(deredden, bool)

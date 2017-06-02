@@ -45,6 +45,10 @@ class NB_nd_pdf(object):
                 this is supplied.
         The nd_pdf will be normalised.
         """
+        if np.any(~np.isfinite(nd_pdf)):
+            raise ValueError("The nd_pdf is not entirely finite")
+        if np.any(nd_pdf < 0):
+            raise ValueError("The nd_pdf contains a negative value")
         self.nd_pdf = nd_pdf
         self.Grid_spec = NB_Result.Grid_spec
         # Add self.marginalised_2d and self.marginalised_1d attributes and
@@ -473,9 +477,12 @@ class NB_Result(object):
         if Interpd_grids.norm_line != norm_line:
             norm_grid = Interpd_grids.grids[norm_line].copy()
             # Copy array so it won't become all "1.0" in the middle of normalising!
+            bad = (norm_grid == 0) # For when we divide by norm_grid
             for line in Interpd_grids.grids:
-                Interpd_grids.grids[line] /= norm_grid  # In-place
-            Interpd_grids.norm_line = norm_line
+                Interpd_grids.grids[line] /= norm_grid  # In-place division
+                # Replace any NaNs we produced by dividing by zero:
+                Interpd_grids.grids[line][bad] = 0
+            Interpd_grids.norm_line = norm_line # Store for later reference
 
         # Initialise log likelihood with 0 everywhere
         log_likelihood = np.zeros(Interpd_grids.shape, dtype="float")
