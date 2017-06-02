@@ -7,7 +7,7 @@ import pandas as pd # For tables ("DataFrame"s)
 from scipy.integrate import cumtrapz, simps
 from scipy.signal import argrelextrema
 from .dereddening import deredden as do_dereddening
-from .NB1_Grid_working import Grid_description
+from .NB1_Process_grids import Grid_description
 from .NB2_Prior import calculate_prior
 
 
@@ -37,7 +37,7 @@ class NB_nd_pdf(object):
         Initialise an instance of the NB_nd_pdf class.
         nd_pdf: A numpy ndarray holding the (linear) pdf.
         NB_Result: A NB_Result object (defined in this module)
-        Interpd_grids: A NB_Grid object (defined in NB1_Grid_working.py)
+        Interpd_grids: A NB_Grid object (defined in NB1_Process_grids.py)
                        holding the interpolated model grid fluxes and the
                        description of the model grid.
         DF_obs: A pandas DataFrame table holding the observed emission line

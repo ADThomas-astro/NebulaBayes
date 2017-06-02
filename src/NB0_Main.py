@@ -2,7 +2,7 @@ from __future__ import print_function, division
 from collections import OrderedDict as OD
 import numpy as np  # Core numerical library
 import pandas as pd # For tables ("DataFrame"s)
-from . import NB1_Grid_working
+from . import NB1_Process_grids
 from . import NB3_Bayes
 from .NB4_Plotting import ND_PDF_Plotter
 
@@ -91,7 +91,7 @@ class NB_Model(object):
                                       ", ".join(str(k) for k in kwargs.keys()) )
 
         # Call grid initialisation:
-        Raw_grids, Interpd_grids = NB1_Grid_working.initialise_grids(grid_file,
+        Raw_grids, Interpd_grids = NB1_Process_grids.initialise_grids(grid_file,
                                     grid_params, lines_list, interpd_grid_shape)
         Raw_grids.grid_rel_error = grid_rel_error
         Interpd_grids.grid_rel_error = grid_rel_error
@@ -102,8 +102,8 @@ class NB_Model(object):
 
     def __call__(self, obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
         """
-        Run NebulaBayes Bayesian parameter estimation using the grids stored in
-        this NB_Model object.
+        Run NebulaBayes Bayesian parameter estimation using the interpolated
+        grids stored in this NB_Model object.
         Required positional arguments:
         obs_fluxes:         list or array of observed emission-line fluxes
         obs_flux_errors:    list or array of corresponding measurement errors
