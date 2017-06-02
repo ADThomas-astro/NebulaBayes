@@ -55,10 +55,9 @@ class NB_nd_pdf(object):
         if DF_obs is not None:
             # Make a table comparing model and observed fluxes for the 'best' model
             self.make_best_model_table(DF_obs, Interpd_grids, NB_Result)
-        # We added the self.DF_best attribute
-
-        # Calculate chi2 for the 'best' model (add self.chi2 attribute)
-        self.calculate_chi2(NB_Result.deredden)
+            # We added the self.DF_best attribute
+            # Calculate chi2 for the 'best' model (add self.chi2 attribute):
+            self.calculate_chi2(NB_Result.deredden)
 
 
 
@@ -475,14 +474,14 @@ class NB_Result(object):
             norm_grid = Interpd_grids.grids[norm_line].copy()
             # Copy array so it won't become all "1.0" in the middle of normalising!
             for line in Interpd_grids.grids:
-                Interpd_grids[line] /= norm_grid  # In-place
+                Interpd_grids.grids[line] /= norm_grid  # In-place
             Interpd_grids.norm_line = norm_line
 
         # Initialise log likelihood with 0 everywhere
         log_likelihood = np.zeros(Interpd_grids.shape, dtype="float")
         # # Initialise linear likelihood with 1 everywhere
         # likelihood = np.ones(Interpd_grids.shape, dtype="float")
-        for i, line in enumerate(Interpd_grids.grids):
+        for i, line in enumerate(self.DF_obs.index):
             pred_flux_i = Interpd_grids.grids[line]
             obs_flux_i = obs_flux_arrs[i]
             obs_flux_err_i = obs_flux_err_arrs[i]

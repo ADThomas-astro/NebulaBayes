@@ -67,7 +67,7 @@ class NB_Grid(Grid_description):
     def __init__(self, param_names, param_value_arrs):
         """ Initialise """
         super(NB_Grid, self).__init__(param_names, param_value_arrs)
-        self.grids = OD()  # We rely on this dict being ordered
+        self.grids = OD()
 
 
 
