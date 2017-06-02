@@ -31,11 +31,13 @@ def calculate_line_ratio_prior(DF_obs, grids_dict, grid_rel_err, line_1, line_2)
     grid, based on matching an observed emission line ratio.
     DF_obs: pandas Dataframe table holding observed line fluxes and errors
     grids_dict: Dictionary that maps line names to interpolated n-D predicted
-                flux arrays
+                flux arrays.  These arrays may not yet be normalised, but this
+                doesn't matter for taking ratios.
     grid_rel_err: Relative systematic error on grid fluxes, as a linear
                   proportion.  This is an input into NebulaBayes.
     line_1 and line_2: Names of emission lines (row index values in DataFrame)
-    Returns an array of the value of the prior over the grid.
+    Returns an array of the value of the prior over the grid.  The prior is
+    calculated by comparing observed and model values of F(line_1) / F(line_2).
     """
     for line_i in [line_1, line_2]:
         if line_i not in DF_obs.index.values:
@@ -81,7 +83,9 @@ def calculate_prior(user_input, DF_obs, grids_dict, grid_rel_err):
                 "SII6731")] (specifying line ratios), or a python "callable"
                 (custom user function).
     DF_obs:     The pandas DataFrame table holding the observed fluxes.
-    grids_dict: Dictionary that maps line names to nD interpolated flux arrays
+    grids_dict: Dictionary that maps line names to nD interpolated flux arrays.
+                These arrays might not yet be normalised, but this doesn't
+                matter if the prior only involves ratios.
     grid_rel_err: The systematic relative error on grid fluxes, as a linear
                   proportion.
     """

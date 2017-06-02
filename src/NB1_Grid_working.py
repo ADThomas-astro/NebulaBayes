@@ -67,7 +67,7 @@ class NB_Grid(Grid_description):
     def __init__(self, param_names, param_value_arrs):
         """ Initialise """
         super(NB_Grid, self).__init__(param_names, param_value_arrs)
-        self.grids = OD()
+        self.grids = OD()  # We rely on this dict being ordered
 
 
 
@@ -76,27 +76,27 @@ def initialise_grids(grid_file, grid_params, lines_list, interpd_grid_shape):
     Initialise grids and return Raw_grids and Interpd_grids.
     The Raw_grids and Interpd_grids objects are instances of the NB_Grid class
     defined above.
-    grid_file:  the filename of an ASCII csv table containing photoionisation
-                model grid data in the form of a database table.
-                Each gridpoint (point in parameter space) is a row in this table.
-                The values of the grid parameters for each row are defined in a
-                column for each parameter.
-                No assumptions are made about the order of the gridpoints (rows) in the table.
-                Spacing of grid values along an axis may be uneven, 
-                but the full grid is required to a be a regular, n-dimensional rectangular grid.
-                There is a column of fluxes for each modelled emission line, and model fluxes
-                are assumed to be normalised to Hbeta.
+    grid_file:  The filename of an ASCII csv table containing photoionisation
+                model grid fluxes in the form of a database table. Each
+                gridpoint (point in parameter space) is a row in this table.
+                The values of the grid parameters for each row are defined in
+                a column for each parameter.
+                No assumptions are made about the order of the gridpoints
+                (rows) in the table.  Spacing of grid values along an axis
+                may be uneven, but the full grid is required to a be a
+                regular, n-dimensional rectangular grid.  There is a column
+                of fluxes for each modelled emission line.  Model fluxes will
+                be normalised later, when calculating the likelihood.
                 Any non-finite fluxes (e.g. nans) will be set to zero.
     grid_params: List of the unique names of the grid parameters as strings.
                  The order is the order of the grid dimensions, i.e. the order
                  in which arrays in NebulaBayes will be indexed.
-    interpd_grid_shape: A tuple of integers, giving the size of each dimension
-                        of the interpolated grid.  The order of the integers
-                        corresponds to the order of parameters in grid_params.
-                        The default is 30 gridpoints along each dimension.  Note
-                        that the number of interpolated gridpoints entered in
-                        interpd_grid_shape may have a major impact on the speed
-                        of the program.
+    interpd_grid_shape: A tuple of integers giving the size of each
+                    dimension of the interpolated flux grids.  The order of
+                    the integers corresponds to the order of parameters in
+                    grid_params.  The default is 15 gridpoints along each
+                    dimension.  These values have a major impact on the
+                    speed of the grid interpolation.
     """
     print("Loading input grid table...")
     # Load database csv table containing the model grid output
@@ -289,6 +289,11 @@ def interpolate_flux_arrays(Raw_grids, interpd_shape):
     # linear interpolation)
     for a in Interpd_grids.grids.values():
         a[a < 0] = 0
+
+    # We keep track of which line the interpolated grids are normalised to, so
+    # we don't unnecessarily re-normalise. (The user may use different 
+    # "norm_line"s with the same interpolated grid).
+    Interpd_grids.norm_line = None  # Grids un-normalised so far
 
     return Interpd_grids
 

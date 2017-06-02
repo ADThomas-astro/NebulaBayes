@@ -52,8 +52,8 @@ class NB_Model(object):
                    (rows) in the table.  Spacing of grid values along an axis
                    may be uneven, but the full grid is required to a be a
                    regular, n-dimensional rectangular grid.  There is a column
-                   of fluxes for each modelled emission line, and model fluxes
-                   are assumed to be normalised to Hbeta == 1.
+                   of fluxes for each modelled emission line.  Model fluxes will
+                   be normalised by NebulaBayes (see "norm_line" keyword below).
                    Any non-finite fluxes (e.g. nans) will be set to zero.
         grid_params: List of the unique names of the grid parameters as strings.
                      This list sets the order of the grid dimensions, i.e. the
@@ -63,17 +63,15 @@ class NB_Model(object):
                     emission lines we'll be using in this NB_Model instance.
 
         Optional additional keyword arguments:
-        interpd_grid_shape: A tuple of integers, giving the size of each
-                            dimension of the interpolated flux grids.  The order
-                            of the integers corresponds to the order of
-                            parameters in grid_params.
-                            The default is 15 gridpoints along each dimension.
-                            Note that the values entered in interpd_grid_shape
-                            have a major impact on the speed of the grid
-                            interpolation.
-        grid_error:         The systematic relative error on grid fluxes, as a
-                            linear proportion.  Default is 0.35 (average of
-                            errors of 0.15 dex above and below).
+        interpd_grid_shape: A tuple of integers giving the size of each
+                        dimension of the interpolated flux grids.  The order of
+                        the integers corresponds to the order of parameters in
+                        grid_params.  The default is 15 gridpoints along each
+                        dimension.  These values have a major impact on the
+                        speed of the grid interpolation.
+        grid_error:     The systematic relative error on grid fluxes, as a
+                        linear proportion.  Default is 0.35 (average of errors
+                        of 0.15 dex above and below).
         """
         # Initialise and do some checks...
         print("Initialising NebulaBayes model...")
@@ -108,17 +106,20 @@ class NB_Model(object):
         this NB_Model object.
         Required positional arguments:
         obs_fluxes:         list or array of observed emission-line fluxes
-                            normalised to Hbeta == 1
         obs_flux_errors:    list or array of corresponding measurement errors
         obs_emission_lines: list of corresponding emission line names as strings
                             (must match names in header of input grid flux table)
         
         Optional keyword arguments which affect the parameter estimation:
-        deredden:        De-redden observed fluxes to match the Balmer decrement
-                         at each interpolated grid point?  Default False.
+        norm_line:     Both observed and grid fluxes will be normalised to this
+                       line.  Because the likelihood calculation will use fluxes
+                       that are actually ratios to this line, the choice may
+                       affect parameter estimation.  Default: "Hbeta"
+        deredden:      De-redden observed fluxes to match the Balmer decrement
+                       at each interpolated grid point?  Default False.
         obs_wavelengths: If deredden=True, you must also supply a list of
-                         wavelengths (Angstroems) associated with obs_fluxes.
-                         Default None.
+                       wavelengths (Angstroems) associated with obs_fluxes.
+                       Default: None
         prior:  The prior to use when calculating the posterior.  Either a
                 user-defined function, the string "Uniform", or a list of length
                 at least one. The entries in the list are tuples such as
@@ -164,6 +165,7 @@ class NB_Model(object):
         Raw_grids = self.Raw_grids
         Interpd_grids = self.Interpd_grids
 
+        norm_line = kwargs.pop("norm_line", "Hbeta") # Default "Hbeta"
         deredden = kwargs.pop("deredden", False) # Default False
         assert isinstance(deredden, bool)
         obs_wavelengths = kwargs.pop("obs_wavelengths", None) # Default None
@@ -174,7 +176,7 @@ class NB_Model(object):
         # Process the input observed data; DF_obs is a pandas DataFrame table
         # where the emission line names index the rows:
         DF_obs = process_observed_data(obs_fluxes, obs_flux_errors,
-                                            obs_emission_lines, obs_wavelengths)
+                       obs_emission_lines, obs_wavelengths, norm_line=norm_line)
 
         input_prior = kwargs.pop("prior", "Uniform") # Default "Uniform"
 
@@ -211,8 +213,8 @@ class NB_Model(object):
         # Create a "NB_Result" object instance, which involves calculating
         # the prior, likelihood and posterior, along with parameter estimates:
         Result = NB3_Bayes.NB_Result(Interpd_grids, DF_obs, ND_PDF_Plotter_1,
-                                     deredden=deredden, input_prior=input_prior,
-                                     line_plot_dir=line_plot_dir)
+                           norm_line=norm_line, deredden=deredden, 
+                           input_prior=input_prior, line_plot_dir=line_plot_dir)
 
         #----------------------------------------------------------------------
         # Outputs
@@ -250,10 +252,10 @@ class NB_Model(object):
 
 
 def process_observed_data(obs_fluxes, obs_flux_errors, obs_emission_lines,
-                                                               obs_wavelengths):
+                                                    obs_wavelengths, norm_line):
     """
-    Error-check the input observed emission line data, and form it into a pandas
-    DataFrame table.
+    Error-check the input observed emission line data, form it into a pandas
+    DataFrame table, and normalise by the specified line.
     """
     obs_fluxes = np.asarray(obs_fluxes, dtype=float) # Ensure numpy array
     obs_flux_errors = np.asarray(obs_flux_errors, dtype=float)
@@ -286,24 +288,21 @@ def process_observed_data(obs_fluxes, obs_flux_errors, obs_emission_lines,
 
     # Form the data from the observations into a pandas DataFrame table.
     obs_dict = OD([("Line",obs_emission_lines)])
-    if obs_wavelengths is not None:
+    if obs_wavelengths is not None: # Leave out of DataFrame if not provided
         obs_dict["Wavelength"] = obs_wavelengths
     obs_dict["Flux"] = obs_fluxes
     obs_dict["Flux_err"] = obs_flux_errors
     DF_obs = pd.DataFrame(obs_dict)
     DF_obs.set_index("Line", inplace=True) # Row index is the emission line name
 
-    # If Hbeta was included in the line list, let's make sure its flux is 1:
-    DF_obs2 = DF_obs.copy()
-    DF_obs2["LINE"] = [l.upper() for l in DF_obs2.index] # Uppercase line names
-    DF_obs2.set_index("LINE", inplace=True)
-    if "HBETA" in DF_obs2.index:
-        if not np.isclose(DF_obs2.loc["HBETA","Flux"], 1.0):
-            raise ValueError("Hbeta was supplied as an observed emission line,"
-                             " but wasn't normalised to 1 (Hbeta flux is"
-                             " {0:.6f})".format(DF_obs2.loc["HBETA","Flux"])   )
-    # Note that we can't just normalise to Hbeta, because the user didn't
-    # necessarily supply Hbeta fluxes.
+    # Normalise the fluxes:
+    if norm_line not in DF_obs.index.values:
+        raise ValueError("'norm_line' {0} not found in input line names".format(
+                                                                     norm_line))
+    norm_flux = DF_obs.loc[norm_line, "Flux"] * 1.0
+    DF_obs["Flux"] = DF_obs["Flux"].values / norm_flux
+    DF_obs["Flux_err"] = DF_obs["Flux_err"].values / norm_flux
+    assert np.isclose(DF_obs.loc[norm_line, "Flux"], 1.0) # Ensure normalised
 
     return DF_obs
 

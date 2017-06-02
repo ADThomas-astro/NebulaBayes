@@ -32,16 +32,17 @@ class NB_nd_pdf(object):
     a probability distribution, i.e. dP = PDF(x) * dx, where the nd_pdf is an
     array of samples of the PDF.
     """
-    def __init__(self, nd_pdf, NB_Result, DF_obs, Interpd_grids):
+    def __init__(self, nd_pdf, NB_Result, Interpd_grids, DF_obs=None):
         """
         Initialise an instance of the NB_nd_pdf class.
         nd_pdf: A numpy ndarray holding the (linear) pdf.
         NB_Result: A NB_Result object (defined in this module)
-        DF_obs: A pandas DataFrame table holding the observed emission line
-                fluxes and errors
         Interpd_grids: A NB_Grid object (defined in NB1_Grid_working.py)
                        holding the interpolated model grid fluxes and the
                        description of the model grid.
+        DF_obs: A pandas DataFrame table holding the observed emission line
+                fluxes and errors.  The "best model table" is only generated if
+                this is supplied.
         The nd_pdf will be normalised.
         """
         self.nd_pdf = nd_pdf
@@ -51,8 +52,9 @@ class NB_nd_pdf(object):
         self.marginalise_pdf()
         # Make a parameter estimate table based on this nd_pdf
         self.make_parameter_estimate_table() # add self.DF_estimates attribute
-        # Make a table comparing model and observed fluxes for the 'best' model
-        self.make_best_model_table(DF_obs, Interpd_grids, NB_Result)
+        if DF_obs is not None:
+            # Make a table comparing model and observed fluxes for the 'best' model
+            self.make_best_model_table(DF_obs, Interpd_grids, NB_Result)
         # We added the self.DF_best attribute
 
         # Calculate chi2 for the 'best' model (add self.chi2 attribute)
@@ -262,12 +264,13 @@ class NB_nd_pdf(object):
                                          / flux_err**2  )
         chi2 = np.sum(chi2_working)
         grid_n = self.Grid_spec.ndim
-        # Degrees of freedom (Hbeta doesn't count as a data point, since it's
-        # normalised to 1)
+        # Degrees of freedom (the normalisation line doesn't count as a data
+        # point, since its flux is normalised to 1)
         dof = (len(DF) - 1) - grid_n
         if deredden:
             dof -= 1 # Halpha doesn't count as a data point; the obs fluxes are
                      # dereddened to match the Balmer decrement at every gridpoint
+                     # so Halpha observations always match the prediction
         chi2 /= dof # This is the reduced chi-squared
         self.chi2 = chi2
 
@@ -367,13 +370,13 @@ class NB_Result(object):
     An instance of this class is returned to the user each time NebulaBayes is
     run.
     """
-    def __init__(self, Interpd_grids, DF_obs, ND_PDF_Plotter_1, deredden,
-                                                    input_prior, line_plot_dir):
+    def __init__(self, Interpd_grids, DF_obs, ND_PDF_Plotter_1, norm_line,
+                                          deredden, input_prior, line_plot_dir):
         """
         Initialise an instance of the class and perform Bayesian parameter
         estimation.
         """
-        self.DF_obs = DF_obs
+        self.DF_obs = DF_obs # Store for user
         self.Plotter = ND_PDF_Plotter_1 # To plot ND PDFs
         self.deredden = deredden # Boolean - dereddeden obs fluxes over whole grid?
         self._line_plot_dir = line_plot_dir
@@ -382,42 +385,45 @@ class NB_Result(object):
         self.Grid_spec = Grid_spec
 
         # Calculate arrays of observed fluxes over the grid (possibly dereddening)
-        self._make_obs_flux_arrays(Interpd_grids)
+        self._make_obs_flux_arrays(Interpd_grids, norm_line)
 
         # Calculate the likelihood over the grid:
         print("Calculating likelihood...")
-        raw_likelihood = self._calculate_likelihood(Interpd_grids)
-        self.Likelihood = NB_nd_pdf(raw_likelihood, self, DF_obs, Interpd_grids)
+        raw_likelihood = self._calculate_likelihood(Interpd_grids, norm_line)
+        self.Likelihood = NB_nd_pdf(raw_likelihood, self, Interpd_grids, DF_obs)
 
         # Calculate the prior over the grid:
         print("Calculating prior...")
         raw_prior = calculate_prior(input_prior, DF_obs, Interpd_grids.grids,
                                                    Interpd_grids.grid_rel_error)
-        self.Prior = NB_nd_pdf(raw_prior, self, DF_obs, Interpd_grids)
+        self.Prior = NB_nd_pdf(raw_prior, self, Interpd_grids, DF_obs)
 
         # Calculate the posterior using Bayes' Theorem:
         # (note that the prior and likelihood pdfs are now normalised)
         print("Calculating posterior using Bayes' Theorem...")
         raw_posterior = self.Likelihood.nd_pdf * self.Prior.nd_pdf # Bayes' theorem
-        self.Posterior = NB_nd_pdf(raw_posterior, self, DF_obs, Interpd_grids)
+        self.Posterior = NB_nd_pdf(raw_posterior, self, Interpd_grids, DF_obs)
 
 
 
-    def _make_obs_flux_arrays(self, Interpd_grids):
+    def _make_obs_flux_arrays(self, Interpd_grids, norm_line):
         """
         Make observed flux arrays covering the entire grid.
         If requested by the user, the observed fluxes are dereddened to match
         the Balmer decrement everywhere in the grid.  Otherwise the flux value
         for a line is uniform over the n-D grid.
+        The observed fluxes have already been normalised to norm_line.
         """
         DF_obs = self.DF_obs
         if self.deredden:
             # Deredden observed fluxes at every interpolated gridpoint to match
             # the model Balmer decrement at that gridpoint.
+            if norm_line != "Hbeta":
+                raise ValueError("Dereddening is only supported for "
+                                 "norm_line = 'Hbeta'")
             # Array of Balmer decrements across the grid:
             grid_BD_arr = Interpd_grids.grids["Halpha"] / Interpd_grids.grids["Hbeta"]
-            # Fluxes should be normalised to Hbeta == 1, but I did the division
-            # here explicitly just in case.
+            # (Grid fluxes may not have been normalised to Hbeta == 1)
             if not np.all(np.isfinite(grid_BD_arr)): # Sanity check
                 raise ValueError("Something went wrong - the array of predicted"
                                  " Balmer decrements over the grid contains a"
@@ -446,12 +452,12 @@ class NB_Result(object):
 
 
 
-    def _calculate_likelihood(self, Interpd_grids):
+    def _calculate_likelihood(self, Interpd_grids, norm_line):
         """
         Calculate the (linear) likelihood over the entire N-D grid at once.
-        The likelihood is not yet normalised - this will be done later.
-        The emission line grids are interpolated prior to being inputted into
-        this method.  The likelihood is a product of PDFs, one for each
+        The likelihood is not yet normalised - that will be done later.
+        The emission line grids have been interpolated prior to being inputted
+        into this method.  The likelihood is a product of PDFs, one for each
         contributing emission line.  We save out a plot of the PDF for each line
         if the uses wishes.
         """
@@ -464,11 +470,19 @@ class NB_Result(object):
         obs_flux_arrs = self.obs_flux_arrs
         obs_flux_err_arrs = self.obs_flux_err_arrs
 
+        # Normalise the interpolated grid fluxes if necessary
+        if Interpd_grids.norm_line != norm_line:
+            norm_grid = Interpd_grids.grids[norm_line].copy()
+            # Copy array so it won't become all "1.0" in the middle of normalising!
+            for line in Interpd_grids.grids:
+                Interpd_grids[line] /= norm_grid  # In-place
+            Interpd_grids.norm_line = norm_line
+
         # Initialise log likelihood with 0 everywhere
         log_likelihood = np.zeros(Interpd_grids.shape, dtype="float")
         # # Initialise linear likelihood with 1 everywhere
         # likelihood = np.ones(Interpd_grids.shape, dtype="float")
-        for i, line in enumerate(self.DF_obs.index):
+        for i, line in enumerate(Interpd_grids.grids):
             pred_flux_i = Interpd_grids.grids[line]
             obs_flux_i = obs_flux_arrs[i]
             obs_flux_err_i = obs_flux_err_arrs[i]
@@ -493,7 +507,7 @@ class NB_Result(object):
                 line_pdf = np.exp(line_contribution - line_contribution.max())
                 outname = os.path.join(self._line_plot_dir,
                                     line + "_PDF_contributes_to_likelihood.pdf")
-                Line_PDF = NB_nd_pdf(line_pdf, self, self.DF_obs, Interpd_grids)
+                Line_PDF = NB_nd_pdf(line_pdf, self, Interpd_grids)
                 Line_PDF.Grid_spec.param_display_names = Interpd_grids.param_display_names
                 print("Plotting pdf for line {0}...".format(line))
                 self.Plotter(Line_PDF, outname)
