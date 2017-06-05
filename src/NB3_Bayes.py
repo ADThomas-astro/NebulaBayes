@@ -47,7 +47,7 @@ class NB_nd_pdf(object):
         """
         if np.any(~np.isfinite(nd_pdf)):
             raise ValueError("The nd_pdf is not entirely finite")
-        if np.any(nd_pdf < 0):
+        if nd_pdf.min() < 0:
             raise ValueError("The nd_pdf contains a negative value")
         self.nd_pdf = nd_pdf
         self.Grid_spec = NB_Result.Grid_spec
@@ -141,12 +141,11 @@ class NB_nd_pdf(object):
         #--------------------------------------------------------------------------
         # Calculate the 0D marginalised pdf (by which I mean find
         # the normalisation constant - the 0D marginalised pdf should be 1!)
-        # Then normalise the 1D and 2D marginalised posteriors:
+        # Then normalise the 1D and 2D marginalised PDFs:
 
         # Firstly find the integral over all n dimensions by picking
         # any 1D marginalised pdf (we use the first) and integrating over it:
-        # integral = np.trapz( marginalised_1D[ param_names[0] ],
-        #                      dx=spacing[0] )
+        # integral = np.trapz(marginalised_1D[param_names[0]], dx=spacing[0])
         integral = simps(marginalised_1D[param_names[0]], dx=spacing[0])
         # Now actually normalise each 2D and 1D marginalised pdf:
         for double_name in double_names:
@@ -166,17 +165,13 @@ class NB_nd_pdf(object):
 
     def make_parameter_estimate_table(self):
         """
-        Do Bayesian parameter estimation for all parameters in the grid.
-        posteriors_marginalised_1D: Dicionary mapping parameter names to 1D numpy
-                        arrays of marginalised posterior PDFs; the probabilities
-                        correspond to the parameter values listed in val_arrs_dict.
-        val_arrs_dict:  Mapping of parameter names to 1D numpy arrays of co-ordinate
-                        values taken by the parameter in the grid.
-        Creates a pandas DataFrame with a row for each parameter.
+        Do parameter estimation for all parameters in the grid.  Where the
+        nd_pdf is the posterior, this is the proper Bayesian parameter
+        estimation.
+        Creates a pandas DataFrame with a row for each parameter, stored as the
+        attribute self.DF_estimates
         """
-        #print("Calculating parameter estimates...")
-        # Initialise DataFrame to hold results
-        # DataFrame columns and types:
+        # DataFrame columns and types, in order:
         columns = [("Parameter", np.str),  ("Estimate", np.float),
                    ("CI68_low", np.float), ("CI68_high", np.float),
                    ("CI95_low", np.float), ("CI95_high", np.float),
@@ -187,16 +182,17 @@ class NB_nd_pdf(object):
                    ("n_local_maxima", np.int)]
         n = self.Grid_spec.ndim
         OD1 = OD([(c, np.zeros(n, dtype=t)) for c,t in columns])
-        DF_estimates = pd.DataFrame(OD1)
+        DF_estimates = pd.DataFrame(OD1) # Initialise DataFrame
         DF_estimates.loc[:,"Parameter"] = self.Grid_spec.param_names
         DF_estimates.sort_values(by="Parameter", inplace=True)
         # Sort DF, so the DF is deterministic (note Upper and lower case param
         # names are sorted into separate sections)
         DF_estimates.set_index("Parameter", inplace=True)
-        for col in [col for col,t in columns if t==np.float]:
+        for col in [col for col,t in columns if t == np.float]:
             DF_estimates.loc[:,col] = np.nan
         DF_estimates.loc[:,"n_local_maxima"] = -1
         
+        # Fill in DF_estimates: 
         for p, pdf_1D in self.marginalised_1D.items():
             param_val_arr = self.Grid_spec.paramName2paramValueArr[p]
             p_dict = make_single_parameter_estimate(p, param_val_arr, pdf_1D)
@@ -250,12 +246,12 @@ class NB_nd_pdf(object):
 
     def calculate_chi2(self, deredden):
         """
-        Calculate chi2 between model and observations for the model
-        corresponding to the peak in the posterior.
+        Calculate a chi^2 value which describes how well the model corresponding
+        to the parameter best estimates matches the observations.
         deredden: Boolean.  Did we deredden the observed line fluxes to match
                   the Balmer decrement at every interpolated model gridpoint?
         """
-        DF = self.DF_best # Only contains a subset of useful columns
+        DF = self.DF_best # Table comparing observations with "best model"
         # We'll need to reconstruct the error column
         if deredden: # If we dereddened the observed fluxes at each gridpoint
             flux_err = DF["Obs_dered"].values / DF["Obs_S/N_dered"].values
@@ -274,7 +270,7 @@ class NB_nd_pdf(object):
             dof -= 1 # Halpha doesn't count as a data point; the obs fluxes are
                      # dereddened to match the Balmer decrement at every gridpoint
                      # so Halpha observations always match the prediction
-        chi2 /= dof # This is the reduced chi-squared
+        chi2 /= dof # The "reduced chi-squared"
         self.chi2 = chi2
 
 
@@ -283,44 +279,47 @@ def make_single_parameter_estimate(param_name, val_arr, pdf_1D):
     """
     Bayesian parameter estimate for a single parameter, including the credible
     intervals.  This function is also used to make "estimates" using the prior
-    and likelihood pdfs, which may be of interest but obviously this isn't full
-    Bayesian parameter estimation.
+    and likelihood pdfs, which may be of interest but isn't full Bayesian
+    parameter estimation.
     param_name: String giving name of the parameter.
     val_arr: 1D numpy array of parameter co-ordinate values associated with
              the values listed in pdf_1D
-    pdf_1D: 1D numpy array of the marginalised posterior pdf for the
-             parameter param_name; the probabilities correspond to the parameter
-             values listed in val_arr.
+    pdf_1D: 1D numpy array of the marginalised 1D pdf for the parameter
+            param_name; the pdf values correspond to the parameter values listed
+            in val_arr.
     Returns a dictionary.  See "make_parameter_estimate_table" for contents.
     """
-    # Initialise and do some checks:
-    length = val_arr.size # Length of val_arr and pdf_1D
+    if np.any(~np.isfinite(pdf_1D)):
+        raise ValueError("The 1D pdf for {0} is not all finite".format(param_name))
+    if np.any(pdf_1D < 0):
+        raise ValueError("The 1D pdf for {0} has a negative value".format(param_name))
+    length = val_arr.size
     assert length == pdf_1D.size # Sanity check
     index_array = np.arange(length)
     bool_map = {True:"Y", False:"N"}
     out_dict = {}  # To hold results for this parameter
     
     out_dict["Parameter"] = param_name
-    # Calculate best estimate of parameter (location of max in posterior):
-    est_ind = np.argmax( pdf_1D )
-    out_dict["Estimate"] = val_arr[ est_ind ]
+    # Calculate estimate of parameter value (location of max in 1D pdf)
+    # (This is the Bayesian parameter estimate if pdf_1D is from the posterior)
+    est_ind = np.argmax(pdf_1D)
+    out_dict["Estimate"] = val_arr[est_ind]
     
-    # Generate posterior CDF using trapezoidal integration:
-    posterior_1D_CDF = cumtrapz(pdf_1D, x=val_arr, initial=0)
-    # initial=0 => CDF has same length as PDF; first CDF entry will be 0,
-    # last will be 1 (once normalised).  So we've assumed that the
-    # posterior PDF probability value is at the RIGHT of each bin.
+    # Generate cumulative density function (CDF) using trapezoidal integration:
+    cdf_1D = cumtrapz(pdf_1D, x=val_arr, initial=0)
+    # initial=0 => cdf_1D has same length as pdf_1D; first CDF entry will be 0;
+    # the last will be 1 (once normalised).
     # Normalise CDF (should be very close to normalised already):
-    posterior_1D_CDF /= posterior_1D_CDF[-1]
+    cdf_1D /= cdf_1D[-1]
 
     # Calculate credible intervals
-    for CI in [68, 95]: # Iterate over credible intervals
+    for CI in [68, 95]:
         # Find the percentiles of lower and upper bounds of CI:
         lower_prop = (1.0 - CI/100.0) / 2.0 # Lower percentile as proportion
         upper_prop = 1.0 - lower_prop       # Upper percentile as proportion
         
         # Find value corresponding to the lower bound
-        lower_ind_arr = index_array[posterior_1D_CDF < lower_prop]
+        lower_ind_arr = index_array[cdf_1D < lower_prop]
         if lower_ind_arr.size == 1:
             # The 1st CDF value (0) is the only value below the lower bound
             lower_val = -np.inf # Indicate that we don't have a lower bound
@@ -328,7 +327,7 @@ def make_single_parameter_estimate(param_name, val_arr, pdf_1D):
             lower_val = val_arr[ lower_ind_arr[-1] ]
 
         # Find value corresponding to the upper bound
-        upper_ind_arr = index_array[posterior_1D_CDF > upper_prop]
+        upper_ind_arr = index_array[cdf_1D > upper_prop]
         if upper_ind_arr.size == 1:
             # The last CDF value (1) is the only value above the upper bound
             upper_val = np.inf # Indicate that we don't have an upper bound
@@ -353,15 +352,16 @@ def make_single_parameter_estimate(param_name, val_arr, pdf_1D):
     if pdf_1D[-1] > pdf_1D[-2]:
         out_dict["n_local_maxima"] += 1
 
-    # Now check the ends to see if the posterior is up against the bounds:
+    # Check if the mass of probabiltiy is at an edge of the parameter space:
     # Lower bound: Check 3rd value of CDF (the 1st is 0 by design)
-    out_dict["P(lower)"] = posterior_1D_CDF[2]
+    out_dict["P(lower)"] = cdf_1D[2]
     out_dict["P(lower)>50%?"] = bool_map[ (out_dict["P(lower)"] > 0.5) ]
     out_dict["Est_at_lower?"] = bool_map[ (est_ind <= 2) ]
     # Upper bound: Check 3rd-last value of CDF (the last is 1 by design)
-    out_dict["P(upper)"] = 1.0 - posterior_1D_CDF[-3]
+    out_dict["P(upper)"] = 1.0 - cdf_1D[-3]
     out_dict["P(upper)>50%?"] = bool_map[ (out_dict["P(upper)"] > 0.5) ]
-    out_dict["Est_at_upper?"] = bool_map[ (est_ind >= posterior_1D_CDF.size - 4) ]
+    out_dict["Est_at_upper?"] = bool_map[ (est_ind >= cdf_1D.size - 4) ]
+    
     return out_dict
 
 
@@ -369,7 +369,7 @@ def make_single_parameter_estimate(param_name, val_arr, pdf_1D):
 class NB_Result(object):
     """
     Class to hold the NebulaBayes results including the likelihood, prior and
-    posterior, marginalised posteriors and parameter estimates.
+    posterior, marginalised PDFs and parameter estimates.
     An instance of this class is returned to the user each time NebulaBayes is
     run.
     """

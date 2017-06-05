@@ -183,6 +183,8 @@ class ND_PDF_Plotter(object):
             ax_k.set_visible(True)  # turn this axis back on
             plt.sca(ax_k)
             pdf_1D =  NB_nd_pdf.marginalised_1D[param]
+            if pdf_1D.min() < 0:  # Ensure the PDF is non-negative
+                raise ValueError("The 1D PDF {0} has a negative value!".format(param))
             ax_k.plot(par_arr_map[param], pdf_1D, color="black", zorder=6)
             # Plot a vertical line to show the parameter estimate (peak of 1D pdf)
             y_lim = (0, 1.14*pdf_1D.max())

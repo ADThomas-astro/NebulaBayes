@@ -109,6 +109,12 @@ def calculate_prior(user_input, DF_obs, grids_dict, grid_rel_err):
         raise ValueError("The input 'prior' must be one of: 'Uniform', a list"
                          " of tuples, or a callable")
 
+    # Check that the prior is sensible:
+    if np.any(~np.isfinite(prior)):
+        raise ValueError("The prior is not entirely finite")
+    if prior.min() < 0:
+        raise ValueError("The prior contains a negative value")
+
     # Return linear prior, which will be normalised later
     return prior
 
