@@ -19,7 +19,7 @@ Adam D. Thomas 2017
 """
 
 
-proj_dir = "/Users/..."
+proj_dir = "/Users/.../"
 grid_file = "/Users/.../MAPPINGS_HII_Grid_DN_GridPP_line_fluxes.csv"
 in_obs_flux = proj_dir + "Obs_data/....csv"
 out_corner_plot_dir = proj_dir + "Plot_results/"
@@ -30,7 +30,7 @@ out_table_dir = out_corner_plot_dir
 # Metadata to use when loading/interpolating the model grid:
 # HII grid
 grid_params  = ["log_P/k", "log_UH", "log_OH"] # Parameter names from grid file header
-interp_shape = [80, 80, 80] # Corresponding number of inteprolated pts in each dimension
+interp_shape = [80, 80, 80] # Corresponding number of interpolated pts in each dimension
 # # AGN grid
 # grid_params = ["E_peak", "UH_at_r_inner", "Press_P/k", "log_OH"]
 # interp_shape = [40]*4
@@ -61,7 +61,8 @@ estimate_table_name  = "{0}_parameter_estimates.csv".format(out_table_dir)
 best_model_table = estimate_table_name.replace("parameter_estimates", "best_model")
 kwargs = {"posterior_plot":posterior_plot_name, "prior_plot":prior_plot_name,
           "estimate_table":estimate_table_name, "best_model_table":best_model_table,
-          "prior":"Uniform", "deredden":False, "obs_wavelengths":line_lambdas}
+          "prior":"Uniform", "deredden":False, "obs_wavelengths":line_lambdas,
+          "norm_line":"Hbeta"}
 
 # Run the model
 Result = NB_Model_1(obs_fluxes, obs_flux_errors, obs_line_names, **kwargs)

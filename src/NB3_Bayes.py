@@ -374,8 +374,8 @@ class NB_Result(object):
     An instance of this class is returned to the user each time NebulaBayes is
     run.
     """
-    def __init__(self, Interpd_grids, DF_obs, ND_PDF_Plotter_1, norm_line,
-                                          deredden, input_prior, line_plot_dir):
+    def __init__(self, Interpd_grids, DF_obs, ND_PDF_Plotter_1, deredden, 
+                                                    input_prior, line_plot_dir):
         """
         Initialise an instance of the class and perform Bayesian parameter
         estimation.
@@ -389,11 +389,11 @@ class NB_Result(object):
         self.Grid_spec = Grid_spec
 
         # Calculate arrays of observed fluxes over the grid (possibly dereddening)
-        self._make_obs_flux_arrays(Interpd_grids, norm_line)
+        self._make_obs_flux_arrays(Interpd_grids, DF_obs.norm_line)
 
         # Calculate the likelihood over the grid:
         print("Calculating likelihood...")
-        raw_likelihood = self._calculate_likelihood(Interpd_grids, norm_line)
+        raw_likelihood = self._calculate_likelihood(Interpd_grids, DF_obs.norm_line)
         self.Likelihood = NB_nd_pdf(raw_likelihood, self, Interpd_grids, DF_obs)
 
         # Calculate the prior over the grid:

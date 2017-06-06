@@ -222,8 +222,8 @@ class NB_Model(object):
         # Create a "NB_Result" object instance, which involves calculating
         # the prior, likelihood and posterior, along with parameter estimates:
         Result = NB3_Bayes.NB_Result(Interpd_grids, DF_obs, ND_PDF_Plotter_1,
-                           norm_line=norm_line, deredden=deredden, 
-                           input_prior=input_prior, line_plot_dir=line_plot_dir)
+                                     deredden=deredden, input_prior=input_prior,
+                                     line_plot_dir=line_plot_dir)
 
         #----------------------------------------------------------------------
         # Outputs
