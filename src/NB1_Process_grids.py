@@ -67,7 +67,15 @@ class NB_Grid(Grid_description):
     def __init__(self, param_names, param_value_arrs):
         """ Initialise """
         super(NB_Grid, self).__init__(param_names, param_value_arrs)
-        self.grids = OD()
+        self.grids = OD()  # We rely on this being ordered
+        # For the raw grids, this "grids" dict holds arrays under the line name
+        # directly.  For the interpolated grids, the "grids" attribute holds
+        # other dicts, named e.g. "No_norm" and "Hbeta_norm", corresponding to
+        # different normalisations.  When we normalise we may lose information
+        # (where the normalising grid has value zero), so we need multiple
+        # copies of the interpolated grids for different normalisations.  Every
+        # time we want a new normalisation, we add another dict (set of grids)
+        # to the "grids" dict.
 
 
 
@@ -200,6 +208,9 @@ def interpolate_flux_arrays(Raw_grids, interpd_shape):
     """
     Interpolate emission line grids, using linear interpolation, and in 
     arbitrary dimensions.
+    We do not normalise the grid fluxes to the norm_line fluxes here (they're
+    normalised just before calculating the likelihood), and we store the
+    interpolated grids under the name "No_norm".
     Note that we require that the spacing in the interpolated grids is uniform,
     becuase we'll be assuming this when integrating to marginalise PDFs, and
     also we'll be using matplotlib.pyplot.imshow to show an image of PDFs on the
@@ -217,6 +228,7 @@ def interpolate_flux_arrays(Raw_grids, interpd_shape):
         val_arrs_interp.append( np.linspace(p_min, p_max, n) )
     
     Interpd_grids = NB_Grid(list(Raw_grids.param_names), val_arrs_interp)
+    Interpd_grids.grids["No_norm"] = OD()
     
     # Check that the interpolated grid has uniform spacing in each dimension:
     for arr in Interpd_grids.param_values_arrs:
@@ -259,42 +271,39 @@ def interpolate_flux_arrays(Raw_grids, interpd_shape):
         # Create function for carrying out the interpolation:
         Interpolator = siRGI(tuple(Raw_grids.param_values_arrs),
                              Raw_grids.grids[emission_line], method="linear") #"nearest")
-        Interpd_grids.grids[emission_line] = Interpolator(param_combos).reshape(interpd_shape)
+        Interpd_grids.grids["No_norm"][emission_line] = Interpolator(param_combos).reshape(interpd_shape)
         # The numpy fancy indexing method might be faster, but is more complex...
+        # I just read that reshaping can in some cases trigger an array copy.
+        # Don't know if that happens here.
 
         # # Using the fancy indexing method:
         # # Create new (emission_line, flux_array) item in dictionary of interpolated grid arrays:
-        # Interpd_grids.grids[emission_line] = np.zeros( interpd_shape )
+        # Interpd_grids.grids["No_norm"][emission_line] = np.zeros( interpd_shape )
         # # Fill the interpolated fluxes into the final grid structure, using "fancy indexing":
-        # Interpd_grids.grids[emission_line][param_fancy_index] = Interpolator(param_combos)
+        # Interpd_grids.grids["No_norm"][emission_line][param_fancy_index] = Interpolator(param_combos)
 
         # # Using "raw index" coords, so assuming square raw grid cells
         # Interpolator = siRGI(tuple([np.arange(s) for s in Raw_grids.shape]),
         #                      Raw_grids.grids[emission_line], method="linear") #"nearest")
-        # Interpd_grids.grids[emission_line] = Interpolator(all_interp_raw_inds).reshape(interpd_shape)
+        # Interpd_grids.grids["No_norm"][emission_line] = Interpolator(all_interp_raw_inds).reshape(interpd_shape)
 
         # # Using another (polynomial) method (2D only):
         # Interpolator = CT2DI(raw_p_combos, Raw_grids.grids[emission_line][inds])
-        # Interpd_grids.grids[emission_line] = Interpolator(param_combos).reshape(interpd_shape)
+        # Interpd_grids.grids["No_norm"][emission_line] = Interpolator(param_combos).reshape(interpd_shape)
 
         # The interpolation should result in an entirely finite grid:
-        assert np.all(np.isfinite(Interpd_grids.grids[emission_line]))
+        assert np.all(np.isfinite(Interpd_grids.grids["No_norm"][emission_line]))
 
-    n_lines = len(Interpd_grids.grids)
-    line_0, arr_0 = list(Interpd_grids.grids.items())[0]
+    n_lines = len(Interpd_grids.grids["No_norm"])
+    line_0, arr_0 = list(Interpd_grids.grids["No_norm"].items())[0]
     print( """Number of bytes in interpolated grid flux arrays: {0} for 1 emission line, 
     {1} total for all {2} lines""".format( arr_0.nbytes, arr_0.nbytes*n_lines,
                                                                       n_lines ) )
 
     # Set negative values to zero: (there shouldn't be any, since we're using
     # linear interpolation)
-    for a in Interpd_grids.grids.values():
+    for a in Interpd_grids.grids["No_norm"].values():
         a[a < 0] = 0
-
-    # We keep track of which line the interpolated grids are normalised to, so
-    # we don't unnecessarily re-normalise. (The user may use different 
-    # "norm_line"s with the same interpolated grid).
-    Interpd_grids.norm_line = None  # Grids un-normalised so far
 
     return Interpd_grids
 

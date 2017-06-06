@@ -111,16 +111,18 @@ class NB_Model(object):
                             (must match names in header of input grid flux table)
         
         Optional keyword arguments which affect the parameter estimation:
-        norm_line:     Both observed and grid fluxes will be normalised to this
-                       line.  Because the likelihood calculation will use fluxes
-                       that are actually ratios to this line, the choice may
-                       affect parameter estimation.  Default: "Hbeta"
-        deredden:      De-redden observed fluxes to match the Balmer decrement
-                       at each interpolated grid point?  Only supported for
-                       norm_line = "Hbeta".  Default: False
+        norm_line: An emission line name.  Observed and grid fluxes will be
+                   normalised to this line.  Because the likelihood calculation
+                   will use fluxes that are actually ratios to this line, the
+                   choice may affect parameter estimation.  Where the model grid
+                   for norm_line has value zero, the normalised grids are set to
+                   zero.  Default: "Hbeta"
+        deredden:  De-redden observed fluxes to match the Balmer decrement at
+                   each interpolated grid point?  Only supported for
+                   norm_line = "Hbeta".  Default: False
         obs_wavelengths: If deredden=True, you must also supply a list of
-                       wavelengths (Angstroems) associated with obs_fluxes.
-                       Default: None
+                   wavelengths (Angstroems) associated with obs_fluxes.
+                   Default: None
         prior:  The prior to use when calculating the posterior.  Either a
                 user-defined function, the string "Uniform", or a list of length
                 at least one. The entries in the list are tuples such as
@@ -168,14 +170,17 @@ class NB_Model(object):
 
         if "norm_line" not in kwargs and "Hbeta" not in obs_emission_lines:
             raise ValueError("Can't normalise by default line 'Hbeta': not "
-                             "found in obs_emission_lines line names")
+                             "found in obs_emission_lines line names.  Maybe "
+                             "set keyword 'norm_line' to another line?")
         norm_line = kwargs.pop("norm_line", "Hbeta") # Default "Hbeta"
         deredden = kwargs.pop("deredden", False) # Default False
         assert isinstance(deredden, bool)
+        if deredden and not all((l in obs_emission_lines) for l in ["Halpha","Hbeta"]):
+            raise ValueError("'Halpha' and 'Hbeta' must be provided for deredden=True")
         obs_wavelengths = kwargs.pop("obs_wavelengths", None) # Default None
         if deredden and (obs_wavelengths is None):
-            raise ValueError("Must supply obs_wavelengths if deredden==True")
-        if (obs_wavelengths is not None) and not deredden:
+            raise ValueError("Must supply obs_wavelengths for deredden=True")
+        if deredden is False and (obs_wavelengths is not None):
             pass # obs_wavelengths is unnecessary but will be checked anyway.
         # Process the input observed data; DF_obs is a pandas DataFrame table
         # where the emission line names index the rows:
@@ -222,28 +227,26 @@ class NB_Model(object):
 
         #----------------------------------------------------------------------
         # Outputs
+        table_kwargs = {"index":True, "float_format":"%.5f"}
         if estimate_table is not None: # Save parameter estimates table?
-            Result.Posterior.DF_estimates.to_csv(estimate_table, index=True,
-                                                            float_format='%.5f')
+            Result.Posterior.DF_estimates.to_csv(estimate_table, **table_kwargs)
         if best_model_table is not None: # Save flux comparison table?
-            Result.Posterior.DF_best.to_csv(best_model_table, index=True,
-                                                            float_format='%.5f')
+            Result.Posterior.DF_best.to_csv(best_model_table, **table_kwargs)
 
         # Plot corner plots if requested:
         pdf_map = { "likelihood" : (likelihood_plot, Result.Likelihood),
                     "prior"      : (prior_plot,      Result.Prior     ),
                     "posterior"  : (posterior_plot,  Result.Posterior )  }
         for pdf_name, (out_image_name, NB_nd_pdf) in pdf_map.items():
-            if out_image_name == None:
-                continue # Only do plotting if an image name was specified:
+            if out_image_name is None:
+                continue # Only do plotting if an image name was specified
+            plot_anno = None
             if table_on_plots is True: # Include a fixed-width text table on image
                 pd.set_option("display.precision", 4)
                 plot_anno = ("Observed fluxes vs. model fluxes at the gridpoint of"
                              "\nparameter best estimates in the "+pdf_name+"\n")
                 plot_anno += str(NB_nd_pdf.DF_best) + "\n\n"
-                plot_anno += r"$\chi^2_r$ = {0:.1f}".format(NB_nd_pdf.chi2)
-            else:
-                plot_anno = None
+                plot_anno += r"$\chi^2_r$ = {0:.1f}".format(NB_nd_pdf.chi2)                
             NB_nd_pdf.Grid_spec.param_display_names = param_display_names
             print("Plotting corner plot for the", pdf_name, "...")
             Result.Plotter(NB_nd_pdf, out_image_name, plot_anno)
@@ -273,21 +276,21 @@ def process_observed_data(obs_fluxes, obs_flux_errors, obs_emission_lines,
         if obs_wavelengths.size != n_measured:
             raise ValueError("obs_wavelengths must have same length as obs_fluxes")
         # Some checks on the input wavelengths:
-        if np.sum( ~np.isfinite(obs_wavelengths) ) > 0: # Any non-finite?
+        if np.any(~np.isfinite(obs_wavelengths)): # Any non-finite?
             raise ValueError("The wavelength for an emission line isn't finite.")
-        if np.sum( obs_wavelengths <= 0 ) != 0: # All positive?
+        if np.any(obs_wavelengths <= 0): # Any non-positive?
             raise ValueError("The wavelength for an emission line not positive.")
 
     # Some checks on the input measured fluxes:
-    if np.sum( ~np.isfinite(obs_fluxes) ) > 0: # Any non-finite?
+    if np.any(~np.isfinite(obs_fluxes)): # Any non-finite?
         raise ValueError("The measured flux for an emission line isn't finite.")
-    if np.sum( obs_fluxes < 0 ) != 0: # Are all flux values are non-negative?
+    if np.any(obs_fluxes < 0): # Any negative?
         raise ValueError("The measured flux for an emission line is negative.")
     
     # Some checks on the input measured flux errors:
-    if np.sum( ~np.isfinite(obs_flux_errors) ) > 0: # Any non-finite?
+    if np.any(~np.isfinite(obs_flux_errors)): # Any non-finite?
         raise ValueError("The flux error for an emission line isn't finite.")
-    if np.sum( obs_flux_errors <= 0 ) != 0: # All positive?
+    if np.any(obs_flux_errors <= 0): # All positive?
         raise ValueError("The flux error for an emission line is not positive.")
 
     # Form the data from the observations into a pandas DataFrame table.
@@ -304,9 +307,12 @@ def process_observed_data(obs_fluxes, obs_flux_errors, obs_emission_lines,
         raise ValueError("'norm_line' {0} not found in input line names".format(
                                                                      norm_line))
     norm_flux = DF_obs.loc[norm_line, "Flux"] * 1.0
+    if norm_flux == 0:
+        raise ValueError("The obs flux for norm_line ({0}) is 0".format(norm_line))
     DF_obs["Flux"] = DF_obs["Flux"].values / norm_flux
     DF_obs["Flux_err"] = DF_obs["Flux_err"].values / norm_flux
     assert np.isclose(DF_obs.loc[norm_line, "Flux"], 1.0) # Ensure normalised
+    DF_obs.norm_line = norm_line  # Store as attribute on DataFrame
 
     return DF_obs
 

@@ -84,8 +84,9 @@ def calculate_prior(user_input, DF_obs, grids_dict, grid_rel_err):
                 (custom user function).
     DF_obs:     The pandas DataFrame table holding the observed fluxes.
     grids_dict: Dictionary that maps line names to nD interpolated flux arrays.
-                These arrays might not yet be normalised, but this doesn't
-                matter if the prior only involves ratios.
+                These interpolated arrays are based on the input grid and
+                haven't been normalised yet, but this doesn't matter if the
+                prior only involves ratios.
     grid_rel_err: The systematic relative error on grid fluxes, as a linear
                   proportion.
     """

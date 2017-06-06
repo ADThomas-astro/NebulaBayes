@@ -219,7 +219,8 @@ class NB_nd_pdf(object):
         DF_best.rename(columns={"Flux":"Obs"}, inplace=True)
 
         inds_max = np.unravel_index(self.nd_pdf.argmax(), self.nd_pdf.shape)
-        grid_fluxes_max = [Interpd_grids.grids[l][inds_max] for l in DF_best.index]
+        normed_grids = Interpd_grids.grids[DF_obs.norm_name + "_norm"]
+        grid_fluxes_max = [normed_grids[l][inds_max] for l in DF_best.index]
         DF_best["Model"] = grid_fluxes_max
         
         if NB_Result.deredden: # If we dereddened the observed fluxes at each gridpoint
@@ -397,7 +398,7 @@ class NB_Result(object):
 
         # Calculate the prior over the grid:
         print("Calculating prior...")
-        raw_prior = calculate_prior(input_prior, DF_obs, Interpd_grids.grids,
+        raw_prior = calculate_prior(input_prior, DF_obs, Interpd_grids.grids["No_norm"],
                                                    Interpd_grids.grid_rel_error)
         self.Prior = NB_nd_pdf(raw_prior, self, Interpd_grids, DF_obs)
 
@@ -411,7 +412,8 @@ class NB_Result(object):
 
     def _make_obs_flux_arrays(self, Interpd_grids, norm_line):
         """
-        Make observed flux arrays covering the entire grid.
+        Make observed flux arrays covering the entire grid, in preparation for
+        calculating the likelihood.
         If requested by the user, the observed fluxes are dereddened to match
         the Balmer decrement everywhere in the grid.  Otherwise the flux value
         for a line is uniform over the n-D grid.
@@ -425,8 +427,8 @@ class NB_Result(object):
                 raise ValueError("Dereddening is only supported for "
                                  "norm_line = 'Hbeta'")
             # Array of Balmer decrements across the grid:
-            grid_BD_arr = Interpd_grids.grids["Halpha"] / Interpd_grids.grids["Hbeta"]
-            # (Grid fluxes may not have been normalised to Hbeta == 1)
+            grid_BD_arr = (Interpd_grids.grids["No_norm"]["Halpha"] /
+                           Interpd_grids.grids["No_norm"]["Hbeta"]    )
             if not np.all(np.isfinite(grid_BD_arr)): # Sanity check
                 raise ValueError("Something went wrong - the array of predicted"
                                  " Balmer decrements over the grid contains a"
@@ -473,23 +475,39 @@ class NB_Result(object):
         obs_flux_arrs = self.obs_flux_arrs
         obs_flux_err_arrs = self.obs_flux_err_arrs
 
-        # Normalise the interpolated grid fluxes if necessary
-        if Interpd_grids.norm_line != norm_line:
-            norm_grid = Interpd_grids.grids[norm_line].copy()
-            # Copy array so it won't become all "1.0" in the middle of normalising!
+        norm_name = norm_line + "_norm"
+        # Normalise the interpolated grid fluxes if necessary (if we don't
+        # already have a dict of grids with the desired normalisation).
+        # When we normalise we may lose information (where the normalising grid
+        # has value zero), so we store the "No_norm" dict of grids to be able
+        # to normalise on the fly without this problem.  We store a few copies
+        # of the interpolated grids for different normalisations to try to avoid
+        # normalising interpolated grids on every call (maybe this is a waste
+        # of effort, I don't know...).  When we want a new normalisation, we add
+        # another dict to the "grids" dict.
+        if norm_name not in Interpd_grids.grids:
+            print("Normalising grids to {0}...".format(norm_line))
+            Interpd_grids.grids[norm_name] = OD() # New dict of grids
+            norm_grid = Interpd_grids.grids["No_norm"][norm_line]#.copy()
+            # Note: copy norm_grid so it won't become all "1.0" in the middle of
+            # normalising if we're normalising the same set of grids (we're not)
             bad = (norm_grid == 0) # For when we divide by norm_grid
-            for line in Interpd_grids.grids:
-                Interpd_grids.grids[line] /= norm_grid  # In-place division
+            for line, grid in Interpd_grids.grids["No_norm"].items():
+                Interpd_grids.grids[norm_name][line] = grid / norm_grid
                 # Replace any NaNs we produced by dividing by zero:
-                Interpd_grids.grids[line][bad] = 0
-            Interpd_grids.norm_line = norm_line # Store for later reference
+                Interpd_grids.grids[norm_name][line][bad] = 0
+            if len(Interpd_grids.grids) > 3:
+                # Don't store too many copies of the interpolated grids for
+                # different normalisations - this might take a lot of memory
+                oldest_norm = list(Interpd_grids.grids.keys())[1]
+                Interpd_grids.grids.popitem(oldest_norm)
 
         # Initialise log likelihood with 0 everywhere
         log_likelihood = np.zeros(Interpd_grids.shape, dtype="float")
         # # Initialise linear likelihood with 1 everywhere
         # likelihood = np.ones(Interpd_grids.shape, dtype="float")
         for i, line in enumerate(self.DF_obs.index):
-            pred_flux_i = Interpd_grids.grids[line]
+            pred_flux_i = Interpd_grids.grids[norm_name][line]
             obs_flux_i = obs_flux_arrs[i]
             obs_flux_err_i = obs_flux_err_arrs[i]
             assert obs_flux_i.shape == pred_flux_i.shape
