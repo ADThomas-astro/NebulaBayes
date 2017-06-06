@@ -219,7 +219,7 @@ class NB_nd_pdf(object):
         DF_best.rename(columns={"Flux":"Obs"}, inplace=True)
 
         inds_max = np.unravel_index(self.nd_pdf.argmax(), self.nd_pdf.shape)
-        normed_grids = Interpd_grids.grids[DF_obs.norm_name + "_norm"]
+        normed_grids = Interpd_grids.grids[DF_obs.norm_line + "_norm"]
         grid_fluxes_max = [normed_grids[l][inds_max] for l in DF_best.index]
         DF_best["Model"] = grid_fluxes_max
         
@@ -483,10 +483,10 @@ class NB_Result(object):
         # to normalise on the fly without this problem.  We store a few copies
         # of the interpolated grids for different normalisations to try to avoid
         # normalising interpolated grids on every call (maybe this is a waste
-        # of effort, I don't know...).  When we want a new normalisation, we add
+        # of memory, I don't know...).  When we want a new normalisation, we add
         # another dict to the "grids" dict.
         if norm_name not in Interpd_grids.grids:
-            print("Normalising grids to {0}...".format(norm_line))
+            # print("Normalising grids to {0}...".format(norm_line))
             Interpd_grids.grids[norm_name] = OD() # New dict of grids
             norm_grid = Interpd_grids.grids["No_norm"][norm_line]#.copy()
             # Note: copy norm_grid so it won't become all "1.0" in the middle of
