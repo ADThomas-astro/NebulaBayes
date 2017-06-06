@@ -304,7 +304,7 @@ def process_observed_data(obs_fluxes, obs_flux_errors, obs_emission_lines,
 
     # Normalise the fluxes:
     if norm_line not in DF_obs.index.values:
-        raise ValueError("'norm_line' {0} not found in input line names".format(
+        raise ValueError("norm_line '{0}' not found in input line names".format(
                                                                      norm_line))
     norm_flux = DF_obs.loc[norm_line, "Flux"] * 1.0
     if norm_flux == 0:
