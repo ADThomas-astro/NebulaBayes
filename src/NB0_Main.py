@@ -75,15 +75,21 @@ class NB_Model(object):
         """
         # Initialise and do some checks...
         print("Initialising NebulaBayes model...")
+        n_params = len(grid_params)
+        if len(set(grid_params)) != n_params: # Parameter names non-unique?
+            raise ValueError("grid_params are not all unique")
+        if len(set(lines_list)) != len(lines_list): # Line names non-unique?
+            raise ValueError("Line names in lines_list are not all unique")
 
-        # Determine if a custom interpolated grid shape was specified:
-        interpd_grid_shape = kwargs.pop("interpd_grid_shape", [15]*len(grid_params))
-        if len(interpd_grid_shape) != len(grid_params):
-            raise ValueError("interpd_grid_shape should contain exactly "
-                             "one integer for each parameter" )
+        # Interpolated grid shape (default: [15, 15, ..., 15])
+        interpd_grid_shape = kwargs.pop("interpd_grid_shape", [15] * n_params)
+        if len(interpd_grid_shape) != n_params:
+            raise ValueError("interpd_grid_shape has wrong length: needs "
+                             "exactly one integer for each parameter")
 
-        grid_rel_error = kwargs.pop("grid_error", 0.35)
-        assert 0 < grid_rel_error < 1
+        grid_rel_error = kwargs.pop("grid_error", 0.35) # Default: 0.35
+        if not 0 < grid_rel_error < 1:
+            raise ValueError("grid_error must be between 0 and 1")
 
         # Are there any remaining keyword arguments that weren't used?
         if len(kwargs) > 0:
@@ -266,35 +272,37 @@ def process_observed_data(obs_fluxes, obs_flux_errors, obs_emission_lines,
     """
     obs_fluxes = np.asarray(obs_fluxes, dtype=float) # Ensure numpy array
     obs_flux_errors = np.asarray(obs_flux_errors, dtype=float)
-    # Check measured data inputs all have the same length:
+    # Check measured data inputs:
     n_measured = len(obs_emission_lines)
     if (obs_fluxes.size != n_measured) or (obs_flux_errors.size != n_measured):    
-        raise ValueError("Input arrays obs_fluxes, obs_flux_errors and " 
+        raise ValueError("Inputs obs_fluxes, obs_flux_errors and " 
                          "obs_emission_lines don't all have the same length.")
+    if len(set(obs_emission_lines)) != n_measured:
+        raise ValueError("obs_emission_lines line names are not all unique")
     if obs_wavelengths is not None:
         obs_wavelengths = np.asarray(obs_wavelengths, dtype=float)
         if obs_wavelengths.size != n_measured:
             raise ValueError("obs_wavelengths must have same length as obs_fluxes")
-        # Some checks on the input wavelengths:
+        # Check input wavelengths:
         if np.any(~np.isfinite(obs_wavelengths)): # Any non-finite?
             raise ValueError("The wavelength for an emission line isn't finite.")
         if np.any(obs_wavelengths <= 0): # Any non-positive?
             raise ValueError("The wavelength for an emission line not positive.")
 
-    # Some checks on the input measured fluxes:
+    # Check input measured fluxes:
     if np.any(~np.isfinite(obs_fluxes)): # Any non-finite?
         raise ValueError("The measured flux for an emission line isn't finite.")
     if np.any(obs_fluxes < 0): # Any negative?
         raise ValueError("The measured flux for an emission line is negative.")
     
-    # Some checks on the input measured flux errors:
+    # Check input measured flux errors:
     if np.any(~np.isfinite(obs_flux_errors)): # Any non-finite?
         raise ValueError("The flux error for an emission line isn't finite.")
     if np.any(obs_flux_errors <= 0): # All positive?
         raise ValueError("The flux error for an emission line is not positive.")
 
     # Form the data from the observations into a pandas DataFrame table.
-    obs_dict = OD([("Line",obs_emission_lines)])
+    obs_dict = OD([("Line", obs_emission_lines)])
     if obs_wavelengths is not None: # Leave out of DataFrame if not provided
         obs_dict["Wavelength"] = obs_wavelengths
     obs_dict["Flux"] = obs_fluxes
@@ -313,6 +321,8 @@ def process_observed_data(obs_fluxes, obs_flux_errors, obs_emission_lines,
     DF_obs["Flux_err"] = DF_obs["Flux_err"].values / norm_flux
     assert np.isclose(DF_obs.loc[norm_line, "Flux"], 1.0) # Ensure normalised
     DF_obs.norm_line = norm_line  # Store as attribute on DataFrame
+    # Note that storing metadata on DataFrames isn't trivial - we may lose the
+    # "norm_line" attribute if we do some common operations on DF_obs.
 
     return DF_obs
 

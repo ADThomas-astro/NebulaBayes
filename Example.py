@@ -15,6 +15,31 @@ An example of how to run NebulaBayes.  NebulaBayes works in python 2 and python 
 For documentation, see the docstrings of the __init__ and __call__ methods of
 the NB_Model class in the module NebulaBayes/src/NB0_Main.py
 
+General suggestions for getting started:
+ 1. NebulaBayes compares a set of observed line fluxes from a single spectrum to
+    a grid of 1D photoionization models.  The assumptions used in the
+    photoionization models need to be compatible with the observations.  E.g.
+    Emission line diagnostics may be used to ensure that e.g. a HII region
+    spectrum is being compared to a HII model grid.
+ 2. Configure the inputs using this example script and the documention, with a
+    uniform prior at first.  Run NebulaBayes.
+ 3. Manually inspect the initial NebulaBayes results to see if they are
+    reasonable.  Are parameter estimates physical, and if they're at the edge of
+    the parameter space is this plausible?  What's the shape of the posterior?
+ 4. The question "Is there a good fit to the data anywhere in the parameter
+    space?" cannot be answered by the NebulaBayes parameter estimates or plots
+    of the posterior PDF.  Inspect the "best model" table to see if observed
+    emission line fluxes are well fit, and which are inconsistent with the
+    "best" model.
+ 5. It may be helpful to iterate to gain a sense of how different choices affect
+    the results, for example by choosing a different set of emission lines, a 
+    different line for normalisation, or a different systematic grid error.
+ 6. Once the results are reasonable, consider using a non-uniform prior.  There
+    might be particular diagnostic line ratios that could help constrain the
+    posterior further.  Is it necessary to depend heavily on a prior to
+    constrain the parameter space?
+
+
 Adam D. Thomas 2017
 """
 
