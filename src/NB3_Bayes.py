@@ -53,19 +53,19 @@ class NB_nd_pdf(object):
         self.Grid_spec = NB_Result.Grid_spec
         # Add self.marginalised_2d and self.marginalised_1d attributes and
         # normalise the self.nd_pdf attribute:
-        self.marginalise_pdf()
+        self._marginalise_pdf()
         # Make a parameter estimate table based on this nd_pdf
-        self.make_parameter_estimate_table() # add self.DF_estimates attribute
+        self._make_parameter_estimate_table() # add self.DF_estimates attribute
         if DF_obs is not None:
             # Make a table comparing model and observed fluxes for the 'best' model
-            self.make_best_model_table(DF_obs, Interpd_grids, NB_Result)
+            self._make_best_model_table(DF_obs, Interpd_grids, NB_Result)
             # We added the self.DF_best attribute
             # Calculate chi2 for the 'best' model (add self.chi2 attribute):
-            self.calculate_chi2(NB_Result.deredden)
+            self._calculate_chi2(NB_Result.deredden)
 
 
 
-    def marginalise_pdf(self):
+    def _marginalise_pdf(self):
         """
         Calculate normalised 1D and 2D marginalised pdfs for all possible
         combinations of parameters.
@@ -163,7 +163,7 @@ class NB_nd_pdf(object):
 
 
 
-    def make_parameter_estimate_table(self):
+    def _make_parameter_estimate_table(self):
         """
         Do parameter estimation for all parameters in the grid.  Where the
         nd_pdf is the posterior, this is the proper Bayesian parameter
@@ -204,7 +204,7 @@ class NB_nd_pdf(object):
 
 
 
-    def make_best_model_table(self, DF_obs, Interpd_grids, NB_Result):
+    def _make_best_model_table(self, DF_obs, Interpd_grids, NB_Result):
         """
         Make a pandas dataframe comparing observed emission line fluxes with
         model fluxes for the model corresponding to the parameter estimates (the
@@ -245,7 +245,7 @@ class NB_nd_pdf(object):
 
 
 
-    def calculate_chi2(self, deredden):
+    def _calculate_chi2(self, deredden):
         """
         Calculate a chi^2 value which describes how well the model corresponding
         to the parameter best estimates matches the observations.
@@ -288,7 +288,7 @@ def make_single_parameter_estimate(param_name, val_arr, pdf_1D):
     pdf_1D: 1D numpy array of the marginalised 1D pdf for the parameter
             param_name; the pdf values correspond to the parameter values listed
             in val_arr.
-    Returns a dictionary.  See "make_parameter_estimate_table" for contents.
+    Returns a dictionary.  See "_make_parameter_estimate_table" for contents.
     """
     if np.any(~np.isfinite(pdf_1D)):
         raise ValueError("The 1D pdf for {0} is not all finite".format(param_name))

@@ -80,6 +80,9 @@ class NB_Model(object):
             raise ValueError("grid_params are not all unique")
         if len(set(lines_list)) != len(lines_list): # Line names non-unique?
             raise ValueError("Line names in lines_list are not all unique")
+        if len(lines_list) < 2:
+            raise ValueError("At least two modelled lines required (one is for "
+                                                                 "normalising)")
 
         # Interpolated grid shape (default: [15, 15, ..., 15])
         interpd_grid_shape = kwargs.pop("interpd_grid_shape", [15] * n_params)
@@ -279,6 +282,9 @@ def process_observed_data(obs_fluxes, obs_flux_errors, obs_emission_lines,
                          "obs_emission_lines don't all have the same length.")
     if len(set(obs_emission_lines)) != n_measured:
         raise ValueError("obs_emission_lines line names are not all unique")
+    if n_measured < 2:
+        raise ValueError("At least two observed lines are required (one is for "
+                                                                 "normalising)")
     if obs_wavelengths is not None:
         obs_wavelengths = np.asarray(obs_wavelengths, dtype=float)
         if obs_wavelengths.size != n_measured:
