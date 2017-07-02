@@ -3,13 +3,10 @@ from collections import OrderedDict as OD
 import itertools # For Cartesian product
 import numpy as np  # Core numerical library
 import pandas as pd # For tables ("DataFrame"s)
-# For interpolating an n-dimensional regular grid:
-from scipy.interpolate import RegularGridInterpolator as siRGI
-# from scipy.interpolate import CloughTocher2DInterpolator as CT2DI
 
 
 """
-This module contains functions to load the model grid database table, constuct
+This module contains code to load the model grid database table, constuct
 model flux arrays, and interpolate those arrays to higher resolution.
 
 Adam D. Thomas 2015 - 2017
@@ -235,76 +232,244 @@ def interpolate_flux_arrays(Raw_grids, interpd_shape):
         arr_diff = np.diff(arr)
         assert np.allclose(arr_diff, arr_diff[0])
 
-    # A list of all parameter value combinations in the interpolated grid in the
-    # form of a numpy array:
-    param_combos = np.array( list( itertools.product( *val_arrs_interp ) ) )
-
-    # # For a different interpolation approach, using numpy fancy indexing:
-    # # A list of all index combinations for the
-    # # interpolated grid, corresponding to param_combos:
-    # param_index_combos = np.array( list(
-    #         itertools.product( *[np.arange(n) for n in Interpd_grids.shape] ) ) )
-    # # Generate a tuple containing an index array for each grid dimension,
-    # # with each combination of indices (e.g. from the 7th entry in each
-    # # index array) correspond to a param_combos row (e.g. the 7th):
-    # param_fancy_index = tuple(
-    #         [ param_index_combos[:,i] for i in np.arange(Params.n_params) ] )
-    # # This will be used to take advantage of numpy's fancy indexing capability.
-
-    # # We can try doing the interpolation with respect to raw grid indices
-    # # instead of parameter values.  There should only be a difference is we
-    # # do "nearest neighbour" interpolation, which we're not doing...
-    # # Find interpolated gridpoints positions with repect to raw grid indices:
-    # interp_val_raw_inds = []
-    # for n_r, n_i in zip(Raw_grids.shape, interpd_shape):
-    #     interp_val_raw_inds.append( np.linspace(0, n_r - 1, n_i) )
-    # all_interp_raw_inds = tuple( np.array(list(itertools.product(
-    #                                         *interp_val_raw_inds)) ).T.tolist() )
-
-    # # For a different approach (using a 2D only CloughTocher2DInterpolator):
-    # raw_p_combos = np.array( list( itertools.product( *Raw_grids.param_values_arrs ) ) )
-    # inds = tuple( np.array(list(itertools.product(
-    #                     *[np.arange(n) for n in Raw_grids.shape])) ).T.tolist() )
-
+    # Create class for carrying out the interpolation:
+    Interpolator = RegularGridResampler(Raw_grids.param_values_arrs, Interpd_grids.shape)
+    # Iterate emission lines, doing the interpolation:
     for emission_line, raw_flux_arr in Raw_grids.grids.items():
         print("Interpolating for {0}...".format(emission_line))
-        # Create function for carrying out the interpolation:
-        Interpolator = siRGI(tuple(Raw_grids.param_values_arrs),
-                             Raw_grids.grids[emission_line], method="linear") #"nearest")
-        Interpd_grids.grids["No_norm"][emission_line] = Interpolator(param_combos).reshape(interpd_shape)
-        # The numpy fancy indexing method might be faster, but is more complex...
-        # I just read that reshaping can in some cases trigger an array copy.
-        # Don't know if that happens here.
+        interp_vals, interp_arr = Interpolator(raw_flux_arr)
+        assert np.all(np.isfinite(interp_arr))
+        Interpd_grids.grids["No_norm"][emission_line] = interp_arr
+        for a1, a2 in zip(interp_vals, Interpd_grids.param_values_arrs):
+            assert np.array_equal(a1, a2)
 
-        # # Using the fancy indexing method:
-        # # Create new (emission_line, flux_array) item in dictionary of interpolated grid arrays:
-        # Interpd_grids.grids["No_norm"][emission_line] = np.zeros( interpd_shape )
-        # # Fill the interpolated fluxes into the final grid structure, using "fancy indexing":
-        # Interpd_grids.grids["No_norm"][emission_line][param_fancy_index] = Interpolator(param_combos)
-
-        # # Using "raw index" coords, so assuming square raw grid cells
-        # Interpolator = siRGI(tuple([np.arange(s) for s in Raw_grids.shape]),
-        #                      Raw_grids.grids[emission_line], method="linear") #"nearest")
-        # Interpd_grids.grids["No_norm"][emission_line] = Interpolator(all_interp_raw_inds).reshape(interpd_shape)
-
-        # # Using another (polynomial) method (2D only):
-        # Interpolator = CT2DI(raw_p_combos, Raw_grids.grids[emission_line][inds])
-        # Interpd_grids.grids["No_norm"][emission_line] = Interpolator(param_combos).reshape(interpd_shape)
-
-        # The interpolation should result in an entirely finite grid:
-        assert np.all(np.isfinite(Interpd_grids.grids["No_norm"][emission_line]))
 
     n_lines = len(Interpd_grids.grids["No_norm"])
     line_0, arr_0 = list(Interpd_grids.grids["No_norm"].items())[0]
-    print( """Number of bytes in interpolated grid flux arrays: {0} for 1 emission line, 
-    {1} total for all {2} lines""".format( arr_0.nbytes, arr_0.nbytes*n_lines,
-                                                                      n_lines ) )
+    print("Number of bytes in interpolated grid flux arrays:")
+    print("  {0} for 1 emission line, {1} total for all {2} lines".format(
+                                   arr_0.nbytes, arr_0.nbytes*n_lines, n_lines))
 
     # Set negative values to zero: (there shouldn't be any, since we're using
     # linear interpolation)
     for a in Interpd_grids.grids["No_norm"].values():
-        a[a < 0] = 0
+        np.clip(a, 0., None, out=a)
 
     return Interpd_grids
+
+
+
+class RegularGridResampler(object):
+    """
+    Interpolate a regular grid in arbitrary dimensions to uniform sampling
+    in each dimension ("re-grid the data"), potentially to a higher resolution.
+    Linear interpolation is used.
+
+    The RegularGridResampler is initialised with an input grid shape and an
+    output grid shape, to be ready to interpolate from the input shape to the 
+    output shape.  Each call then provides different grid data to be
+    interpolated; this code is optimised for doing the same interpolation
+    on many different grids of the same shape.
+
+    The input grid data must be defined on a regular grid, but the grid spacing
+    may be uneven.  The output grid will have even spacing, and the "corner"
+    gridpoints and values will be the same as in the input grid.
+
+    -- Parameters --
+    in_points : tuple of ndarray of float, with shapes (m1, ), ..., (mn, )
+        The points defining the regular grid in n dimensions.
+
+    out_shape : tuple of ints
+        The number of evenly spaced interpolated points in each dimension for
+        output interpolated grids
+
+    -- Notes --
+    Based on the same method as is used in the scipy RegularGridInterpolator,
+    which itself is based on code by Johannes Buchner, see
+    https://github.com/JohannesBuchner/regulargrid
+
+    The method is as follows (consider just one interpolation point for now):
+    Iterate over "edges", which are the 2**ndim points around the interpolation
+    point that are relevant to the interpolation.  An "edge" is on the "lower"
+    or "upper" side of the interpolated point in a given dimension.  Each of the
+    2**ndim "edges" contributes to the interpolated value.
+    For each "edge", find the total weight.  The weight for each dimension comes
+    from the distance in that dimension between the interpolation point and the
+    "edge", and the total weight for the "edge" is the product of the weights
+    for each dimension.
+    The final interpolated value is the sum of contributions from each of the
+    2**ndim "edges", where the contribution from each edge is the product of the
+    edge value and its associated total weight.
+
+    In practice the code is vectorised, so we do this for all interpolated
+    points at once, and we use a slightly different order of calculations to
+    minimise the work that needs to be done when repeating the interpolation on
+    new data.
+    """
+    def __init__(self, in_points, out_shape):
+        self.in_points = [np.asarray(p) for p in in_points]
+        self.in_shape = tuple(len(p) for p in in_points)
+        self.ndim = len(in_points)
+        self.out_shape = tuple(out_shape)
+        
+        for p in self.in_points:
+            if p.ndim != 1:
+                raise ValueError("Points arrays must be 1D")
+            if np.any(np.diff(p) <= 0.):
+                raise ValueError("Points arrays must be strictly ascending")
+        if len(out_shape) != self.ndim:
+            raise ValueError("The output array must have the same number of "
+                             "dimensions as the input array")
+        for n_p in out_shape:
+            if n_p < 2:
+                raise ValueError("Each output dimension needs at least 2 points")
+        self.out_points = [np.linspace(p[0], p[-1], n_p) for p,n_p in zip(
+                                                     self.in_points, out_shape)]
+        
+        # Find indices of the lower edge for each interpolated point in each
+        # dimension:
+        self.lower_edge_inds = []
+        # We calculate the distance from the interpolated point to the lower
+        # edge in units where the distance from the lower to the upper edge is 1.
+        self.norm_distances = []
+        # Iterate dimensions:
+        for p_out, p_in in zip(self.out_points, self.in_points):
+            # p_out and p_in are a series of coordinate values for this dimension
+            i_vec = np.searchsorted(p_in, p_out) - 1
+            np.clip(i_vec, 0, p_in.size - 2, out=i_vec)
+            self.lower_edge_inds.append(i_vec)
+            p_in_diff = np.diff(p_in) # p_in_diff[j] is p_in[j+1] - p_in[j]
+            # Use fancy indexing:
+            self.norm_distances.append((p_out - p_in[i_vec]) / p_in_diff[i_vec])
+
+        # Find weights:
+        self._find_weights()
+
+        # Find fancy indices for each edge:
+        prod_arr = self._cartesian_prod(self.lower_edge_inds)
+        fancy_inds_lower = tuple(prod_arr[:,i] for i in range(self.ndim))
+        # The fancy indices are for the edge which corresponds to the "lower"
+        # edge position in each dimension, and will extract the edge values
+        # from the input grid array for every interpolated point at once
+        self.fancy_inds_all = {}
+        for all_j in itertools.product(*[[0,1] for _ in range(self.ndim)]):
+            self.fancy_inds_all[all_j] = tuple(a + j for j,a in zip(all_j,
+                                                              fancy_inds_lower))
+            # We do this calculation here and store the results because it is
+            # surprsingly slow and otherwise we'd need to do it for every
+            # emission line (this approach does take a lot of memory though)
+
+
+    def _find_weights(self):
+        """
+        Find the weights that are necessary for linear interpolation
+        """
+        # Weights for upper edge for interpolation positions in each dimension:
+        weights_upper = self.norm_distances
+        # The norm_distances are from the lower edge.  The weighting is such
+        # that if this distance is large, we favour the upper edge.
+        upper_all = self._cartesian_prod(weights_upper)
+        lower_all = 1 - upper_all
+        # These two arrays have shape (n_iterp_points, ndim)
+        weights_all_l_u = [lower_all, upper_all]
+
+        # Calculate the weight for each edge.  We do this for every interpolated
+        # point at once.
+        # The 2**ndim edges are identified by keys (j0, j1, ..., jn) where
+        # j == 0 is for the lower edge in a dimension; j == 1 is for the upper edge.
+        weights = {} # We'll have a vector of weights for each edge; the vector
+        # has one entry for each interpolated point
+        for all_j in itertools.product(*[[0,1] for _ in range(self.ndim)]):
+            combined_weights = np.ones(upper_all.shape[0]) # Length n_iterp_points
+            for k,j in enumerate(all_j):
+                combined_weights *= weights_all_l_u[j][:,k]
+                # For j = 0 use "lower_all", and for j = 1, use "upper_all".
+                # We multiply the weights for each dimension to obtain the total
+                # weight for this edge for each interpolated point.
+            weights[all_j] = combined_weights
+            # The weights for this edge are in a 1D array, which has a length
+            # equal to the total number of points in the grid.
+
+        self.weights = weights
+
+
+    def _cartesian_prod(self, arrays, out=None):
+        """
+        Generate a cartesian product of input arrays recursively.
+        Copied from:
+        https://stackoverflow.com/questions/1208118/
+                using-numpy-to-build-an-array-of-all-combinations-of-two-arrays
+        https://stackoverflow.com/questions/28684492/
+                                     numpy-equivalent-of-itertools-product?rq=1
+        This method is much faster than constructing a numpy array using
+        itertools.product().
+
+        -- Parameters --
+        arrays : list of array-like
+            1-D arrays to form the cartesian product of.
+        out : ndarray
+            Array to place the cartesian product in.
+
+        -- Returns --
+        out : ndarray
+            2-D array of shape (M, len(arrays)) containing cartesian products
+            formed of input arrays.
+
+        -- Example --
+        >>> self._cartesian_prod(([1, 2, 3], [4, 5], [6, 7]))
+        array([[1, 4, 6],
+               [1, 4, 7],
+               [1, 5, 6],
+               [1, 5, 7],
+               [2, 4, 6],
+               [2, 4, 7],
+               [2, 5, 6],
+               [2, 5, 7],
+               [3, 4, 6],
+               [3, 4, 7],
+               [3, 5, 6],
+               [3, 5, 7]])
+
+        """
+        arrays = [np.asarray(x) for x in arrays]
+        dtype = arrays[0].dtype
+
+        n = np.prod([x.size for x in arrays])
+        if out is None:
+            out = np.zeros((n, len(arrays)), dtype=dtype)
+
+        m = n // arrays[0].size
+        out[:,0] = np.repeat(arrays[0], m)
+        if arrays[1:]:
+            self._cartesian_prod(arrays[1:], out=out[0:m, 1:])
+            for j in range(1, arrays[0].size):
+                out[j*m:(j+1)*m, 1:] = out[0:m, 1:]
+
+        return out
+
+
+    def __call__(self, in_grid_values):
+        """
+        Evaluate linear interpolation to resample a regular grid.
+
+        -- Parameters --
+        in_grid_values : ndarray
+            Array holding the grid values of the grid to be resampled.
+        """
+        if in_grid_values.shape != self.in_shape:
+            raise ValueError("Shape of grid array doesn't match shape of this "
+                             "RegularGridResampler")
+
+        out_values = np.zeros(np.product(self.out_shape)) # 1D for now
+        # Iterate edges, adding the contribution from each edge to the
+        # interpolated values
+        for all_j, edge_weights in self.weights.items():
+            edge_fancy_inds = self.fancy_inds_all[all_j]
+            out_values += in_grid_values[edge_fancy_inds] * edge_weights
+
+        # Reshape the array
+        out_grid_values = out_values.reshape(self.out_shape)
+
+        return self.out_points, out_grid_values
 
 

@@ -11,6 +11,7 @@ import pandas as pd
 this_file_dir_path = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.split(os.path.split(this_file_dir_path)[0])[0])
 from NebulaBayes import NB_Model, __version__
+from NebulaBayes.src.NB1_Process_grids import RegularGridResampler
 
 
 
@@ -24,6 +25,9 @@ test_dir = os.path.join(this_file_dir_path, "test_outputs") # For outputs
 
 
 
+
+
+
 # Note about output structure:
 # print("NB_Model dir:", [i for i in dir(self.NB_Model_1) if i[0] != "_"])
 # ['Interpd_grids', 'Raw_grids']
@@ -33,7 +37,8 @@ test_dir = os.path.join(this_file_dir_path, "test_outputs") # For outputs
 
 
 
-
+###############################################################################
+# Helper functions
 def build_grid(param_range_dict, line_peaks_dict, n_gridpts_list, std_frac=0.25):
     """
     Initialise a grid - create a pandas DataFrame table.  Fluxes for each
@@ -104,6 +109,8 @@ def extract_grid_fluxes_i(DF, p_name_ind_map, line_names):
 
 
 
+###############################################################################
+# Helper class
 class Base_2D_Grid_2_Lines(unittest.TestCase):
     """
     Base class holding setup and cleanup methods to make a 2D grid with only 2
@@ -140,6 +147,8 @@ class Base_2D_Grid_2_Lines(unittest.TestCase):
 
 
 
+###############################################################################
+# Check parameter estimates
 class Test_Obs_from_Peak_Gridpoint_2D_Grid_2_Lines(Base_2D_Grid_2_Lines):
     """
     Test for a grid from Base_2D_Grid_2_Lines:  Take a gridpoint that is at
@@ -252,6 +261,65 @@ class Test_Obs_from_nonPeak_Gridpoint_2D_Grid_2_Lines(Base_2D_Grid_2_Lines):
 
 
 
+
+
+###############################################################################
+# Test the NebulaBayes ND linear interpolation
+
+class test_linear_interpolation_1D(unittest.TestCase):
+    def test_linear_interpolation_simple_1D(self):
+        R1 = RegularGridResampler([[10, 20, 30]], [5])
+        R1_pout, R1_arr = R1(np.array([-100,-200,-300]))
+        assert np.array_equal(R1_pout[0], np.array([ 10.,  15.,  20.,  25.,  30.]))
+        assert np.array_equal(R1_arr, np.array([-100., -150., -200., -250., -300.]))
+
+
+class test_linear_interpolation_2D(unittest.TestCase):
+    def test_linear_interpolation_simple_2D(self):
+        R2 = RegularGridResampler([[10, 20, 30], [8e4, 9e4]], [5,2])
+        R2_pout, R2_arr = R2(np.array([[-100,-2000],
+                                       [-300,-4000],
+                                       [-500,-6000]]))
+        assert np.array_equal(R2_pout[0], np.array([ 10.,  15.,  20.,  25.,  30.]))
+        assert np.array_equal(R2_pout[1], np.array([8e4, 9e4]))
+        assert np.array_equal(R2_arr, np.array([[-100., -2000.],
+                                                [-200., -3000.],
+                                                [-300., -4000.],
+                                                [-400., -5000.],
+                                                [-500., -6000.]]))
+
+class test_linear_interpolation_3D(unittest.TestCase):
+    def test_linear_interpolation_simple_3D(self):
+        R3 = RegularGridResampler([[-2, -1],[10, 20, 30], [8e4, 9e4]], [2, 5, 2])
+        R3_pout, R3_arr = R3(np.array([[[-100, -2000],
+                                        [-300, -4000],
+                                        [-500, -6000]],
+                                       [[-100, -2000],
+                                        [-300, -4000],
+                                        [-500, -6000]] ]))
+        assert np.array_equal(R3_pout[0], np.array([-2, -1]))
+        assert np.array_equal(R3_pout[1], np.array([10.,  15.,  20.,  25.,  30.]))
+        assert np.array_equal(R3_pout[2], np.array([8e4, 9e4]))
+        assert np.array_equal(R3_arr, np.array([[[-100., -2000.],
+                                                 [-200., -3000.],
+                                                 [-300., -4000.],
+                                                 [-400., -5000.],
+                                                 [-500., -6000.]],
+                                                [[-100., -2000.],
+                                                 [-200., -3000.],
+                                                 [-300., -4000.],
+                                                 [-400., -5000.],
+                                                 [-500., -6000.]] ]))
+
+
+###############################################################################
+
+
+
+
+
+
+###############################################################################
 # Ideas for more tests:
 
 # Test in more dimensions, i.e. 3 or 4
@@ -263,7 +331,15 @@ class Test_Obs_from_nonPeak_Gridpoint_2D_Grid_2_Lines(Base_2D_Grid_2_Lines):
 
 # Check that parameter estimates are inside the CIs, and check the flags for this
 
+# Test normalising to different lines, and having enough interpolated grids
+# for the excess ones to be deleted, and checking that they are.
+
 # Check coverage of the code, to see what isn't being run?
+
+
+
+
+
 
 
 
@@ -273,5 +349,5 @@ class Test_Obs_from_nonPeak_Gridpoint_2D_Grid_2_Lines(Base_2D_Grid_2_Lines):
 
 if __name__ == "__main__":
     print("\nTesting NebulaBayes version {0} ...\n".format(__version__))
-    unittest.main()
+    unittest.main(verbosity=2)
 
