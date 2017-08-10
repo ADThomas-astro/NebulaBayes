@@ -1,6 +1,8 @@
 from __future__ import print_function, division
 from collections import OrderedDict as OD
-import itertools # For Cartesian product
+import itertools  # For Cartesian product
+from astropy.io import fits  # For reading FITS binary tables
+from astropy.table import Table  # For FITS table to pandas DataFrame conversion
 import numpy as np  # Core numerical library
 import pandas as pd # For tables ("DataFrame"s)
 
@@ -78,24 +80,27 @@ class NB_Grid(Grid_description):
 
 def initialise_grids(grid_file, grid_params, lines_list, interpd_grid_shape):
     """
-    Initialise grids and return Raw_grids and Interpd_grids.
+    Initialise grids and return Raw_grids and Interpd_grids.  Called when
+    initialising an NB_Model instance.
     The Raw_grids and Interpd_grids objects are instances of the NB_Grid class
     defined above.
-    grid_file:  The filename of an ASCII csv table containing photoionisation
-                model grid fluxes in the form of a database table. Each
-                gridpoint (point in parameter space) is a row in this table.
-                The values of the grid parameters for each row are defined in
-                a column for each parameter.
-                No assumptions are made about the order of the gridpoints
-                (rows) in the table.  Spacing of grid values along an axis
-                may be uneven, but the full grid is required to a be a
-                regular, n-dimensional rectangular grid.  There is a column
-                of fluxes for each modelled emission line.  Model fluxes will
-                be normalised later, when calculating the likelihood.
-                Any non-finite fluxes (e.g. nans) will be set to zero.
+    grid_file: The filename of a csv, FITS or compressed FITS (fits.gz)
+               table of photoionisation model grid fluxes. Each gridpoint
+               (point in parameter space) is a row in this table.  The
+               values of the grid parameters for each row are defined in a
+               column for each parameter.  There is a column of fluxes for
+               each modelled emission line. 
+               No assumptions are made about the order of the gridpoints
+               (rows) in the table.  Spacing of grid values along an axis
+               may be uneven, but the full grid is required to be a regular,
+               n-dimensional rectangular grid.  Unnecessary columns will be
+               ignored but extra rows are not permitted.  Model fluxes will
+               be normalised by NebulaBayes.
+               Any non-finite fluxes (e.g. nans) will be set to zero.
     grid_params: List of the unique names of the grid parameters as strings.
-                 The order is the order of the grid dimensions, i.e. the order
-                 in which arrays in NebulaBayes will be indexed.
+                 This list sets the order of the grid dimensions, i.e. the
+                 order in which arrays in NebulaBayes will be indexed.  The
+                 names must each match a column header in grid_file.
     interpd_grid_shape: A tuple of integers giving the size of each
                     dimension of the interpolated flux grids.  The order of
                     the integers corresponds to the order of parameters in
@@ -103,14 +108,39 @@ def initialise_grids(grid_file, grid_params, lines_list, interpd_grid_shape):
                     dimension.  These values have a major impact on the
                     speed of the grid interpolation.
     """
-    print("Loading input grid table...")
-    # Load database csv table containing the model grid output
-    DF_grid = pd.read_table(grid_file, header=0, delimiter=",")
-    print("Cleaning input grid table...")
+    # Load database table containing the model grid output
+    DF_grid = read_gridfile(grid_file, lines_list)
+    
+    # Construct raw flux grids
+    Raw_grids = construct_raw_grids(DF_grid, grid_params, lines_list)
+
+    # Interpolate flux grids
+    Interpd_grids = interpolate_flux_arrays(Raw_grids, interpd_grid_shape)
+
+    return Raw_grids, Interpd_grids
+
+
+
+def read_gridfile(grid_file, lines_list):
+    """
+    Read the model grid table file, and return a pandas DataFrame.
+    See initialise_grids for more info.
+    """
+    
+    print("Loading input grid table...") 
+    if grid_file.endswith(".csv"):
+        DF_grid = pd.read_table(grid_file, header=0, delimiter=",")
+    elif grid_file.endswith((".fits", ".fits.gz")):
+        BinTableHDU_0 = fits.getdata(grid_file, 0)
+        DF_grid = Table(BinTableHDU_0).to_pandas()
+    else:
+        raise ValueError("grid_file has unknown file extension")
+
+    # print("Cleaning input grid table...")
     # Remove any whitespace from column names
     DF_grid.rename(inplace=True, columns={c:c.strip() for c in DF_grid.columns})
-    for line in lines_list: # Ensure line columns have float dtype
-        DF_grid[line] = pd.to_numeric(DF_grid[line], errors="coerce")
+    for line in lines_list: # Ensure line columns are double precision
+        DF_grid[line] = pd.to_numeric(DF_grid[line], "float64", errors="coerce")
         # We "coerce" errors to NaNs, which will be set to zero
 
     # Clean and check the model data:
@@ -127,15 +157,7 @@ def initialise_grids(grid_file, grid_params, lines_list, interpd_grid_shape):
             raise ValueError("A model flux value for emission line " +
                              line + " is negative.")
 
-    #--------------------------------------------------------------------------
-    # Construct raw flux grids
-    Raw_grids = construct_raw_grids(DF_grid, grid_params, lines_list)
-
-    #--------------------------------------------------------------------------
-    # Interpolate flux grids
-    Interpd_grids = interpolate_flux_arrays(Raw_grids, interpd_grid_shape)
-
-    return Raw_grids, Interpd_grids
+    return DF_grid
 
 
 

@@ -43,16 +43,17 @@ class NB_Model(object):
         Initialise an instance of the NB_Model class.
 
         Required arguments to initialise the NB_Model instance:
-        grid_file: The filename of an ASCII csv table containing photoionisation
-                   model grid fluxes in the form of a database table. Each
-                   gridpoint (point in parameter space) is a row in this table.
-                   The values of the grid parameters for each row are defined in
-                   a column for each parameter.
+        grid_file: The filename of a csv, FITS or compressed FITS (fits.gz)
+                   table of photoionisation model grid fluxes. Each gridpoint
+                   (point in parameter space) is a row in this table.  The
+                   values of the grid parameters for each row are defined in a
+                   column for each parameter.  There is a column of fluxes for
+                   each modelled emission line. 
                    No assumptions are made about the order of the gridpoints
                    (rows) in the table.  Spacing of grid values along an axis
-                   may be uneven, but the full grid is required to a be a
-                   regular, n-dimensional rectangular grid.  There is a column
-                   of fluxes for each modelled emission line.  Model fluxes will
+                   may be uneven, but the full grid is required to be a regular,
+                   n-dimensional rectangular grid.  Unnecessary columns will be
+                   ignored but extra rows are not permitted.  Model fluxes will
                    be normalised by NebulaBayes (see "norm_line" keyword below).
                    Any non-finite fluxes (e.g. nans) will be set to zero.
         grid_params: List of the unique names of the grid parameters as strings.
@@ -60,9 +61,10 @@ class NB_Model(object):
                      order in which arrays in NebulaBayes will be indexed.  The
                      names must each match a column header in grid_file.
         lines_list: List of column names from grid_file corresponding to the
-                    emission lines we'll be using in this NB_Model instance.
+                    emission lines to use in this NB_Model instance (it is not
+                    necessary to load grids for all emission lines into memory).
 
-        Optional additional keyword arguments:
+        Optional keyword arguments:
         interpd_grid_shape: A tuple of integers giving the size of each
                         dimension of the interpolated flux grids.  The order of
                         the integers corresponds to the order of parameters in
