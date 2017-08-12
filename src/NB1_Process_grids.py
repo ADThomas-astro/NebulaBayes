@@ -139,9 +139,9 @@ def read_gridfile(grid_file, lines_list):
     # print("Cleaning input grid table...")
     # Remove any whitespace from column names
     DF_grid.rename(inplace=True, columns={c:c.strip() for c in DF_grid.columns})
-    for line in lines_list: # Ensure line columns are double precision
-        DF_grid[line] = pd.to_numeric(DF_grid[line], "float64", errors="coerce")
-        # We "coerce" errors to NaNs, which will be set to zero
+    for line in lines_list: # Ensure line columns are a numeric data type
+        DF_grid[line] = pd.to_numeric(DF_grid[line], errors="raise")
+        DF_grid[line] = DF_grid[line].astype("float64") # Ensure double precision
 
     # Clean and check the model data:
     for line in lines_list:
