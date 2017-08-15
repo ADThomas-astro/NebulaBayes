@@ -169,7 +169,7 @@ class NB_Model(object):
                           corner plots? Default: True
         line_plot_dir:    A directory; Plots showing the ND PDFs for each line
                           (the PDFs which contribute to the likelihood) are
-                          saved here.  Saving these plots is quite quite slow.
+                          saved here.  Saving these plots is quite slow.
 
         Returns a NB_Result object (defined in src/NB3_Bayes.py), which contains
         the data relevant to the Bayesian parameter estimation.
@@ -211,18 +211,14 @@ class NB_Model(object):
         Interpd_grids.param_display_names = param_display_names
         # Include text "best model" table on posterior corner plots?
         table_on_plots = kwargs.pop("table_on_plots", True) # Default True
-        # Filenames for output corner plot images?  Default None (no plotting)
-        likelihood_plot = kwargs.pop("likelihood_plot", None)
-        prior_plot      = kwargs.pop("prior_plot",      None)
-        posterior_plot  = kwargs.pop("posterior_plot",  None)
-        # Directory name for individual line PDF plots?
-        line_plot_dir  = kwargs.pop("line_plot_dir", None)
+        # Handle directory and file names for the outputs:
+        output_locations = {}
+        for key in ["likelihood_plot", "prior_plot", "posterior_plot",
+                    "line_plot_dir", "estimate_table", "best_model_table"]:
+            output_locations[key] = kwargs.pop(key, None)
+            # Default None means "Don't produce the relevant output"
 
-        # Filenames for output csv tables?  Default None (don't write out table)
-        estimate_table   = kwargs.pop("estimate_table",   None)
-        best_model_table = kwargs.pop("best_model_table", None)
-
-        # Are there any remaining keyword arguments that weren't used?
+        # Any remaining keyword arguments that weren't used?
         if len(kwargs) > 0:
             raise ValueError("Unknown keyword argument(s): " +
                              ", ".join("'{0}'".format(k) for k in kwargs.keys()))
@@ -234,38 +230,37 @@ class NB_Model(object):
         # the prior, likelihood and posterior, along with parameter estimates:
         Result = NB3_Bayes.NB_Result(Interpd_grids, DF_obs, ND_PDF_Plotter_1,
                                      deredden=deredden, input_prior=input_prior,
-                                     line_plot_dir=line_plot_dir)
+                                line_plot_dir=output_locations["line_plot_dir"])
 
         #----------------------------------------------------------------------
-        # Outputs
-        table_kwargs = {"index":True, "float_format":"%.5f"}
-        if estimate_table is not None: # Save parameter estimates table?
-            Result.Posterior.DF_estimates.to_csv(estimate_table, **table_kwargs)
-        if best_model_table is not None: # Save flux comparison table?
-            Result.Posterior.DF_best.to_csv(best_model_table, **table_kwargs)
+        # Write out the results
+        table_map = { "estimate_table"   : Result.Posterior.DF_estimates,
+                      "best_model_table" : Result.Posterior.DF_best }
+        for table_name, DF in table_map.items():
+            out_table_name = output_locations[table_name]
+            if out_table_name is not None:
+                DF.to_csv(out_table_name, index=True, float_format="%.5f")
 
         # Plot corner plots if requested:
-        pdf_map = { "likelihood" : (likelihood_plot, Result.Likelihood),
-                    "prior"      : (prior_plot,      Result.Prior     ),
-                    "posterior"  : (posterior_plot,  Result.Posterior )  }
-        for pdf_name, (out_image_name, NB_nd_pdf) in pdf_map.items():
+        ndpdf_map = { "likelihood" : Result.Likelihood, "prior" : Result.Prior,
+                      "posterior"  : Result.Posterior }
+        for ndpdf_name, NB_nd_pdf in ndpdf_map.items():
+            out_image_name = output_locations[ndpdf_name + "_plot"]
             if out_image_name is None:
-                continue # Only do plotting if an image name was specified
+                continue  # Only do plotting if an image name was specified
             plot_anno = None
             if table_on_plots is True: # Include a fixed-width text table on image
                 pd.set_option("display.precision", 4)
                 plot_anno = ("Observed fluxes vs. model fluxes at the gridpoint of"
-                             "\nparameter best estimates in the "+pdf_name+"\n")
+                             "\nparameter best estimates in the "+ndpdf_name+"\n")
                 plot_anno += str(NB_nd_pdf.DF_best) + "\n\n"
                 plot_anno += r"$\chi^2_r$ = {0:.1f}".format(NB_nd_pdf.chi2)                
             NB_nd_pdf.Grid_spec.param_display_names = param_display_names
-            print("Plotting corner plot for the", pdf_name, "...")
+            print("Plotting corner plot for the", ndpdf_name, "...")
             Result.Plotter(NB_nd_pdf, out_image_name, plot_anno)
 
-        
         print("NebulaBayes finished.")
         return Result
-
 
 
 
