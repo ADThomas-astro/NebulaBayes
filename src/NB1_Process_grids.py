@@ -184,8 +184,12 @@ def construct_raw_grids(DF_grid, grid_params, lines_list):
     # (This is equivalent to checking that we have a rectangular grid, e.g.
     # without missing values.  The spacing does not need to be uniform.)
     if Raw_grids.n_gridpoints != len(DF_grid):
-        raise ValueError("The input model grid table does not " + 
-                         "have a consistent length.")
+        raise ValueError("The input model grid table length of "
+                "{0} is not equal to the product of the ".format(len(DF_grid)) +
+                "number of values of each parameter "
+                "({0})\nParameter values:\n".format(Raw_grids.n_gridpoints) +
+                "\n".join("{0} ({1} values): {2}".format(p, len(vals), vals)
+                           for p, vals in zip( grid_params,param_val_arrs_raw)))
 
     #--------------------------------------------------------------------------
     # Construct the raw model grids as a multidimensional array for each line
