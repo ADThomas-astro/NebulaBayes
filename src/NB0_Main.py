@@ -15,65 +15,71 @@ Australian National University
 2015 - 2017
 
 The NB_Model class in this module is the entry point for performing Bayesian
-parameter estimation.  The data are a
-set of emission line flux measurements with associated errors.  The model
-is a photoionisation model, varied in a grid over n=2 or more parameters,
-input as n-dimensional grids of fluxes for each emission line.  The model is
-for an HII region or AGN Narrow Line Region, for example.  The measured
-and modelled emission line fluxes are compared to calculate a "likelihood"
-probability distribution, before Bayes' Theorem is applied to produce an
-n-dimensional "posterior" probability distribution for the values of the
-parameters.  The parameter values are estimated from 1D marginalised
+parameter estimation.  The data are a set of emission line flux measurements
+with associated errors.  The model is a photoionisation model, varied in a grid
+over n=2 or more parameters, input as n-dimensional grids of fluxes for each
+emission line.  The model is for an HII region or AGN Narrow Line Region, for
+example.
+The measured and modelled emission line fluxes are compared to calculate a
+"likelihood" probability distribution, before Bayes' Theorem is applied to
+produce an n-dimensional "posterior" probability distribution for the values of
+the parameters.  The parameter values are estimated from 1D marginalised
 posteriors.
 
 NebulaBayes is heavily based on IZI (Blanc+2015).
-
 """
 
 
 
 class NB_Model(object):
     """
-    Primary class for working with NebulaBayes.  To use, initialise a class instance
-    with a grid and then call the instance to run Bayesian parameter estimation.
+    Primary class for working with NebulaBayes.  To use, initialise a class
+    instance with a model grid and then call the instance one or more times to
+    run Bayesian parameter estimation.
     """
 
-    def __init__(self, grid_file, grid_params, lines_list, **kwargs):
+    def __init__(self, input_grid, grid_params, lines_list, **kwargs):
         """
         Initialise an instance of the NB_Model class.
 
-        Required arguments to initialise the NB_Model instance:
-        grid_file: The filename of a csv, FITS or compressed FITS (fits.gz)
-                   table of photoionisation model grid fluxes. Each gridpoint
-                   (point in parameter space) is a row in this table.  The
-                   values of the grid parameters for each row are defined in a
-                   column for each parameter.  There is a column of fluxes for
-                   each modelled emission line. 
-                   No assumptions are made about the order of the gridpoints
-                   (rows) in the table.  Spacing of grid values along an axis
-                   may be uneven, but the full grid is required to be a regular,
-                   n-dimensional rectangular grid.  Unnecessary columns will be
-                   ignored but extra rows are not permitted.  Model fluxes will
-                   be normalised by NebulaBayes (see "norm_line" keyword below).
-                   Any non-finite fluxes (e.g. nans) will be set to zero.
-        grid_params: List of the unique names of the grid parameters as strings.
-                     This list sets the order of the grid dimensions, i.e. the
-                     order in which arrays in NebulaBayes will be indexed.  The
-                     names must each match a column header in grid_file.
-        lines_list: List of column names from grid_file corresponding to the
-                    emission lines to use in this NB_Model instance (it is not
-                    necessary to load grids for all emission lines into memory).
+        Parameters
+        ----------
+        input_grid : str or pandas DataFrame
+            The table of photoionisation model grid fluxes, given as either the
+            filename of a csv, FITS (.fits) or compressed FITS (fits.gz) file,
+            or a pandas DataFrame instance.
+            Each gridpoint (point in parameter space) is a row in the table.
+            There is a column for each parameter; the location of a gridpoint is
+            defined by these parameter values.  There is a column of fluxes for
+            each modelled emission line. 
+            No assumptions are made about the order of the gridpoints (rows) or
+            the order of the columns in the table.  Unnecessary columns will be
+            ignored, but the number of rows must be exact - the grid must be
+            rectangular with exactly one gridpoint for every possible
+            combination of included parameter values.  Note that the sampling
+            of a parameter (spacing of gridpoints) may be uneven.
+            Model fluxes will be normalised by NebulaBayes (see "norm_line"
+            parameter to __call__ below).  Any non-finite fluxes (e.g. nans)
+            will be set to zero.
+        grid_params : list of strings
+            The names of the grid parameters.  This list sets the order of the
+            grid dimensions, i.e. the order in which arrays in NebulaBayes will
+            be indexed.  Each name must match a column header in the input_grid.
+        lines_list : list of strings
+            The emission lines to use in this NB_Model instance.  Each name must
+            match a column name in input_grid.  Unused lines may be excluded.
 
-        Optional keyword arguments:
-        interpd_grid_shape: A tuple of integers giving the size of each
-                        dimension of the interpolated flux grids.  The order of
-                        the integers corresponds to the order of parameters in
-                        grid_params.  The default is 15 gridpoints along each
-                        dimension.  These values have a major impact on the
-                        speed of the grid interpolation.
-        grid_error:     The systematic relative error on grid fluxes, as a
-                        linear proportion.  Default is 0.35 (average of errors
-                        of 0.15 dex above and below).
+        Optional parameters
+        -------------------
+        interpd_grid_shape : tuple of integers, optional
+            The size of each dimension of the interpolated flux grids, default
+            (15,)*ndim.  The order of the integers corresponds to the order of
+            parameters in grid_params.  These values have a major impact on the
+            speed of the grid interpolation.
+        grid_error : float between 0 and 1, optional
+            The systematic relative error on grid fluxes, as a linear
+            proportion.  Default is 0.35 (average of errors of 0.15 dex above
+            and below).
         """
         # Initialise and do some checks...
         print("Initialising NebulaBayes model...")
@@ -102,7 +108,7 @@ class NB_Model(object):
                                       ", ".join(str(k) for k in kwargs.keys()) )
 
         # Call grid initialisation:
-        Raw_grids, Interpd_grids = NB1_Process_grids.initialise_grids(grid_file,
+        Raw_grids, Interpd_grids = NB1_Process_grids.initialise_grids(input_grid,
                                     grid_params, lines_list, interpd_grid_shape)
         Raw_grids.grid_rel_error = grid_rel_error
         Interpd_grids.grid_rel_error = grid_rel_error
@@ -115,64 +121,80 @@ class NB_Model(object):
         """
         Run NebulaBayes Bayesian parameter estimation using the interpolated
         grids stored in this NB_Model object.
-        Required positional arguments:
-        obs_fluxes:         list or array of observed emission-line fluxes
-        obs_flux_errors:    list or array of corresponding measurement errors
-        obs_emission_lines: list of corresponding emission line names as strings
-                            (must match names in header of input grid flux table)
         
-        Optional keyword arguments which affect the parameter estimation:
-        norm_line: An emission line name.  Observed and grid fluxes will be
-                   normalised to this line.  Because the likelihood calculation
-                   will use fluxes that are actually ratios to this line, the
-                   choice may affect parameter estimation.  Where the model grid
-                   for norm_line has value zero, the normalised grids are set to
-                   zero.  Default: "Hbeta"
-        deredden:  De-redden observed fluxes to match the Balmer decrement at
-                   each interpolated grid point?  Only supported for
-                   norm_line = "Hbeta".  Default: False
-        obs_wavelengths: If deredden=True, you must also supply a list of
-                   wavelengths (Angstroems) associated with obs_fluxes.
-                   Default: None
-        prior:  The prior to use when calculating the posterior.  Either a
-                user-defined function, the string "Uniform", or a list of length
-                at least one. The entries in the list are tuples such as
-                ("SII6716","SII6731") to indicate a line ratio to use as a prior.
-                The listed line-ratio priors will all be multiplied together
-                (weighted equally) and then normalised before being used in
-                Bayes' Theorem.  See the code file "src/NB2_Prior.py" for the
-                details of the prior calculations, including to see the required
-                inputs and output for a user-defined prior function.
-                Default: "Uniform"
+        Parameters
+        ----------
+        obs_fluxes : list of floats
+            The observed emission-line fluxes
+        obs_flux_errors : list of floats
+            The corresponding measurement errors
+        obs_emission_lines : list of str
+            The corresponding emission line names, matching names in the header
+            of the input grid flux table
         
-        Optional additional keyword arguments regarding outputs (an output is
-        only produced if a value is provided for the relevant keyword):
-        param_display_names:  A dictionary of parameter display names for grid
-                          parameters, for plotting purposes.  The dictionary
-                          keys are parameter names from the grid file, and the
-                          corresponding values are the "display" names.  The
-                          display names can use markup (e.g. r"$\alpha$") in
-                          order to include e.g. Greek letters.  Not all of the
-                          grid parameters need to be in param_display_names;
-                          raw parameter names will be used by default.
-        posterior_plot:   A filename for saving out a results image of 2D and
-                          1D marginalised posterior pdfs. The image file type is
-                          specified by the file extension.
-        prior_plot:       A filename; as for posterior_plot but for the prior
-        likelihood_plot:  A filename; as for posterior_plot but for the likelihood
-        estimate_table:   A filename for a csv file providing Bayesian parameter
-                          estimates for the grid parameters
-        best_model_table: A filename for a csv file which will compare observed
-                          and model fluxes at the point defined by the Bayesian
-                          parameter estimates.
-        table_on_plots:   Include a "best model" flux comparison table on the
-                          corner plots? Default: True
-        line_plot_dir:    A directory; Plots showing the ND PDFs for each line
-                          (the PDFs which contribute to the likelihood) are
-                          saved here.  Saving these plots is quite slow.
+        Optional parameters - for parameter estimation
+        ----------------------------------------------
+        norm_line : str
+            Observed and grid fluxes will be normalised to this emission line.
+            Because the likelihood calculation will use fluxes that are actually
+            ratios to this line, the choice may affect parameter estimation.
+            Where the model grid for norm_line has value zero, the normalised
+            grids are set to zero.  Default: "Hbeta"
+        deredden : bool
+            De-redden observed fluxes to match the Balmer decrement at each
+            interpolated grid point?  Only supported for norm_line = "Hbeta".
+            Default: False
+        obs_wavelengths : list of floats
+            If deredden=True, you must also supply a list of wavelengths
+            (Angstroems) associated with obs_fluxes.  Default: None
+        prior : list of ("line1","line2") tuples, or "Uniform", or a callable
+            The prior to use when calculating the posterior.  Either a user-
+            defined function, the string "Uniform", or a list of length at least
+            one. Entries in the list are tuples such as ("SII6716","SII6731") to
+            specify a line ratio to use as a prior.  The listed line-ratio
+            priors will all be multiplied together (weighted equally) and then
+            normalised before being used in Bayes' Theorem.  See the code file
+            "src/NB2_Prior.py" for the details of the prior calculations,
+            including to see the required inputs and output for a user-defined
+            prior function.  Default: "Uniform"
 
-        Returns a NB_Result object (defined in src/NB3_Bayes.py), which contains
-        the data relevant to the Bayesian parameter estimation.
+        Optional parameters - outputs
+        -----------------------------
+        Provide a value for a keyword to produce the corresponding output.
+        param_display_names : dict
+            Parameter display names for grid parameters, for plotting purposes.
+            The dictionary keys are parameter names from the grid file, and the
+            corresponding values are the "display" names.  The display names can
+            include markup (e.g. r"$\alpha$") in order to include e.g. Greek
+            letters.  Not all of the grid parameters need to be in
+            param_display_names; raw parameter names will be used by default.
+        posterior_plot : str
+            A filename for a results image of 2D and 1D marginalised posterior
+            PDFs. The image file type is specified by the file extension.
+        prior_plot : str
+            As for posterior_plot but for the prior
+        likelihood_plot : str
+            As for posterior_plot but for the likelihood
+        estimate_table : str
+            A filename for a csv file containing Bayesian parameter estimates
+            for the grid parameters
+        best_model_table : str
+            A filename for a csv file which will compare observed and model
+            fluxes at the point defined by the Bayesian parameter estimates.
+        table_on_plots : bool
+            Include a "best model" flux comparison table on the 'corner' plots
+            (i.e. plots of 1D and 2D marginalised PDFs)?  Default: True
+        line_plot_dir : str
+            A directory; 'corner' plots showing the nD PDFs for each line (the
+            PDFs which contribute to the likelihood) are saved here.  Saving
+            these plots is quite slow.  The plots show the constraints provided
+            by each line.
+
+        Returns
+        -------
+        NB_Result
+            Object (defined in src/NB3_Bayes.py), which contains the data
+            relevant to the Bayesian parameter estimation.
         """
         print("Running NebulaBayes...")
 
@@ -195,7 +217,7 @@ class NB_Model(object):
             pass # obs_wavelengths is unnecessary but will be checked anyway.
         # Process the input observed data; DF_obs is a pandas DataFrame table
         # where the emission line names index the rows:
-        DF_obs = process_observed_data(obs_fluxes, obs_flux_errors,
+        DF_obs = _process_observed_data(obs_fluxes, obs_flux_errors,
                        obs_emission_lines, obs_wavelengths, norm_line=norm_line)
 
         input_prior = kwargs.pop("prior", "Uniform") # Default "Uniform"
@@ -264,7 +286,7 @@ class NB_Model(object):
 
 
 
-def process_observed_data(obs_fluxes, obs_flux_errors, obs_emission_lines,
+def _process_observed_data(obs_fluxes, obs_flux_errors, obs_emission_lines,
                                                     obs_wavelengths, norm_line):
     """
     Error-check the input observed emission line data, form it into a pandas
