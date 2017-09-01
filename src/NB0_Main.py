@@ -38,13 +38,13 @@ class NB_Model(object):
     run Bayesian parameter estimation.
     """
 
-    def __init__(self, input_grid, grid_params, lines_list, **kwargs):
+    def __init__(self, grid_table, grid_params, lines_list, **kwargs):
         """
         Initialise an instance of the NB_Model class.
 
         Parameters
         ----------
-        input_grid : str or pandas DataFrame
+        grid_table : str or pandas DataFrame
             The table of photoionisation model grid fluxes, given as either the
             filename of a csv, FITS (.fits) or compressed FITS (fits.gz) file,
             or a pandas DataFrame instance.
@@ -64,10 +64,10 @@ class NB_Model(object):
         grid_params : list of strings
             The names of the grid parameters.  This list sets the order of the
             grid dimensions, i.e. the order in which arrays in NebulaBayes will
-            be indexed.  Each name must match a column header in the input_grid.
+            be indexed.  Each name must match a column header in the grid_table.
         lines_list : list of strings
             The emission lines to use in this NB_Model instance.  Each name must
-            match a column name in input_grid.  Unused lines may be excluded.
+            match a column name in grid_table.  Unused lines may be excluded.
 
         Optional parameters
         -------------------
@@ -108,7 +108,7 @@ class NB_Model(object):
                                       ", ".join(str(k) for k in kwargs.keys()) )
 
         # Call grid initialisation:
-        Raw_grids, Interpd_grids = NB1_Process_grids.initialise_grids(input_grid,
+        Raw_grids, Interpd_grids = NB1_Process_grids.initialise_grids(grid_table,
                                     grid_params, lines_list, interpd_grid_shape)
         Raw_grids.grid_rel_error = grid_rel_error
         Interpd_grids.grid_rel_error = grid_rel_error

@@ -78,21 +78,21 @@ class NB_Grid(Grid_description):
 
 
 
-def initialise_grids(input_grid, grid_params, lines_list, interpd_grid_shape):
+def initialise_grids(grid_table, grid_params, lines_list, interpd_grid_shape):
     """
     Initialise grids objects for an initialising NB_Model instance.  The
     outputs are instances of the NB_Grid class defined above.
     
     Parameters
     ----------
-    input_grid : str or pandas DataFrame
+    grid_table : str or pandas DataFrame
         The table of photoionisation model grid fluxes, given as either the
         filename of a csv, FITS (.fits) or compressed FITS (fits.gz) file,
         or a pandas DataFrame instance.
     grid_params : list of strings
         The names of the grid parameters.
     lines_list : list of strings
-        The emission lines to to extract from the input_grid of model fluxes
+        The emission lines to to extract from the grid_table of model fluxes
     interpd_grid_shape : tuple of integers
         The size of each dimension of the interpolated flux grids.
 
@@ -102,7 +102,7 @@ def initialise_grids(input_grid, grid_params, lines_list, interpd_grid_shape):
     Interpd_grids : NB_Grid instance
     """
     # Load database table containing the model grid output
-    DF_grid = load_grid_data(input_grid, lines_list)
+    DF_grid = load_grid_data(grid_table, lines_list)
     
     # Construct raw flux grids
     Raw_grids = construct_raw_grids(DF_grid, grid_params, lines_list)
@@ -114,7 +114,7 @@ def initialise_grids(input_grid, grid_params, lines_list, interpd_grid_shape):
 
 
 
-def load_grid_data(input_grid, lines_list):
+def load_grid_data(grid_table, lines_list):
     """
     Read the model grid data.  See initialise_grids for more info.
     
@@ -123,18 +123,18 @@ def load_grid_data(input_grid, lines_list):
     DF_grid : pd.DataFrame instance
     """
     print("Loading input grid data...") 
-    if isinstance(input_grid, pd.DataFrame):
-        return input_grid
-    elif isinstance(input_grid, str):
-        if input_grid.endswith(".csv"):
-            DF_grid = pd.read_table(input_grid, header=0, delimiter=",")
-        elif input_grid.endswith((".fits", ".fits.gz")):
-            BinTableHDU_0 = fits.getdata(input_grid, 0)
+    if isinstance(grid_table, pd.DataFrame):
+        return grid_table
+    elif isinstance(grid_table, str):
+        if grid_table.endswith(".csv"):
+            DF_grid = pd.read_table(grid_table, header=0, delimiter=",")
+        elif grid_table.endswith((".fits", ".fits.gz")):
+            BinTableHDU_0 = fits.getdata(grid_table, 0)
             DF_grid = Table(BinTableHDU_0).to_pandas()
         else:
-            raise ValueError("input_grid string has unknown file extension")
+            raise ValueError("grid_table string has unknown file extension")
     else:
-        raise TypeError("input_grid should be a string or DataFrame")
+        raise TypeError("grid_table should be a string or DataFrame")
 
     # Remove any whitespace from column names
     DF_grid.rename(inplace=True, columns={c:c.strip() for c in DF_grid.columns})
