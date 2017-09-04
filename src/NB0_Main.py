@@ -114,6 +114,10 @@ class NB_Model(object):
         Interpd_grids.grid_rel_error = grid_rel_error
         self.Raw_grids = Raw_grids
         self.Interpd_grids = Interpd_grids
+        # Creat a ND_PDF_Plotter instance to plot corner plots
+        self.Plotter = ND_PDF_Plotter(Raw_grids.paramName2paramValueArr)
+        # The ND_PDF_Plotter instance will be an attribute on both this NB_Model
+        # instance and on all "NB_Result" instances created later.
 
 
 
@@ -198,9 +202,6 @@ class NB_Model(object):
         """
         print("Running NebulaBayes...")
 
-        Raw_grids = self.Raw_grids
-        Interpd_grids = self.Interpd_grids
-
         if "norm_line" not in kwargs and "Hbeta" not in obs_emission_lines:
             raise ValueError("Can't normalise by default line 'Hbeta': not "
                              "found in obs_emission_lines line names.  Maybe "
@@ -225,12 +226,12 @@ class NB_Model(object):
         #----------------------------------------------------------------------
         # Handle options for NebulaBayes outputs:
         # Determine the list of parameter display names to use for plotting:
-        param_display_names = list(Interpd_grids.param_names) # Default
+        param_display_names = list(self.Interpd_grids.param_names) # Default
         if "param_display_names" in kwargs:
             custom_display_names = kwargs.pop("param_display_names")
             for i, custom_name in enumerate(custom_display_names):
                 param_display_names[i] = custom_name # Override default
-        Interpd_grids.param_display_names = param_display_names
+        self.Interpd_grids.param_display_names = param_display_names
         # Include text "best model" table on posterior corner plots?
         table_on_plots = kwargs.pop("table_on_plots", True) # Default True
         # Handle directory and file names for the outputs:
@@ -246,11 +247,9 @@ class NB_Model(object):
                              ", ".join("'{0}'".format(k) for k in kwargs.keys()))
 
         #----------------------------------------------------------------------
-        # Creat a ND_PDF_Plotter instance to plot corner plots
-        ND_PDF_Plotter_1 = ND_PDF_Plotter(Raw_grids.paramName2paramValueArr)
         # Create a "NB_Result" object instance, which involves calculating
         # the prior, likelihood and posterior, along with parameter estimates:
-        Result = NB3_Bayes.NB_Result(Interpd_grids, DF_obs, ND_PDF_Plotter_1,
+        Result = NB3_Bayes.NB_Result(self.Interpd_grids, DF_obs, self.Plotter,
                                      deredden=deredden, input_prior=input_prior,
                                 line_plot_dir=output_locations["line_plot_dir"])
 
@@ -279,7 +278,7 @@ class NB_Model(object):
                 plot_anno += r"$\chi^2_r$ = {0:.1f}".format(NB_nd_pdf.chi2)                
             NB_nd_pdf.Grid_spec.param_display_names = param_display_names
             print("Plotting corner plot for the", ndpdf_name, "...")
-            Result.Plotter(NB_nd_pdf, out_image_name, plot_anno)
+            self.Plotter(NB_nd_pdf, out_image_name, plot_anno)
 
         print("NebulaBayes finished.")
         return Result
