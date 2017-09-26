@@ -1,10 +1,11 @@
 from __future__ import print_function, division
-import numpy as np  # Core numerical library
+# For finding Cartesian product and combinatorial combinations:
+import itertools
 import matplotlib.pyplot as plt  # Plotting
 # For generating a custom colourmap:
 from matplotlib.colors import LinearSegmentedColormap
-# For finding Cartesian product and combinatorial combinations:
-import itertools
+import numpy as np  # Core numerical library
+import pandas as pd
 
 
 """
@@ -15,11 +16,60 @@ Adam D. Thomas 2015 - 2017
 
 
 
+# These are the only allowed "plot_types", which an ND_PDF_Plotter (defined
+# below) will be used for. 
+plot_types = ["Prior", "Likelihood", "Posterior", "Individual_lines"]
+
+
+class Plot_Config(object):
+    """
+    Helper class to store the user's plot configuration for a NebulaBayes run.
+    """
+    # A custom colourmap for the 2D marginalised pdfs - black to white through
+    # green, as in Blanc+ 2015
+    # Use a list of RGB tuples (values normalised to [0,1])
+    default_cmap = LinearSegmentedColormap.from_list( "NB_default",
+                                      [(0,0,0), (56./255,132./255,0), (1,1,1)] )
+    default_config = { # Include a text "best model" flux comparison table on
+                       # the 'corner' plots?
+                       "table_on_plots": True,
+                       "show_legend": True,  # Show the legend?
+                       # The colormap for the images of 2D marginalised PDFs:
+                       "cmap": default_cmap,
+                       "callback": None,  # Callback to modify plot
+                      }
+    option_keys = list(default_config.keys())
+
+    def __init__(self, input_configs):
+        """
+        Initialise this Plot_Config instance by overriding the defaults with
+        the user's inputs.  We also error check inputs.
+        """
+        if not isinstance(input_configs, list) or len(input_configs) != 4:
+            raise Exception("plot_configs must be a list of length 4")
+        # We store a config dict for each of the four plot types
+        self.configs = {t:self.default_config.copy() for t in plot_types}
+        for plot_type, input_dict in zip(plot_types, input_configs):
+            if not isinstance(input_dict, dict):
+                raise TypeError("plot_configs list must contain 4 dicts")
+            for key, val in input_dict.items(): # input_dict may be empty
+                if key not in self.option_keys:
+                    raise ValueError("Unknown plot config key " + str(key))
+                if key == "callback" and not callable(key):
+                    raise TypeError("callback must be a callable")
+                self.configs[plot_type][key] = val
+
+
+
+Plot_Config_Default = Plot_Config([{}]*4, None)
+
+
+
 class ND_PDF_Plotter(object):
     """
     Helper class for plotting "corner plots" showing all possible 2D and 1D
     marginalised PDFs derived from an ND PDF.
-    We use a class to save some information about the raw grids, so we
+    We use a class in order to save some information about the raw grids, so we
     can overplot the locations of the raw gridpoints without passing in raw
     grid information whenever we want to make a corner plot.
     """
@@ -30,23 +80,18 @@ class ND_PDF_Plotter(object):
         """
         self.raw_gridpts = raw_gridpts # Map of parameter names to lists of raw
                                        # grid parameter values (optional)
-        self.plot_legend = True
 
-        # Add some plotting configuration
+        # Some hard-coded plotting configuration
         self.fs1 = 4.5 # Fontsize of annotation table (if shown) and legend
         self.label_fontsize = 7
         self.tick_fontsize = 7
         self.tick_size = 3
         self.label_kwargs = {"annotation_clip":False, "horizontalalignment":"center",
                         "verticalalignment":"center", "fontsize":self.label_fontsize}
-        # Make a custom colourmap for the 2D marginalised pdfs - black to
-        # white through green, as in Blanc+ 2015
-        # Use a list of RGB tuples (values normalised to [0,1])
-        self.im_cmap = LinearSegmentedColormap.from_list( "cmap1", # Name unnecessary?
-                                        [(0,0,0),(56./255,132./255,0),(1,1,1)] )
 
 
-    def __call__(self, NB_nd_pdf, out_filename, plot_anno=None):
+
+    def __call__(self, NB_nd_pdf, out_filename, config=Plot_Config_Default):
         """
         Generate a corner plot of all the 2D and 1D marginalised pdfs for an
         n-dimensional pdf.  This method may be used for the prior, lkelihood or
@@ -58,14 +103,16 @@ class ND_PDF_Plotter(object):
         NB_nd_pdf: An object which contains the 1D and 2D marginalised pdfs and
                    interpolated grid information
         out_filename: The filename for the output corner plot image file
-        plot_anno: Text to annotate the output image in the empty upper-triangle
-                   of the grid of plots (e.g. the "best model" comparison table)
+        config: An instance of the Plot_Config class defined above.
         """
+        plot_type = NB_nd_pdf.name
+        assert plot_type in plot_types
+        config1 = config[plot_type]
         n = NB_nd_pdf.Grid_spec.ndim
         fig_width_ht = 6, 6 # Figure width and height in inches
         # We keep the figure size and bounds of the axes grid the same, and
         # change only n_rows(==n_cols) for different grid dimensions.
-        grid_bounds = {"left":0.13, "bottom":0.13, "right":0.95, "top":0.95}
+        grid_bounds = {"left": 0.13, "bottom": 0.13, "right": 0.95, "top": 0.95}
         axes_width = (grid_bounds["right"] - grid_bounds["left"]) / n # Figure frac
         axes_height = (grid_bounds["top"] - grid_bounds["bottom"]) / n # Figure frac
         if hasattr(self, "_fig"):  # Resuse the saved figure and axes objects
@@ -124,7 +171,7 @@ class ND_PDF_Plotter(object):
             if pdf_2D.min() < 0:  # Ensure the PDF is non-negative
                 raise ValueError("The 2D PDF {0} has a negative value!".format(double_name))
             ax_i.imshow( pdf_2D, vmin=0,
-                         origin="lower", extent=extent_list, cmap=self.im_cmap,
+                         origin="lower", extent=extent_list, cmap=config1["cmap"],
                          interpolation="spline16", aspect=image_aspect )
             # Data point [0,0] is in the bottom-left of the image; the next point
             # above the lower-left corner is [1,0], and the next point to the right
@@ -143,7 +190,7 @@ class ND_PDF_Plotter(object):
             # Show best estimates (coordinates from peaks of 1D pdf):
             x_best_1d, y_best_1d = p_estimates[name_x], p_estimates[name_y]
             ax_i.scatter(x_best_1d, y_best_1d, marker="o", s=12, facecolor="maroon",
-                    linewidth=0, label="Model defined by parameter estimates")
+                    linewidth=0, label="Model defined by 1D pdf peaks")
             # Show peak of 2D pdf:
             max_inds_2d = np.unravel_index(np.argmax(pdf_2D), pdf_2D.shape)
             x_best_2d = x_arr[max_inds_2d[1]]
@@ -194,12 +241,16 @@ class ND_PDF_Plotter(object):
             ax_k.plot(par_arr_map[param], pdf_1D, color="black", zorder=6)
             # Plot a vertical line to show the parameter estimate (peak of 1D pdf)
             y_lim = (0, 1.14*pdf_1D.max())
+            if plot_type == "Posterior":
+                label1 = "Parameter estimate: peak of 1D\nmarginalised pdf"
+            else:
+                label1 = "Peak of 1D marginalised pdf"
             ax_k.plot([p_estimates[G.param_names[ind]]]*2, y_lim, lw=0.6,
-                        linestyle='--', dashes=(3, 1.4), color="maroon", zorder=5,
-                        label="Parameter estimate: peak of 1D\nmarginalised pdf")
+                        linestyle='--', dashes=(3, 1.4), color="maroon",
+                        zorder=5, label=label1)
             ax_k.set_yticks([])  # No y-ticks
-            ax_k.set_xlim( np.min( par_arr_map[param] ) - interp_spacing[param]/2.,
-                           np.max( par_arr_map[param] ) + interp_spacing[param]/2. )
+            ax_k.set_xlim(np.min(par_arr_map[param]) - interp_spacing[param]/2.,
+                          np.max(par_arr_map[param]) + interp_spacing[param]/2. )
             ax_k.set_ylim(y_lim[0], y_lim[1])
             if ind == 0: # Last column
                 label_x = grid_bounds["right"] - 0.5 * axes_width
@@ -213,15 +264,16 @@ class ND_PDF_Plotter(object):
                 ax_k.set_xticklabels([]) # No x_labels
             ax_k.tick_params(direction='out', length=self.tick_size)
 
-        if self.plot_legend:
-            # Add legend to current axes
+        if config1["plot_legend"] is True:  # Add legend to current axes
             lh1, ll1 = ax_k.get_legend_handles_labels()
             lh2, ll2 = ax_i.get_legend_handles_labels()
-            lgd = ax_i.legend(lh1+lh2, ll1+ll2, loc='lower left', scatterpoints=1,
-                          bbox_to_anchor=(grid_bounds["left"]+((n+1)//2)*axes_width+0.02,
-                                          grid_bounds["bottom"]+(n//2)*axes_height+0.01),
-                            bbox_transform=self._fig.transFigure, # figure fraction coords
-                            fontsize=self.fs1, borderpad=1)
+            anchor = (grid_bounds["left"]+((n+1)//2)*axes_width+0.02,
+                      grid_bounds["bottom"]+(n//2)*axes_height+0.01),
+            lgd = ax_i.legend(lh1+lh2, ll1+ll2, loc='lower left', borderpad=1,
+                              scatterpoints=1, bbox_to_anchor=anchor, 
+                              bbox_transform=self._fig.transFigure,
+                                                        # figure fraction coords
+                              fontsize=self.fs1)
             lgd.get_frame().set_linewidth(0.5)
 
 
@@ -229,13 +281,22 @@ class ND_PDF_Plotter(object):
         fig.subplots_adjust(left=grid_bounds["left"], bottom=grid_bounds["bottom"],
                                                           wspace=0.04, hspace=0.04)
 
-        if plot_anno is not None: # Add text including chisquared and fluxes table
-            ax_i.annotate(plot_anno,
-                        (grid_bounds["left"]+n//2*axes_width+0.03, 0.95),
-                        xycoords="figure fraction", annotation_clip=False, 
-                        horizontalalignment="left", verticalalignment="top", 
-                        family="monospace", fontsize=self.fs1)
+        # Add fluxes table and chisquared as text annotation if requested
+        if config1["table_on_plots"] is True:
+            if plot_type != "Individual_lines":  # If table available
+                pd.set_option("display.precision", 4)
+                ax_i.annotate(config.plot_anno,
+                            (grid_bounds["left"]+n//2*axes_width+0.03, 0.95),
+                            xycoords="figure fraction", annotation_clip=False, 
+                            horizontalalignment="left", verticalalignment="top", 
+                            family="monospace", fontsize=self.fs1)
 
-        fig.savefig(out_filename)
+        # Call the user's "callback" function, if it was supplied
+        callback = config1["callback"]
+        if callback is not None:
+            callback(self._fig, self._axes, config1, out_filename)
+        else:
+            # Save the figure
+            fig.savefig(out_filename)
 
 

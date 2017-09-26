@@ -32,7 +32,7 @@ class NB_nd_pdf(object):
     a probability distribution, i.e. dP = PDF(x) * dx, where the nd_pdf is an
     array of samples of the PDF.
     """
-    def __init__(self, nd_pdf, NB_Result, Interpd_grids, DF_obs=None):
+    def __init__(self, nd_pdf, NB_Result, Interpd_grids, name, DF_obs=None):
         """
         Initialise an instance of the NB_nd_pdf class.
         nd_pdf: A numpy ndarray holding the (linear) pdf.
@@ -51,6 +51,8 @@ class NB_nd_pdf(object):
             raise ValueError("The nd_pdf contains a negative value")
         self.nd_pdf = nd_pdf
         self.Grid_spec = NB_Result.Grid_spec
+        self.name = name
+        # The "name" must be one of the "plot_types" listed in NB4_Plotting.py
         # Add self.marginalised_2d and self.marginalised_1d attributes and
         # normalise the self.nd_pdf attribute:
         self._marginalise_pdf()
@@ -374,14 +376,15 @@ class NB_Result(object):
     An instance of this class is returned to the user each time NebulaBayes is
     run.
     """
-    def __init__(self, Interpd_grids, DF_obs, ND_PDF_Plotter_1, deredden, 
-                                                    input_prior, line_plot_dir):
+    def __init__(self, Interpd_grids, DF_obs, ND_PDF_Plotter, Plot_Config,
+                                          deredden, input_prior, line_plot_dir):
         """
         Initialise an instance of the class and perform Bayesian parameter
         estimation.
         """
         self.DF_obs = DF_obs # Store for user
-        self.Plotter = ND_PDF_Plotter_1 # To plot ND PDFs
+        self.Plotter = ND_PDF_Plotter # To plot ND PDFs
+        self.Plot_Config = Plot_Config
         self.deredden = deredden # Boolean - dereddeden obs fluxes over whole grid?
         self._line_plot_dir = line_plot_dir
         Grid_spec = Grid_description(Interpd_grids.param_names,
@@ -394,19 +397,22 @@ class NB_Result(object):
         # Calculate the likelihood over the grid:
         print("Calculating likelihood...")
         raw_likelihood = self._calculate_likelihood(Interpd_grids, DF_obs.norm_line)
-        self.Likelihood = NB_nd_pdf(raw_likelihood, self, Interpd_grids, DF_obs)
+        self.Likelihood = NB_nd_pdf(raw_likelihood, self, Interpd_grids,
+                                    name="Likelihood", DF_obs=DF_obs)
 
         # Calculate the prior over the grid:
         print("Calculating prior...")
         raw_prior = calculate_prior(input_prior, DF_obs, Interpd_grids.grids["No_norm"],
                                                    Interpd_grids.grid_rel_error)
-        self.Prior = NB_nd_pdf(raw_prior, self, Interpd_grids, DF_obs)
+        self.Prior = NB_nd_pdf(raw_prior, self, Interpd_grids, name="Prior",
+                                                                  DF_obs=DF_obs)
 
         # Calculate the posterior using Bayes' Theorem:
         # (note that the prior and likelihood pdfs are now normalised)
         print("Calculating posterior using Bayes' Theorem...")
         raw_posterior = self.Likelihood.nd_pdf * self.Prior.nd_pdf # Bayes' theorem
-        self.Posterior = NB_nd_pdf(raw_posterior, self, Interpd_grids, DF_obs)
+        self.Posterior = NB_nd_pdf(raw_posterior, self, Interpd_grids,
+                                                name="Posterior", DF_obs=DF_obs)
 
 
 
@@ -532,10 +538,12 @@ class NB_Result(object):
                 line_pdf = np.exp(line_contribution - line_contribution.max())
                 outname = os.path.join(self._line_plot_dir,
                                     line + "_PDF_contributes_to_likelihood.pdf")
-                Line_PDF = NB_nd_pdf(line_pdf, self, Interpd_grids)
+                Line_PDF = NB_nd_pdf(line_pdf, self, Interpd_grids,
+                                     name="Indivual line")  # We include this
+                                    # "name" for information when we're plotting
                 Line_PDF.Grid_spec.param_display_names = Interpd_grids.param_display_names
                 print("Plotting pdf for line {0}...".format(line))
-                self.Plotter(Line_PDF, outname)
+                self.Plotter(Line_PDF, outname, config=self.Plot_Config)
 
         # log_likelihood += np.log(2 * np.pi)
         log_likelihood -= log_likelihood.max() # Ensure max is 0 (log space); 1 (linear)

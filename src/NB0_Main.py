@@ -4,7 +4,7 @@ import numpy as np  # Core numerical library
 import pandas as pd # For tables ("DataFrame"s)
 from . import NB1_Process_grids
 from . import NB3_Bayes
-from .NB4_Plotting import ND_PDF_Plotter
+from .NB4_Plotting import Plot_Config, ND_PDF_Plotter
 
 
 """
@@ -151,7 +151,7 @@ class NB_Model(object):
         obs_wavelengths : list of floats
             If deredden=True, you must also supply a list of wavelengths
             (Angstroems) associated with obs_fluxes.  Default: None
-        prior : list of ("line1","line2") tuples, or "Uniform", or a callable
+        prior : list of ("line1","line2") tuples, or "Uniform", or a callable.
             The prior to use when calculating the posterior.  Either a user-
             defined function, the string "Uniform", or a list of length at least
             one. Entries in the list are tuples such as ("SII6716","SII6731") to
@@ -166,14 +166,13 @@ class NB_Model(object):
         -----------------------------
         Provide a value for a keyword to produce the corresponding output.
         param_display_names : dict
-            Parameter display names for grid parameters, for plotting purposes.
-            The dictionary keys are parameter names from the grid file, and the
+            Display names for grid parameters, for plotting purposes.  The
+            dictionary keys are parameter names from the grid file, and the
             corresponding values are the "display" names.  The display names can
-            include markup (e.g. r"$\alpha$") in order to include e.g. Greek
-            letters.  Not all of the grid parameters need to be in
-            param_display_names; raw parameter names will be used by default.
+            include markup (r"$\alpha$") to include e.g. Greek letters.  Raw
+            text names will be used where a display name is not provided.
         posterior_plot : str
-            A filename for a results image of 2D and 1D marginalised posterior
+            A filename for a 'corner' plot of 1D and 2D marginalised posterior
             PDFs. The image file type is specified by the file extension.
         prior_plot : str
             As for posterior_plot but for the prior
@@ -185,14 +184,29 @@ class NB_Model(object):
         best_model_table : str
             A filename for a csv file which will compare observed and model
             fluxes at the point defined by the Bayesian parameter estimates.
-        table_on_plots : bool
-            Include a "best model" flux comparison table on the 'corner' plots
-            (i.e. plots of 1D and 2D marginalised PDFs)?  Default: True
         line_plot_dir : str
-            A directory; 'corner' plots showing the nD PDFs for each line (the
-            PDFs which contribute to the likelihood) are saved here.  Saving
-            these plots is quite slow.  The plots show the constraints provided
-            by each line.
+            A directory where 'corner' plots showing the nD PDFs for each line
+            will be saved.  These PDFs are the contribution to the likelihood
+            from each line, and the plots show the constraints each line
+            provides.  Saving these plots is slow; a ".pdf" file type is used.
+        plot_configs : list of dicts
+            A list of four dictionaries which update plotting options for the
+            0) Prior, 1) Likelihood, 2) Posterior, and 3) Individual line plots.
+            To apply the same options to all four plot types, write
+            "plot_configs=[my_dict]*4".  Valid items in each dictionary are:
+                table_on_plots : bool
+                    Include a text "best model" flux comparison table on the
+                    'corner' plots?  (Won't work for individual line plots).
+                    Default: True
+                show_legend : bool
+                    Show the legend?  Default: True
+                cmap : str or matplotlib.colors.Colormap instance
+                    The colormap for the images of the 2D marginalised PDFs.
+                    Default: From black to white through green
+                callback : callable
+                    A function called instead of saving the plot, which may be
+                    used to save a customised figure (e.g. with custom
+                    annotations).
 
         Returns
         -------
@@ -241,8 +255,9 @@ class NB_Model(object):
                     raise ValueError("Unknown parameter in param_display_names")
                 param_display_names[p] = custom_name  # Override default
         self.Interpd_grids.param_display_names = list(param_display_names.values())
-        # Include text "best model" table on posterior corner plots?
-        table_on_plots = kwargs.pop("table_on_plots", True) # Default True
+        # Configuration for plots
+        input_plot_configs = kwargs.pop("plot_configs", [{}]*4)
+        Plot_Config_1 = Plot_Config(input_plot_configs)
         # Handle directory and file names for the outputs:
         output_locations = {}
         for key in ["likelihood_plot", "prior_plot", "posterior_plot",
@@ -259,7 +274,8 @@ class NB_Model(object):
         # Create a "NB_Result" object instance, which involves calculating
         # the prior, likelihood and posterior, along with parameter estimates:
         Result = NB3_Bayes.NB_Result(self.Interpd_grids, DF_obs, self.Plotter,
-                                     deredden=deredden, input_prior=input_prior,
+                                     Plot_Config=Plot_Config_1,
+                                     input_prior=input_prior, deredden=deredden,
                                 line_plot_dir=output_locations["line_plot_dir"])
 
         #----------------------------------------------------------------------
@@ -279,17 +295,19 @@ class NB_Model(object):
             if out_image_name is None:
                 continue  # Only do plotting if an image name was specified
             plot_anno = None
-            if table_on_plots is True: # Include a fixed-width text table on image
-                pd.set_option("display.precision", 4)
+            if Plot_Config_1[ndpdf_name.capitalize()]["table_on_plots"] is True:
+                # Include a fixed-width text table on image
                 plot_anno = ("Observed fluxes vs. model fluxes at the gridpoint of"
                              "\nparameter best estimates in the "+ndpdf_name+"\n")
                 plot_anno += str(NB_nd_pdf.DF_best) + "\n\n"
-                plot_anno += r"$\chi^2_r$ = {0:.1f}".format(NB_nd_pdf.chi2)                
+                plot_anno += r"$\chi^2_r$ = {0:.1f}".format(NB_nd_pdf.chi2)
+            Plot_Config_1.table_for_plot = plot_anno  # Convenient storage spot
             NB_nd_pdf.Grid_spec.param_display_names = list(
                                                    param_display_names.values())
             print("Plotting corner plot for the", ndpdf_name, "...")
-            self.Plotter(NB_nd_pdf, out_image_name, plot_anno)
+            self.Plotter(NB_nd_pdf, out_image_name, config=Plot_Config_1)
 
+        self.Plot_Config = Plot_Config_1
         print("NebulaBayes finished.")
         return Result
 
