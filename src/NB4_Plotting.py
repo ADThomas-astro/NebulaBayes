@@ -68,18 +68,18 @@ class ND_PDF_Plotter(object):
         grid_bounds = {"left":0.13, "bottom":0.13, "right":0.95, "top":0.95}
         axes_width = (grid_bounds["right"] - grid_bounds["left"]) / n # Figure frac
         axes_height = (grid_bounds["top"] - grid_bounds["bottom"]) / n # Figure frac
-        if hasattr(self, "fig"):  # Resuse the saved figure and axes objects
+        if hasattr(self, "_fig"):  # Resuse the saved figure and axes objects
             # This provides a significant speedup compared to making new ones.
-            fig, axes = self.fig, self.axes
+            fig, axes = self._fig, self._axes
             for ax in axes.ravel():
                 ax.clear()  # Clear images, lines, annotations, and legend
         else: # Create a new figure and 2D-array of axes objects
             fig, axes = plt.subplots(n, n, figsize=fig_width_ht, gridspec_kw=grid_bounds)
-            self.fig = fig # Save reference to figure
+            self._fig = fig # Save reference to figure
             # Flip axes array so images fill the lower-left half of the subplot grid:
             axes = np.flipud(np.fliplr(axes))
             # Now axes[0, 0] is the axes in the lower-right.
-            self.axes = axes # Save reference to axes
+            self._axes = axes # Save reference to axes
             for ax in axes.ravel():    # Turn all axes off for now.
                 ax.set_visible(False)  # Needed axes will be turned on later.
 
@@ -220,7 +220,7 @@ class ND_PDF_Plotter(object):
             lgd = ax_i.legend(lh1+lh2, ll1+ll2, loc='lower left', scatterpoints=1,
                           bbox_to_anchor=(grid_bounds["left"]+((n+1)//2)*axes_width+0.02,
                                           grid_bounds["bottom"]+(n//2)*axes_height+0.01),
-                            bbox_transform=self.fig.transFigure, # figure fraction coords
+                            bbox_transform=self._fig.transFigure, # figure fraction coords
                             fontsize=self.fs1, borderpad=1)
             lgd.get_frame().set_linewidth(0.5)
 

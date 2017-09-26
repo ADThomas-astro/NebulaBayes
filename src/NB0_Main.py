@@ -220,18 +220,27 @@ class NB_Model(object):
         # where the emission line names index the rows:
         DF_obs = _process_observed_data(obs_fluxes, obs_flux_errors,
                        obs_emission_lines, obs_wavelengths, norm_line=norm_line)
+        for line in DF_obs.index:  # Check observed emission lines are in grid
+            if line not in self.Interpd_grids.grids["No_norm"]:
+                raise ValueError("The line {0}".format(line) + 
+                                 " was not previously loaded from grid table")
 
         input_prior = kwargs.pop("prior", "Uniform") # Default "Uniform"
 
         #----------------------------------------------------------------------
         # Handle options for NebulaBayes outputs:
-        # Determine the list of parameter display names to use for plotting:
-        param_display_names = list(self.Interpd_grids.param_names) # Default
+        # Determine the parameter display names to use for plotting:
+        param_list = list(self.Interpd_grids.param_names)
+        param_display_names = OD(zip(param_list, param_list)) # Default; ordered
         if "param_display_names" in kwargs:
             custom_display_names = kwargs.pop("param_display_names")
-            for i, custom_name in enumerate(custom_display_names):
-                param_display_names[i] = custom_name # Override default
-        self.Interpd_grids.param_display_names = param_display_names
+            if not isinstance(custom_display_names, dict):
+                raise TypeError("param_display_names must be a dict")
+            for p, custom_name in custom_display_names.items():
+                if p not in param_list:
+                    raise ValueError("Unknown parameter in param_display_names")
+                param_display_names[p] = custom_name  # Override default
+        self.Interpd_grids.param_display_names = list(param_display_names.values())
         # Include text "best model" table on posterior corner plots?
         table_on_plots = kwargs.pop("table_on_plots", True) # Default True
         # Handle directory and file names for the outputs:
@@ -276,7 +285,8 @@ class NB_Model(object):
                              "\nparameter best estimates in the "+ndpdf_name+"\n")
                 plot_anno += str(NB_nd_pdf.DF_best) + "\n\n"
                 plot_anno += r"$\chi^2_r$ = {0:.1f}".format(NB_nd_pdf.chi2)                
-            NB_nd_pdf.Grid_spec.param_display_names = param_display_names
+            NB_nd_pdf.Grid_spec.param_display_names = list(
+                                                   param_display_names.values())
             print("Plotting corner plot for the", ndpdf_name, "...")
             self.Plotter(NB_nd_pdf, out_image_name, plot_anno)
 

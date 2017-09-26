@@ -500,6 +500,7 @@ class NB_Result(object):
                 # Don't store too many copies of the interpolated grids for
                 # different normalisations - this might take a lot of memory
                 oldest_norm = list(Interpd_grids.grids.keys())[1]
+                # The 0th key is "No_norm"; 1st key is for oldest normalisation
                 Interpd_grids.grids.popitem(oldest_norm)
 
         # Initialise log likelihood with 0 everywhere

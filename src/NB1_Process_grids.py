@@ -138,16 +138,17 @@ def load_grid_data(grid_table, lines_list):
 
     # Remove any whitespace from column names
     DF_grid.rename(inplace=True, columns={c:c.strip() for c in DF_grid.columns})
-    for line in lines_list: # Ensure line columns are a numeric data type
+    for line in lines_list:
+        # Check that all requested emission lines are present in the model data:
+        if not line in DF_grid.columns:
+            raise ValueError("Emission line " + line +
+                             " was not found in the model grid table")
+        # Ensure line flux columns are a numeric data type
         DF_grid[line] = pd.to_numeric(DF_grid[line], errors="raise")
         DF_grid[line] = DF_grid[line].astype("float64") # Ensure double precision
 
     # Clean and check the model data:
     for line in lines_list:
-        # Check that all emission lines in input are also in the model data:
-        if not line in DF_grid.columns:
-            raise ValueError("Measured emission line " + line +
-                             " was not found in the model data.")
         # Set any non-finite model fluxes to zero.  Is this the wrong thing to
         # do?  It's documented at least, in NB0_Main.py.
         DF_grid.loc[~np.isfinite(DF_grid[line].values), line] = 0
