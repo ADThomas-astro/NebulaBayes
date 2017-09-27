@@ -192,11 +192,11 @@ class NB_Model(object):
         plot_configs : list of dicts
             A list of four dictionaries which update plotting options for the
             0) Prior, 1) Likelihood, 2) Posterior, and 3) Individual line plots.
-            To apply the same options to all four plot types, write
+            To use the same config dict object for all four plot types, write
             "plot_configs=[my_dict]*4".  Valid items in each dictionary are:
                 table_on_plots : bool
                     Include a text "best model" flux comparison table on the
-                    'corner' plots?  (Won't work for individual line plots).
+                    'corner' plots?  (Doesn't apply to individual line plots).
                     Default: True
                 show_legend : bool
                     Show the legend?  Default: True

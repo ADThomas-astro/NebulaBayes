@@ -21,6 +21,7 @@ Adam D. Thomas 2015 - 2017
 plot_types = ["Prior", "Likelihood", "Posterior", "Individual_lines"]
 
 
+
 class Plot_Config(object):
     """
     Helper class to store the user's plot configuration for a NebulaBayes run.
@@ -38,7 +39,8 @@ class Plot_Config(object):
                        "cmap": default_cmap,
                        "callback": None,  # Callback to modify plot
                       }
-    option_keys = list(default_config.keys())
+    option_keys = list(default_config.keys())  # List of allowed config keys
+
 
     def __init__(self, input_configs):
         """
@@ -60,8 +62,13 @@ class Plot_Config(object):
                 self.configs[plot_type][key] = val
 
 
+    def __getitem__(self, x):
+        """ To ease access to the configs """
+        return self.configs[x]
 
-Plot_Config_Default = Plot_Config([{}]*4, None)
+
+
+Plot_Config_Default = Plot_Config([{}]*4)
 
 
 
@@ -86,14 +93,55 @@ class ND_PDF_Plotter(object):
         self.label_fontsize = 7
         self.tick_fontsize = 7
         self.tick_size = 3
-        self.label_kwargs = {"annotation_clip":False, "horizontalalignment":"center",
-                        "verticalalignment":"center", "fontsize":self.label_fontsize}
+        self.label_kwargs = {"annotation_clip":False,
+                  "horizontalalignment":"center", "verticalalignment":"center",
+                  "fontsize":self.label_fontsize,
+        }
+        self.axes_spine_width = 0.8
+
+
+
+    def _prepare_fig_and_axes(self, n):
+        """
+        Create the figure and axes the first time this ND_PDF_Plotter instance
+        is called.  On subsequent calls we simply clear the axes to reuse the
+        same figure and axes.
+        n: The number of dimensions of the grid
+        """
+        if hasattr(self, "_fig"):  # Resuse the saved figure and axes objects
+            # This provides a significant speedup compared to making new ones.
+            for ax in self._axes.ravel():
+                ax.clear()  # Clear images, lines, annotations, and legend
+            return
+
+        # Create a new figure and 2D-array of axes objects
+        fig_width_ht = (6.0,)*2 # Figure width and height in inches (equal)
+        # We keep the figure size and bounds of the axes grid the same, and
+        # change only n_rows(==n_cols) for different grid dimensions.
+        gridspec = {"left": 0.13, "bottom": 0.13, "right": 0.98, "top": 0.98,
+                    "hspace": 0.02, "wspace": 0.02}
+        gridspec["axes_width"] = (gridspec["right"] - gridspec["left"] -
+                           (n - 1) * gridspec["wspace"]) / n  # Figure fraction
+        gridspec["axes_height"] = (gridspec["top"] - gridspec["bottom"] -
+                           (n - 1) * gridspec["hspace"]) / n  # Figure fraction
+        gridspec_kw = gridspec.copy()
+        gridspec_kw.pop("axes_width"); gridspec_kw.pop("axes_height")
+        fig, axes = plt.subplots(n, n, figsize=fig_width_ht,
+                                                       gridspec_kw=gridspec_kw)
+        self._fig = fig # Save reference to figure
+        # Flip axes array so images fill the lower-left half of subplot grid:
+        axes = np.flipud(np.fliplr(axes))
+        # Now axes[0, 0] is the axes in the lower-right.
+        self._axes = axes # Save reference to axes
+        for ax in axes.ravel():    # Turn all axes off for now.
+            ax.set_visible(False)  # Needed axes will be turned on later.
+        self._gridspec = gridspec
 
 
 
     def __call__(self, NB_nd_pdf, out_filename, config=Plot_Config_Default):
         """
-        Generate a corner plot of all the 2D and 1D marginalised pdfs for an
+        Generate a "corner plot" of all the 2D and 1D marginalised pdfs for an
         n-dimensional pdf.  This method may be used for the prior, lkelihood or
         posterior, or for the individual line PDFs contributing to the likelihood.
         The resulting "corner plot" is a triangular grid of 2-D images for each
@@ -103,38 +151,22 @@ class ND_PDF_Plotter(object):
         NB_nd_pdf: An object which contains the 1D and 2D marginalised pdfs and
                    interpolated grid information
         out_filename: The filename for the output corner plot image file
-        config: An instance of the Plot_Config class defined above.
+        config: An instance of the Plot_Config class defined above
         """
+        # Handle inputs
         plot_type = NB_nd_pdf.name
         assert plot_type in plot_types
         config1 = config[plot_type]
         n = NB_nd_pdf.Grid_spec.ndim
-        fig_width_ht = 6, 6 # Figure width and height in inches
-        # We keep the figure size and bounds of the axes grid the same, and
-        # change only n_rows(==n_cols) for different grid dimensions.
-        grid_bounds = {"left": 0.13, "bottom": 0.13, "right": 0.95, "top": 0.95}
-        axes_width = (grid_bounds["right"] - grid_bounds["left"]) / n # Figure frac
-        axes_height = (grid_bounds["top"] - grid_bounds["bottom"]) / n # Figure frac
-        if hasattr(self, "_fig"):  # Resuse the saved figure and axes objects
-            # This provides a significant speedup compared to making new ones.
-            fig, axes = self._fig, self._axes
-            for ax in axes.ravel():
-                ax.clear()  # Clear images, lines, annotations, and legend
-        else: # Create a new figure and 2D-array of axes objects
-            fig, axes = plt.subplots(n, n, figsize=fig_width_ht, gridspec_kw=grid_bounds)
-            self._fig = fig # Save reference to figure
-            # Flip axes array so images fill the lower-left half of the subplot grid:
-            axes = np.flipud(np.fliplr(axes))
-            # Now axes[0, 0] is the axes in the lower-right.
-            self._axes = axes # Save reference to axes
-            for ax in axes.ravel():    # Turn all axes off for now.
-                ax.set_visible(False)  # Needed axes will be turned on later.
+        self._prepare_fig_and_axes(n)
+        gridspec = self._gridspec
 
         # Some quantities for working with the parameters:
         G = NB_nd_pdf.Grid_spec # Interpolated grid description
         par_arr_map = G.paramName2paramValueArr
         interp_spacing = {p : (arr[1] - arr[0]) for p,arr in par_arr_map.items()}
-        p_estimates = NB_nd_pdf.DF_estimates["Estimate"] # pandas Series; index is param name
+        p_estimates = NB_nd_pdf.DF_estimates["Estimate"]
+        # p_estimates is a pandas Series; the index is the parameter name
 
         # Iterate over the 2D marginalised pdfs:
         for double_name, param_inds_double in zip(G.double_names, G.double_indices):
@@ -146,8 +178,10 @@ class ND_PDF_Plotter(object):
             # the list of parameters Params.names
             # Note that here ind_y ranges from 0 to n - 2, and
             # ind_x ranges from 1 to n - 1.
-            ax_i = axes[ ind_y, ind_x ]
+            ax_i = self._axes[ ind_y, ind_x ]
             ax_i.set_visible(True)  # Turn this axis back on
+            for axis in ["top", "bottom", "left", "right"]:
+                ax_i.spines[axis].set_linewidth(self.axes_spine_width)
 
             # Calculate the image extent:
             x_arr, y_arr = par_arr_map[name_x], par_arr_map[name_y]
@@ -189,20 +223,23 @@ class ND_PDF_Plotter(object):
             
             # Show best estimates (coordinates from peaks of 1D pdf):
             x_best_1d, y_best_1d = p_estimates[name_x], p_estimates[name_y]
-            ax_i.scatter(x_best_1d, y_best_1d, marker="o", s=12, facecolor="maroon",
-                    linewidth=0, label="Model defined by 1D pdf peaks")
+            ax_i.scatter(x_best_1d, y_best_1d, marker="o", s=12, linewidth=0,
+                 facecolor="maroon", label="Model defined by peaks of 1D PDFs")
             # Show peak of 2D pdf:
             max_inds_2d = np.unravel_index(np.argmax(pdf_2D), pdf_2D.shape)
             x_best_2d = x_arr[max_inds_2d[1]]
             y_best_2d = y_arr[max_inds_2d[0]]
-            ax_i.scatter(x_best_2d, y_best_2d, marker="v", s=13, facecolor="none",
-                linewidth=0.5, edgecolor="blue", label="Peak of 2D marginalised pdf")
+            ax_i.scatter(x_best_2d, y_best_2d, marker="v", s=13, linewidth=0.5,
+                         facecolor="none", edgecolor="blue",
+                         label="Peak of 2D marginalised PDF")
             # Show projection of peak of full nD pdf:
-            max_inds_nd = np.unravel_index(np.argmax(NB_nd_pdf.nd_pdf), NB_nd_pdf.nd_pdf.shape)
+            max_inds_nd = np.unravel_index(np.argmax(NB_nd_pdf.nd_pdf),
+                                           NB_nd_pdf.nd_pdf.shape)
             x_best_nd = x_arr[max_inds_nd[ind_x]]
             y_best_nd = y_arr[max_inds_nd[ind_y]]
-            ax_i.scatter(x_best_nd, y_best_nd, marker="s", s=21, facecolor="none",
-                linewidth=0.5, edgecolor="orange", label="Projected peak of full ND pdf")
+            ax_i.scatter(x_best_nd, y_best_nd, marker="s", s=21, linewidth=0.5,
+                         facecolor="none", edgecolor="orange",
+                         label="Projected peak of full nD PDF")
 
             # Format the current axes:
             ax_i.set_xlim( extent["xmin"], extent["xmax"] )
@@ -210,8 +247,9 @@ class ND_PDF_Plotter(object):
             ax_i.tick_params( direction='out', length=self.tick_size )
             if ind_y == 0: # If we're in the first row of plots
                 # Generate x-axis label
-                label_x = grid_bounds["right"] - axes_width * (ind_x + 0.5)
-                label_y = grid_bounds["bottom"] * 0.25
+                label_x = (gridspec["right"] - ind_x * gridspec["wspace"] -
+                                        (ind_x + 0.5) * gridspec["axes_width"])
+                label_y = gridspec["bottom"] * 0.25
                 ax_i.annotate(G.param_display_names[ind_x], (label_x, label_y),
                               xycoords="figure fraction", **self.label_kwargs)
                 for tick in ax_i.get_xticklabels():  # Rotate x tick labels
@@ -221,10 +259,12 @@ class ND_PDF_Plotter(object):
                 ax_i.set_xticklabels([]) # No x_labels
             if ind_x == n - 1: # If we're in the first column of plots
                 # Generate y-axis label
-                label_x = grid_bounds["left"] * 0.25
-                label_y = grid_bounds["bottom"] + axes_height * (ind_y + 0.5)
+                label_x = gridspec["left"] * 0.25
+                label_y = (gridspec["bottom"] + ind_y * gridspec["hspace"] +
+                                       (ind_y + 0.5) * gridspec["axes_height"])
                 ax_i.annotate(G.param_display_names[ind_y], (label_x, label_y),
-                    xycoords="figure fraction", rotation="vertical", **self.label_kwargs)
+                              xycoords="figure fraction", rotation="vertical",
+                              **self.label_kwargs)
                 for tick in ax_i.get_yticklabels():
                         tick.set_fontsize(self.tick_fontsize)
             else: # Not first column
@@ -233,12 +273,15 @@ class ND_PDF_Plotter(object):
         # Iterate over the 1D marginalised pdfs:
         # We plot the 1D pdfs along the diagonal of the grid of plots:
         for ind, param in enumerate(G.param_names):
-            ax_k = axes[ ind, ind ]
+            ax_k = self._axes[ ind, ind ]
             ax_k.set_visible(True)  # turn this axis back on
+            for axis in ["top", "bottom", "left", "right"]:
+                ax_k.spines[axis].set_linewidth(self.axes_spine_width)
             pdf_1D =  NB_nd_pdf.marginalised_1D[param]
             if pdf_1D.min() < 0:  # Ensure the PDF is non-negative
                 raise ValueError("The 1D PDF {0} has a negative value!".format(param))
-            ax_k.plot(par_arr_map[param], pdf_1D, color="black", zorder=6)
+            ax_k.plot(par_arr_map[param], pdf_1D, color="black", linewidth=0.9,
+                      zorder=6)
             # Plot a vertical line to show the parameter estimate (peak of 1D pdf)
             y_lim = (0, 1.14*pdf_1D.max())
             if plot_type == "Posterior":
@@ -253,8 +296,8 @@ class ND_PDF_Plotter(object):
                           np.max(par_arr_map[param]) + interp_spacing[param]/2. )
             ax_k.set_ylim(y_lim[0], y_lim[1])
             if ind == 0: # Last column
-                label_x = grid_bounds["right"] - 0.5 * axes_width
-                label_y = grid_bounds["bottom"] * 0.25
+                label_x = gridspec["right"] - 0.5 * gridspec["axes_width"]
+                label_y = gridspec["bottom"] * 0.25
                 ax_k.annotate(G.param_display_names[ind], (label_x, label_y),
                                 xycoords="figure fraction", **self.label_kwargs)
                 for tick in ax_k.get_xticklabels():
@@ -264,29 +307,30 @@ class ND_PDF_Plotter(object):
                 ax_k.set_xticklabels([]) # No x_labels
             ax_k.tick_params(direction='out', length=self.tick_size)
 
-        if config1["plot_legend"] is True:  # Add legend to current axes
+        legend_anchor = (  # Figure fraction coords
+            (gridspec["left"] +
+             ((n+1)//2) * (gridspec["axes_width"] + gridspec["wspace"]) + 0.005),
+            (gridspec["bottom"] +
+             (n//2) * (gridspec["axes_height"] + gridspec["hspace"]) + 0.00)
+            )
+        if config1["show_legend"] is True:  # Add legend to current axes
             lh1, ll1 = ax_k.get_legend_handles_labels()
             lh2, ll2 = ax_i.get_legend_handles_labels()
-            anchor = (grid_bounds["left"]+((n+1)//2)*axes_width+0.02,
-                      grid_bounds["bottom"]+(n//2)*axes_height+0.01),
-            lgd = ax_i.legend(lh1+lh2, ll1+ll2, loc='lower left', borderpad=1,
-                              scatterpoints=1, bbox_to_anchor=anchor, 
-                              bbox_transform=self._fig.transFigure,
-                                                        # figure fraction coords
-                              fontsize=self.fs1)
-            lgd.get_frame().set_linewidth(0.5)
-
-
-        # Adjust spacing between and around subplots (spacing in inches):
-        fig.subplots_adjust(left=grid_bounds["left"], bottom=grid_bounds["bottom"],
-                                                          wspace=0.04, hspace=0.04)
+            lgd = ax_i.legend(lh1+lh2, ll1+ll2, loc="lower left", borderpad=1,
+                              scatterpoints=1, bbox_to_anchor=legend_anchor, 
+                              bbox_transform=self._fig.transFigure,  # Needed
+                                        # because we use figure fraction coords
+                              fontsize=self.fs1, fancybox=False)
+            leg_frame = lgd.get_frame()
+            leg_frame.set_linewidth(0.5); leg_frame.set_edgecolor("black")
 
         # Add fluxes table and chisquared as text annotation if requested
+        anno_location = (gridspec["left"] + (n//2 * (gridspec["axes_width"] + 
+                                   gridspec["wspace"]) + 0.01), gridspec["top"])
         if config1["table_on_plots"] is True:
             if plot_type != "Individual_lines":  # If table available
                 pd.set_option("display.precision", 4)
-                ax_i.annotate(config.plot_anno,
-                            (grid_bounds["left"]+n//2*axes_width+0.03, 0.95),
+                ax_i.annotate(config.table_for_plot, anno_location,
                             xycoords="figure fraction", annotation_clip=False, 
                             horizontalalignment="left", verticalalignment="top", 
                             family="monospace", fontsize=self.fs1)
@@ -297,6 +341,6 @@ class ND_PDF_Plotter(object):
             callback(self._fig, self._axes, config1, out_filename)
         else:
             # Save the figure
-            fig.savefig(out_filename)
+            self._fig.savefig(out_filename)
 
 
