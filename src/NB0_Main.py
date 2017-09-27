@@ -71,11 +71,12 @@ class NB_Model(object):
 
         Optional parameters
         -------------------
-        interpd_grid_shape : tuple of integers, optional
-            The size of each dimension of the interpolated flux grids, default
-            (15,)*ndim.  The order of the integers corresponds to the order of
-            parameters in grid_params.  These values have a major impact on the
-            speed of the grid interpolation.
+        interpd_grid_shape : list of integers, optional
+            The size of each dimension of the interpolated flux grids.  The
+            default varies with the number of dimensions to give 60000 points
+            in total in each interpolated grid.  The order of the integers
+            corresponds to the order of parameters in grid_params.  These
+            values have a major impact on the speed of the grid interpolation.
         grid_error : float between 0 and 1, optional
             The systematic relative error on grid fluxes, as a linear
             proportion.  Default is 0.35 (average of errors of 0.15 dex above
@@ -92,8 +93,9 @@ class NB_Model(object):
             raise ValueError("At least two modelled lines required (one is for "
                                                                  "normalising)")
 
-        # Interpolated grid shape (default: [15, 15, ..., 15])
-        interpd_grid_shape = kwargs.pop("interpd_grid_shape", [15] * n_params)
+        # Interpolated grid shape
+        default_shape = [int(6e4**(1./n_params))] * n_params  # 6e4 point total
+        interpd_grid_shape = kwargs.pop("interpd_grid_shape", default_shape)
         if len(interpd_grid_shape) != n_params:
             raise ValueError("interpd_grid_shape has wrong length: needs "
                              "exactly one integer for each parameter")

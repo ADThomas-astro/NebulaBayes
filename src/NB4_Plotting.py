@@ -4,6 +4,7 @@ import itertools
 import matplotlib.pyplot as plt  # Plotting
 # For generating a custom colourmap:
 from matplotlib.colors import LinearSegmentedColormap
+import matplotlib.ticker as ticker  # Customise tick placement
 import numpy as np  # Core numerical library
 import pandas as pd
 
@@ -45,7 +46,7 @@ class Plot_Config(object):
     def __init__(self, input_configs):
         """
         Initialise this Plot_Config instance by overriding the defaults with
-        the user's inputs.  We also error check inputs.
+        the user's inputs.  We also validate the inputs.
         """
         if not isinstance(input_configs, list) or len(input_configs) != 4:
             raise Exception("plot_configs must be a list of length 4")
@@ -79,6 +80,10 @@ class ND_PDF_Plotter(object):
     We use a class in order to save some information about the raw grids, so we
     can overplot the locations of the raw gridpoints without passing in raw
     grid information whenever we want to make a corner plot.
+
+    The plotting method includes many specific constraints (such as how to
+    place ticks) that are designed to ensure that NebulaBayes plots look
+    consistently good over different versions of matplotlib.
     """
     def __init__(self, raw_gridpts=None):
         """
@@ -90,9 +95,9 @@ class ND_PDF_Plotter(object):
 
         # Some hard-coded plotting configuration
         self.fs1 = 4.5 # Fontsize of annotation table (if shown) and legend
-        self.label_fontsize = 7
+        self.label_fontsize = 8
         self.tick_fontsize = 7
-        self.tick_size = 3
+        self.tick_size = 2
         self.label_kwargs = {"annotation_clip":False,
                   "horizontalalignment":"center", "verticalalignment":"center",
                   "fontsize":self.label_fontsize,
@@ -182,6 +187,11 @@ class ND_PDF_Plotter(object):
             ax_i.set_visible(True)  # Turn this axis back on
             for axis in ["top", "bottom", "left", "right"]:
                 ax_i.spines[axis].set_linewidth(self.axes_spine_width)
+            for axis in [ax_i.xaxis, ax_i.yaxis]:
+                axis.set_major_locator(ticker.MaxNLocator(nbins=8, min_n_ticks=4))
+                axis.set_minor_locator(ticker.AutoMinorLocator(n=2))
+            ax_i.xaxis.set_ticks_position("both")  # On top and bottom spines
+            ax_i.yaxis.set_ticks_position("left")  # On left but not right spine
 
             # Calculate the image extent:
             x_arr, y_arr = par_arr_map[name_x], par_arr_map[name_y]
@@ -241,10 +251,26 @@ class ND_PDF_Plotter(object):
                          facecolor="none", edgecolor="orange",
                          label="Projected peak of full nD PDF")
 
-            # Format the current axes:
-            ax_i.set_xlim( extent["xmin"], extent["xmax"] )
-            ax_i.set_ylim( extent["ymin"], extent["ymax"] )
-            ax_i.tick_params( direction='out', length=self.tick_size )
+            # Format the current axes
+            ax_i.set_xlim(extent["xmin"], extent["xmax"])
+            ax_i.set_ylim(extent["ymin"], extent["ymax"])
+            # Manually prune ticks, becuase the "prune" option doesn't work
+            # in the MaxNLocator
+            xmin, xmax = ax_i.get_xlim(); ymin, ymax = ax_i.get_ylim()
+            x_cut = xmin + 0.95 * (xmax - xmin)  # Remove ticks above x_cut
+            y_cut = ymin + 0.95 * (ymax - ymin)
+            xticks, yticks = ax_i.get_xticks(), ax_i.get_yticks()
+            if len(xticks) > 0 and (xticks[-1] > x_cut):
+                # Workaround: use tick values, instead of labels
+                xlabels = [round(t,8) if t < x_cut else "" for t in xticks]
+                ax_i.set_xticklabels(xlabels)
+            if len(yticks) > 0 and (yticks[-1] > y_cut):
+                # Workaround: use tick values, instead of labels
+                ylabels = [round(t,8) if t < y_cut else "" for t in yticks]
+                ax_i.set_yticklabels(ylabels)
+
+            ax_i.tick_params(direction="out", length=self.tick_size, which="major")
+            ax_i.tick_params(direction="out", length=0.7*self.tick_size, which="minor")
             if ind_y == 0: # If we're in the first row of plots
                 # Generate x-axis label
                 label_x = (gridspec["right"] - ind_x * gridspec["wspace"] -
@@ -277,6 +303,9 @@ class ND_PDF_Plotter(object):
             ax_k.set_visible(True)  # turn this axis back on
             for axis in ["top", "bottom", "left", "right"]:
                 ax_k.spines[axis].set_linewidth(self.axes_spine_width)
+            for axis in [ax_k.xaxis, ax_k.yaxis]:
+                axis.set_major_locator(ticker.MaxNLocator(nbins=8, min_n_ticks=4))
+                axis.set_minor_locator(ticker.AutoMinorLocator(n=2))
             pdf_1D =  NB_nd_pdf.marginalised_1D[param]
             if pdf_1D.min() < 0:  # Ensure the PDF is non-negative
                 raise ValueError("The 1D PDF {0} has a negative value!".format(param))
@@ -305,7 +334,10 @@ class ND_PDF_Plotter(object):
                         tick.set_fontsize(self.tick_fontsize)
             else: # Not last column
                 ax_k.set_xticklabels([]) # No x_labels
-            ax_k.tick_params(direction='out', length=self.tick_size)
+            ax_k.tick_params(direction="out", length=self.tick_size, which="major")
+            ax_k.tick_params(direction="out", length=0.7*self.tick_size, which="minor")
+            ax_k.xaxis.tick_bottom()  # Ticks on bottom but not top spine
+            ax_k.yaxis.tick_left()    # Ticks on left but not right spine
 
         legend_anchor = (  # Figure fraction coords
             (gridspec["left"] +
