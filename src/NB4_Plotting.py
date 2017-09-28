@@ -120,27 +120,32 @@ class ND_PDF_Plotter(object):
             return
 
         # Create a new figure and 2D-array of axes objects
-        fig_width_ht = (6.0,)*2 # Figure width and height in inches (equal)
+        fig_width_ht = (6.0,) * 2  # Figure width and height in inches (equal)
         # We keep the figure size and bounds of the axes grid the same, and
         # change only n_rows(==n_cols) for different grid dimensions.
         gridspec = {"left": 0.13, "bottom": 0.13, "right": 0.98, "top": 0.98,
                     "hspace": 0.02, "wspace": 0.02}
+        fig, axes = plt.subplots(n, n, figsize=fig_width_ht,
+                                                          gridspec_kw=gridspec)
+        
+        # Add some more information to the gridspec dict
         gridspec["axes_width"] = (gridspec["right"] - gridspec["left"] -
                            (n - 1) * gridspec["wspace"]) / n  # Figure fraction
         gridspec["axes_height"] = (gridspec["top"] - gridspec["bottom"] -
                            (n - 1) * gridspec["hspace"]) / n  # Figure fraction
-        gridspec_kw = gridspec.copy()
-        gridspec_kw.pop("axes_width"); gridspec_kw.pop("axes_height")
-        fig, axes = plt.subplots(n, n, figsize=fig_width_ht,
-                                                       gridspec_kw=gridspec_kw)
-        self._fig = fig # Save reference to figure
+        gridspec["n"] = n
+        
+        # Set up the axes grid
         axes = np.atleast_2d(axes)  # For the n == 1 case
         # Flip axes array so images fill lower-left half of subplot grid:
         axes = np.flipud(np.fliplr(axes))
         # Now axes[0, 0] is the axes in the lower-right.
-        self._axes = axes # Save reference to axes
         for ax in axes.ravel():    # Turn all axes off for now.
             ax.set_visible(False)  # Needed axes will be turned on later.
+        
+        # Save the figure, axes grid and gridspec dictionary as attributes
+        self._axes = axes
+        self._fig = fig
         self._gridspec = gridspec
 
 
@@ -181,6 +186,34 @@ class ND_PDF_Plotter(object):
         ax.tick_params(direction="out", length=self.tick_size, which="major")
         ax.tick_params(direction="out", length=(0.7 * self.tick_size),
                        which="minor")
+
+
+    def _add_legend(self, ax_1D, ax_2D, gridspec):
+        """
+        Add a legend to the figure.  The inputs ax_1D and ax_2D are axes which
+        have 1- and 2-dimensional PDFs plotted on them, respectively.
+        """
+        n = gridspec["n"]
+        legend_anchor = (  # (x,y) in figure fraction coords
+            (gridspec["left"] +
+                ((n+1)//2) * (gridspec["axes_width"] + gridspec["wspace"])
+                                                                      + 0.005),
+            (gridspec["bottom"] +
+                (n//2) * (gridspec["axes_height"] + gridspec["hspace"])
+                                                                      + 0.00)
+                        )
+        lh1, ll1 = ax_1D.get_legend_handles_labels()
+        lh2, ll2 = ax_2D.get_legend_handles_labels()
+        lgd = ax_1D.legend(lh1+lh2, ll1+ll2, loc="lower left", borderpad=1,
+                          scatterpoints=1, bbox_to_anchor=legend_anchor, 
+                          bbox_transform=self._fig.transFigure,  # Needed
+                                    # because we use figure fraction coords
+                          fontsize=self.fs1, fancybox=False)
+        leg_frame = lgd.get_frame()
+        leg_frame.set_linewidth(0.5)
+        leg_frame.set_edgecolor("black")
+
+
 
 
 
@@ -354,26 +387,9 @@ class ND_PDF_Plotter(object):
             ax_k.xaxis.tick_bottom()  # Ticks on bottom but not top spine
             ax_k.yaxis.tick_left()    # Ticks on left but not right spine
 
-        # Handle the legend
         if config1["show_legend"] is True and n > 1:
             # Add legend to current axes.  Legend not required for n = 1.
-            legend_anchor = (  # (x,y) in figure fraction coords
-                (gridspec["left"] +
-                    ((n+1)//2) * (gridspec["axes_width"] +
-                                  gridspec["wspace"]) + 0.005),
-                (gridspec["bottom"] +
-                    (n//2) * (gridspec["axes_height"] +
-                              gridspec["hspace"]) + 0.00)
-                            )
-            lh1, ll1 = ax_k.get_legend_handles_labels()
-            lh2, ll2 = ax_i.get_legend_handles_labels()
-            lgd = ax_k.legend(lh1+lh2, ll1+ll2, loc="lower left", borderpad=1,
-                              scatterpoints=1, bbox_to_anchor=legend_anchor, 
-                              bbox_transform=self._fig.transFigure,  # Needed
-                                        # because we use figure fraction coords
-                              fontsize=self.fs1, fancybox=False)
-            leg_frame = lgd.get_frame()
-            leg_frame.set_linewidth(0.5); leg_frame.set_edgecolor("black")
+            self._add_legend(ax_k, ax_i, gridspec)
 
         # Add fluxes table and chisquared as text annotation if requested
         if config1["table_on_plots"] is True:
