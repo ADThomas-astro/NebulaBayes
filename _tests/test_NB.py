@@ -348,7 +348,9 @@ class Test_1D_grid(unittest.TestCase):
                                           cls.__name__ + "_best_model.csv")
         cls.NB_Model_1 = NB_Model(DF_grid1D, ["P0"], cls.lines,
                                   interpd_grid_shape=[300])
-        kwargs = {"posterior_plot":cls.posterior_plot, "norm_line":"l0",
+        # We test the case-insensitivity of the norm_line, by writing
+        # "L0" instead of "l0" here:
+        kwargs = {"posterior_plot":cls.posterior_plot, "norm_line":"L0",
                   "best_model_table":cls.best_model_table}
         cls.Result = cls.NB_Model_1(obs_fluxes, obs_errors, cls.lines, **kwargs)
 

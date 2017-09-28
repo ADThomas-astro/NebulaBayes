@@ -123,7 +123,7 @@ class NB_Model(object):
 
 
 
-    def __call__(self, obs_fluxes, obs_flux_errors, obs_emission_lines, **kwargs):
+    def __call__(self, obs_fluxes, obs_flux_errors, obs_line_names, **kwargs):
         """
         Run NebulaBayes Bayesian parameter estimation using the interpolated
         grids stored in this NB_Model object.
@@ -134,7 +134,7 @@ class NB_Model(object):
             The observed emission-line fluxes
         obs_flux_errors : list of floats
             The corresponding measurement errors
-        obs_emission_lines : list of str
+        obs_line_names : list of str
             The corresponding emission line names, matching names in the header
             of the input grid flux table
         
@@ -218,14 +218,24 @@ class NB_Model(object):
         """
         print("Running NebulaBayes...")
 
-        if "norm_line" not in kwargs and "Hbeta" not in obs_emission_lines:
-            raise ValueError("Can't normalise by default line 'Hbeta': not "
-                             "found in obs_emission_lines line names.  Maybe "
-                             "set keyword 'norm_line' to another line?")
-        norm_line = kwargs.pop("norm_line", "Hbeta") # Default "Hbeta"
+        line_names_upper = [l.upper() for l in obs_line_names]
+        if "norm_line" not in kwargs and "HBETA" not in line_names_upper:
+            raise ValueError("Can't normalise by default line 'Hbeta': not"
+                             " found in obs_line_names.  Consider setting"
+                             " keyword 'norm_line' to another line.")
+        norm_line = kwargs.pop("norm_line", "Hbeta")  # Default "Hbeta"
+        if norm_line not in obs_line_names:
+            # We want norm_line to be case-insensitive.  If there is exactly
+            # 1 case-insensitive match in obs_line_names, use the matched name.
+            if line_names_upper.count(norm_line.upper()) == 1:
+                index_nl = line_names_upper.index(norm_line.upper())
+                norm_line = obs_line_names[index_nl]
+            else:
+                raise ValueError("norm_line '{0}'".format(norm_line) +
+                                 " not found in obs_line_names")
         deredden = kwargs.pop("deredden", False) # Default False
         assert isinstance(deredden, bool)
-        if deredden and not all((l in obs_emission_lines) for l in ["Halpha","Hbeta"]):
+        if deredden and not all((l in obs_line_names) for l in ["Halpha","Hbeta"]):
             raise ValueError("'Halpha' and 'Hbeta' must be provided for deredden=True")
         obs_wavelengths = kwargs.pop("obs_wavelengths", None) # Default None
         if deredden and (obs_wavelengths is None):
@@ -235,7 +245,7 @@ class NB_Model(object):
         # Process the input observed data; DF_obs is a pandas DataFrame table
         # where the emission line names index the rows:
         DF_obs = _process_observed_data(obs_fluxes, obs_flux_errors,
-                       obs_emission_lines, obs_wavelengths, norm_line=norm_line)
+                       obs_line_names, obs_wavelengths, norm_line=norm_line)
         for line in DF_obs.index:  # Check observed emission lines are in grid
             if line not in self.Interpd_grids.grids["No_norm"]:
                 raise ValueError("The line {0}".format(line) + 
@@ -315,7 +325,7 @@ class NB_Model(object):
 
 
 
-def _process_observed_data(obs_fluxes, obs_flux_errors, obs_emission_lines,
+def _process_observed_data(obs_fluxes, obs_flux_errors, obs_line_names,
                                                     obs_wavelengths, norm_line):
     """
     Error-check the input observed emission line data, form it into a pandas
@@ -324,12 +334,12 @@ def _process_observed_data(obs_fluxes, obs_flux_errors, obs_emission_lines,
     obs_fluxes = np.asarray(obs_fluxes, dtype=float) # Ensure numpy array
     obs_flux_errors = np.asarray(obs_flux_errors, dtype=float)
     # Check measured data inputs:
-    n_measured = len(obs_emission_lines)
+    n_measured = len(obs_line_names)
     if (obs_fluxes.size != n_measured) or (obs_flux_errors.size != n_measured):    
         raise ValueError("Inputs obs_fluxes, obs_flux_errors and " 
-                         "obs_emission_lines don't all have the same length.")
-    if len(set(obs_emission_lines)) != n_measured:
-        raise ValueError("obs_emission_lines line names are not all unique")
+                         "obs_line_names don't all have the same length.")
+    if len(set(obs_line_names)) != n_measured:
+        raise ValueError("obs_line_names are not all unique")
     if n_measured < 2:
         raise ValueError("At least two observed lines are required (one is for "
                                                                  "normalising)")
@@ -356,18 +366,15 @@ def _process_observed_data(obs_fluxes, obs_flux_errors, obs_emission_lines,
         raise ValueError("The flux error for an emission line is not positive.")
 
     # Form the data from the observations into a pandas DataFrame table.
-    obs_dict = OD([("Line", obs_emission_lines)])
+    obs_dict = OD([("Line", obs_line_names)])
     if obs_wavelengths is not None: # Leave out of DataFrame if not provided
         obs_dict["Wavelength"] = obs_wavelengths
     obs_dict["Flux"] = obs_fluxes
     obs_dict["Flux_err"] = obs_flux_errors
     DF_obs = pd.DataFrame(obs_dict)
-    DF_obs.set_index("Line", inplace=True) # Row index is the emission line name
+    DF_obs.set_index("Line", inplace=True) # Row index is emission line name
 
     # Normalise the fluxes:
-    if norm_line not in DF_obs.index.values:
-        raise ValueError("norm_line '{0}' not found in input line names".format(
-                                                                     norm_line))
     norm_flux = DF_obs.loc[norm_line, "Flux"] * 1.0
     if norm_flux == 0:
         raise ValueError("The obs flux for norm_line ({0}) is 0".format(norm_line))
