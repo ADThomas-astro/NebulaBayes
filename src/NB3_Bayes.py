@@ -114,23 +114,28 @@ class NB_nd_pdf(object):
                                                         dx=spacing[param_index])
             marginalised_2D[double_name] = working_arr # Store result
 
-        #--------------------------------------------------------------------------
+        #----------------------------------------------------------------------
         # Calculate the 1D marginalised pdf for each individual parameter
         # Initialise dictionary of all 1D marginalised pdf arrays:
         marginalised_1D = {}
 
         # For the first parameter in param_names, integrate the first 2D
-        # marginalised pdf over the other dimension (parameter), using Simpson's
-        # rule:
-        marginalised_1D[param_names[0]] = simps(marginalised_2D[double_names[0]],
-                                                        axis=1, dx=spacing[1])
-        #    np.trapz(marginalised_2D[double_names[0]], axis=1, dx=spacing[1])
+        # marginalised pdf over the other dimension (parameter), using
+        # Simpson's rule:
+        if len(marginalised_2D) > 0:  # If more than 1 dimension in grid
+            integral_i = simps(marginalised_2D[double_names[0]], axis=1,
+                                                                 dx=spacing[1])
+            marginalised_1D[param_names[0]] = integral_i
+            # np.trapz(marginalised_2D[double_names[0]], axis=1, dx=spacing[1])
+        else:  # Must be a 1D grid
+            marginalised_1D[param_names[0]] = self.nd_pdf
 
         # For all parameters after the first in param_names:
-        for double_name, param_inds_double in zip(double_names[:n-1], double_indices[:n-1]):
-            # For each pair of parameters we take the second parameter, and integrate 
-            # over the first parameter of the pair (which by construction is always the
-            # first parameter in param_names).
+        for double_name, param_inds_double in zip(double_names[:n-1],
+                                                  double_indices[:n-1]):
+            # For each pair of parameters we take the second parameter, and 
+            # integrate over the first parameter of the pair (which by
+            # construction is always the first parameter in param_names).
             assert param_inds_double[0] == 0 
             param = param_names[param_inds_double[1]]
             # Integrate over first dimension (parameter) using Simpson's rule:

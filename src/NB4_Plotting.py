@@ -134,13 +134,53 @@ class ND_PDF_Plotter(object):
         fig, axes = plt.subplots(n, n, figsize=fig_width_ht,
                                                        gridspec_kw=gridspec_kw)
         self._fig = fig # Save reference to figure
-        # Flip axes array so images fill the lower-left half of subplot grid:
+        axes = np.atleast_2d(axes)  # For the n == 1 case
+        # Flip axes array so images fill lower-left half of subplot grid:
         axes = np.flipud(np.fliplr(axes))
         # Now axes[0, 0] is the axes in the lower-right.
         self._axes = axes # Save reference to axes
         for ax in axes.ravel():    # Turn all axes off for now.
             ax.set_visible(False)  # Needed axes will be turned on later.
         self._gridspec = gridspec
+
+
+
+    def _format_2D_PDF_axes(self, ax, extent):
+        """
+        Set the axis properties and tick properties for an axes displaying a 2D
+        marginalised PDF.
+        """
+        # Set width of axis spine lines
+        for axis in ["top", "bottom", "left", "right"]:
+            ax.spines[axis].set_linewidth(self.axes_spine_width)
+        # Set tick locations
+        for axis in [ax.xaxis, ax.yaxis]:
+            axis.set_major_locator(ticker.MaxNLocator(nbins=8, min_n_ticks=4))
+            axis.set_minor_locator(ticker.AutoMinorLocator(n=2))
+        # Set which spines ticks are on
+        ax.xaxis.set_ticks_position("both")  # On top and bottom spines
+        ax.yaxis.set_ticks_position("left")  # On left but not right spine
+        # Set the axis limits
+        ax.set_xlim(extent["xmin"], extent["xmax"])
+        ax.set_ylim(extent["ymin"], extent["ymax"])
+        # Manually prune ticks, becuase the "prune" option doesn't work
+        # in the MaxNLocator
+        xmin, xmax = ax.get_xlim(); ymin, ymax = ax.get_ylim()
+        x_cut = xmin + 0.95 * (xmax - xmin)  # Remove ticks above x_cut
+        y_cut = ymin + 0.95 * (ymax - ymin)
+        xticks, yticks = ax.get_xticks(), ax.get_yticks()
+        if len(xticks) > 0 and (xticks[-1] > x_cut):
+            # Workaround: use tick values, instead of labels
+            xlabels = [round(t, 8) if t < x_cut else "" for t in xticks]
+            ax.set_xticklabels(xlabels)
+        if len(yticks) > 0 and (yticks[-1] > y_cut):
+            # Workaround: use tick values, instead of labels
+            ylabels = [round(t, 8) if t < y_cut else "" for t in yticks]
+            ax.set_yticklabels(ylabels)
+        # Point ticks out of the axes and set their length
+        ax.tick_params(direction="out", length=self.tick_size, which="major")
+        ax.tick_params(direction="out", length=(0.7 * self.tick_size),
+                       which="minor")
 
 
 
@@ -185,13 +225,6 @@ class ND_PDF_Plotter(object):
             # ind_x ranges from 1 to n - 1.
             ax_i = self._axes[ ind_y, ind_x ]
             ax_i.set_visible(True)  # Turn this axis back on
-            for axis in ["top", "bottom", "left", "right"]:
-                ax_i.spines[axis].set_linewidth(self.axes_spine_width)
-            for axis in [ax_i.xaxis, ax_i.yaxis]:
-                axis.set_major_locator(ticker.MaxNLocator(nbins=8, min_n_ticks=4))
-                axis.set_minor_locator(ticker.AutoMinorLocator(n=2))
-            ax_i.xaxis.set_ticks_position("both")  # On top and bottom spines
-            ax_i.yaxis.set_ticks_position("left")  # On left but not right spine
 
             # Calculate the image extent:
             x_arr, y_arr = par_arr_map[name_x], par_arr_map[name_y]
@@ -230,7 +263,7 @@ class ND_PDF_Plotter(object):
                 raw_gridpoints_iter = itertools.product(self.raw_gridpts[name_x],
                                                         self.raw_gridpts[name_y] )
                 ax_i.scatter(*zip(*raw_gridpoints_iter), marker='o', s=0.3, color='0.4')
-            
+
             # Show best estimates (coordinates from peaks of 1D pdf):
             x_best_1d, y_best_1d = p_estimates[name_x], p_estimates[name_y]
             ax_i.scatter(x_best_1d, y_best_1d, marker="o", s=12, linewidth=0,
@@ -251,26 +284,8 @@ class ND_PDF_Plotter(object):
                          facecolor="none", edgecolor="orange",
                          label="Projected peak of full nD PDF")
 
-            # Format the current axes
-            ax_i.set_xlim(extent["xmin"], extent["xmax"])
-            ax_i.set_ylim(extent["ymin"], extent["ymax"])
-            # Manually prune ticks, becuase the "prune" option doesn't work
-            # in the MaxNLocator
-            xmin, xmax = ax_i.get_xlim(); ymin, ymax = ax_i.get_ylim()
-            x_cut = xmin + 0.95 * (xmax - xmin)  # Remove ticks above x_cut
-            y_cut = ymin + 0.95 * (ymax - ymin)
-            xticks, yticks = ax_i.get_xticks(), ax_i.get_yticks()
-            if len(xticks) > 0 and (xticks[-1] > x_cut):
-                # Workaround: use tick values, instead of labels
-                xlabels = [round(t,8) if t < x_cut else "" for t in xticks]
-                ax_i.set_xticklabels(xlabels)
-            if len(yticks) > 0 and (yticks[-1] > y_cut):
-                # Workaround: use tick values, instead of labels
-                ylabels = [round(t,8) if t < y_cut else "" for t in yticks]
-                ax_i.set_yticklabels(ylabels)
+            self._format_2D_PDF_axes(ax_i, extent)
 
-            ax_i.tick_params(direction="out", length=self.tick_size, which="major")
-            ax_i.tick_params(direction="out", length=0.7*self.tick_size, which="minor")
             if ind_y == 0: # If we're in the first row of plots
                 # Generate x-axis label
                 label_x = (gridspec["right"] - ind_x * gridspec["wspace"] -
@@ -339,16 +354,20 @@ class ND_PDF_Plotter(object):
             ax_k.xaxis.tick_bottom()  # Ticks on bottom but not top spine
             ax_k.yaxis.tick_left()    # Ticks on left but not right spine
 
-        legend_anchor = (  # Figure fraction coords
-            (gridspec["left"] +
-             ((n+1)//2) * (gridspec["axes_width"] + gridspec["wspace"]) + 0.005),
-            (gridspec["bottom"] +
-             (n//2) * (gridspec["axes_height"] + gridspec["hspace"]) + 0.00)
-            )
-        if config1["show_legend"] is True:  # Add legend to current axes
+        # Handle the legend
+        if config1["show_legend"] is True and n > 1:
+            # Add legend to current axes.  Legend not required for n = 1.
+            legend_anchor = (  # (x,y) in figure fraction coords
+                (gridspec["left"] +
+                    ((n+1)//2) * (gridspec["axes_width"] +
+                                  gridspec["wspace"]) + 0.005),
+                (gridspec["bottom"] +
+                    (n//2) * (gridspec["axes_height"] +
+                              gridspec["hspace"]) + 0.00)
+                            )
             lh1, ll1 = ax_k.get_legend_handles_labels()
             lh2, ll2 = ax_i.get_legend_handles_labels()
-            lgd = ax_i.legend(lh1+lh2, ll1+ll2, loc="lower left", borderpad=1,
+            lgd = ax_k.legend(lh1+lh2, ll1+ll2, loc="lower left", borderpad=1,
                               scatterpoints=1, bbox_to_anchor=legend_anchor, 
                               bbox_transform=self._fig.transFigure,  # Needed
                                         # because we use figure fraction coords
@@ -357,12 +376,14 @@ class ND_PDF_Plotter(object):
             leg_frame.set_linewidth(0.5); leg_frame.set_edgecolor("black")
 
         # Add fluxes table and chisquared as text annotation if requested
-        anno_location = (gridspec["left"] + (n//2 * (gridspec["axes_width"] + 
-                                   gridspec["wspace"]) + 0.01), gridspec["top"])
         if config1["table_on_plots"] is True:
+            anno_location = [gridspec["left"] + (n//2 * (gridspec["axes_width"]
+                                + gridspec["wspace"]) + 0.01), gridspec["top"]]
+            if n == 1:
+                anno_location[1] -= 0.02  # Slightly lower
             if plot_type != "Individual_lines":  # If table available
                 pd.set_option("display.precision", 4)
-                ax_i.annotate(config.table_for_plot, anno_location,
+                ax_k.annotate(config.table_for_plot, anno_location,
                             xycoords="figure fraction", annotation_clip=False, 
                             horizontalalignment="left", verticalalignment="top", 
                             family="monospace", fontsize=self.fs1)

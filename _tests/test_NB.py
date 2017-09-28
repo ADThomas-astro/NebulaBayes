@@ -42,7 +42,7 @@ test_dir = os.path.join(this_file_dir_path, "test_outputs") # For outputs
 def build_grid(param_range_dict, line_peaks_dict, n_gridpts_list, std_frac=0.25):
     """
     Initialise a grid - create a pandas DataFrame table.  Fluxes for each
-    emission line form a Gaussian ball around a specified point. 
+    emission line form a Gaussian ball around a specified point.
     param_range_dict: Ordered dict mapping parameter names to a tuple giving
                       the parameter minimum and maximum
     line_peaks_dict: Ordered dict mapping line names to the location
@@ -56,7 +56,7 @@ def build_grid(param_range_dict, line_peaks_dict, n_gridpts_list, std_frac=0.25)
                                     param_range_dict.values(), n_gridpts_list)]
     line_names = list(line_peaks_dict.keys())
     std = np.array([(r[1] - r[0]) * std_frac for r in param_range_dict.values()])
-    
+
     line_peak_vals = {}
     for line, peak_inds in line_peaks_dict.items():
         line_peak = []
@@ -157,7 +157,7 @@ class Test_Obs_from_Peak_Gridpoint_2D_Grid_2_Lines(Base_2D_Grid_2_Lines):
     NebulaBayes.
     """
     test_gridpoint = [8, 5]  # From zero.  [11, 9] total gridpoints in each dim
-    
+
     @classmethod
     def setUpClass(cls):
         super(Test_Obs_from_Peak_Gridpoint_2D_Grid_2_Lines, cls).setUpClass()
@@ -235,7 +235,7 @@ class Test_Obs_from_nonPeak_Gridpoint_2D_Grid_2_Lines(Base_2D_Grid_2_Lines):
     """
     test_gridpoint = [6, 4]  # From zero.  [11, 9] total gridpoints in each dim,
                              # the line peak is at line_peaks = [8, 5]
-    
+
     @classmethod
     def setUpClass(cls):
         super(Test_Obs_from_nonPeak_Gridpoint_2D_Grid_2_Lines, cls).setUpClass()
@@ -251,8 +251,8 @@ class Test_Obs_from_nonPeak_Gridpoint_2D_Grid_2_Lines(Base_2D_Grid_2_Lines):
     def test_output_deredden_flag(self):
         self.assertTrue(self.Result.deredden is False)
 
-    def test_parameter_estimates(self):
-        """ Ensure the parameter estimates are as expected """
+    def test_parameters_in_output(self):
+        """ Check all parameters are found in output """
         DF_est = self.Result.Posterior.DF_estimates
         self.assertTrue(all(p in DF_est.index for p in self.params))
         # THE POSTERIOR IS SHAPED LIKE A DONUT.  CHECK FOR A SINGLE LOCAL MIN?
@@ -313,6 +313,68 @@ class test_linear_interpolation_3D(unittest.TestCase):
 
 
 ###############################################################################
+
+
+class Test_1D_grid(unittest.TestCase):
+    """
+    Test that a 1D grid works and gives expected results.
+    We use a gaussian 1D "grid", and input a point at the peak into NB to
+    ensure NB finds the correct point.
+    """
+    longMessage = True  # Append messages to existing message
+
+    @classmethod
+    def setUpClass(cls):
+        # Make a 1D grid:
+        test_gridpoint = 45  # From zero
+        cls.test_gridpoint = test_gridpoint
+        p_vals = np.linspace(-2, 8, 100)
+        cls.p_vals = p_vals
+        peak1, peak2, peak3 = p_vals[8], p_vals[60], p_vals[83]
+        std1, std2, std3 = 1.1, 1.8, 4.3
+        flux_0 = 3.0 * np.ones_like(p_vals)
+        flux_1 = 13. * np.exp(-np.sqrt(((p_vals - peak1) / std1)**2) / 2)
+        flux_2 = 13. * np.exp(-np.sqrt(((p_vals - peak2) / std2)**2) / 2)
+        flux_3 = 21. * np.exp(-np.sqrt(((p_vals - peak3) / std3)**2) / 2)
+        cls.lines = ["l0", "l1", "l2", "l3"]
+        DF_grid1D = pd.DataFrame({"P0":p_vals, "l0":flux_0, "l1":flux_1,
+                                  "l2":flux_2, "l3":flux_3})
+        obs_fluxes = [x[test_gridpoint] for x in [flux_0,flux_1,flux_2,flux_3]]
+        obs_errors = [f / 7. for f in obs_fluxes]
+
+        cls.posterior_plot = os.path.join(test_dir,
+                                          cls.__name__ + "_posterior.pdf")
+        cls.best_model_table = os.path.join(test_dir,
+                                          cls.__name__ + "_best_model.csv")
+        cls.NB_Model_1 = NB_Model(DF_grid1D, ["P0"], cls.lines,
+                                  interpd_grid_shape=[300])
+        kwargs = {"posterior_plot":cls.posterior_plot, "norm_line":"l0",
+                  "best_model_table":cls.best_model_table}
+        cls.Result = cls.NB_Model_1(obs_fluxes, obs_errors, cls.lines, **kwargs)
+
+    def test_output_deredden_flag(self):
+        self.assertTrue(self.Result.deredden is False)
+
+    def test_parameter_estimate(self):
+        """ Ensure the single parameter estimate is as expected """
+        DF_est = self.Result.Posterior.DF_estimates
+        self.assertTrue("P0" in DF_est.index)
+        lower = self.p_vals[self.test_gridpoint - 1]
+        upper = self.p_vals[self.test_gridpoint + 1]
+        est = DF_est.loc["P0", "Estimate"]
+        self.assertTrue(lower < est < upper, msg="{0}, {1}, {2}".format(
+                                                            lower, est, upper))
+
+    @classmethod
+    def tearDownClass(cls):
+        """ Remove the output when tests in this class have finished """
+        if clean_up:
+            if hasattr(cls, "posterior_plot"):
+                os.remove(cls.posterior_plot)
+            if hasattr(cls, "best_model_table"):
+                os.remove(cls.best_model_table)
+
+
 
 
 
