@@ -7,6 +7,7 @@ import pandas as pd # For tables ("DataFrame"s)
 from scipy.integrate import cumtrapz, simps
 from scipy.signal import argrelextrema
 from .dereddening import deredden as do_dereddening
+from .dereddening import Av_from_BD
 from .NB1_Process_grids import Grid_description
 from .NB2_Prior import calculate_prior
 
@@ -59,11 +60,14 @@ class NB_nd_pdf(object):
         # Make a parameter estimate table based on this nd_pdf
         self._make_parameter_estimate_table() # add self.DF_estimates attribute
         if DF_obs is not None:
-            # Make a table comparing model and observed fluxes for the 'best' model
+            # For the "best" model, we calculate the following 3 items:
+            # 1.) Make a table comparing the model and observed fluxes
             self._make_best_model_table(DF_obs, Interpd_grids, NB_Result)
-            # We added the self.DF_best attribute
-            # Calculate chi2 for the 'best' model (add self.chi2 attribute):
+                  # We added the self.DF_best attribute
+            # 2.) Calculate the chi2 of the fit (add self.chi2 attribute):
             self._calculate_chi2(NB_Result.deredden)
+            # 3.) Calculate implied extinction (self.extinction_Av attribute):
+            self._calculate_Av(NB_Result.deredden, Interpd_grids, DF_obs)
 
 
 
@@ -280,6 +284,31 @@ class NB_nd_pdf(object):
                      # so Halpha observations always match the prediction
         chi2 /= dof # The "reduced chi-squared"
         self.chi2 = chi2
+
+
+
+    def _calculate_Av(self, deredden, Interpd_grids, DF_obs):
+        """
+        Calculate the visual extinction Av in magnitudes that is implied by
+        the "best" model.
+        deredden: Boolean.  Did we deredden the observed line fluxes to match
+                  the Balmer decrement at every interpolated model gridpoint?
+        Interpd_grids: Object storing interpolated model emission line grids
+        DF_obs: DataFrame containing the input observed line fluxes and errors
+        """
+        if deredden is False:
+            self.extinction_Av = np.nan  # We didn't deredden
+            return
+        # Find the Balmer decrements for both the "best" model and the raw
+        # observations
+        inds_max = np.unravel_index(self.nd_pdf.argmax(), self.nd_pdf.shape)
+        normed_grids = Interpd_grids.grids[DF_obs.norm_line + "_norm"]
+        Ha_Hb_max = [normed_grids[l][inds_max] for l in ["Halpha", "Hbeta"]]
+        BD_model = Ha_Hb_max[0] / Ha_Hb_max[1]  # Balmer decrement (predicted)
+        BD_obs = DF_obs.loc["Halpha", "Flux"] / DF_obs.loc["Hbeta", "Flux"]
+
+        # If BD_model > BD_obs, the extinction will be negative
+        self.extinction_Av = Av_from_BD(BD_low=BD_model, BD_high=BD_obs)
 
 
 

@@ -251,6 +251,9 @@ class Test_Obs_from_nonPeak_Gridpoint_2D_Grid_2_Lines(Base_2D_Grid_2_Lines):
     def test_output_deredden_flag(self):
         self.assertTrue(self.Result.deredden is False)
 
+    def test_output_extinction_is_NaN(self):  # Since we didn't deredden
+        self.assertTrue(np.isnan(self.Result.Posterior.extinction_Av))
+
     def test_parameters_in_output(self):
         """ Check all parameters are found in output """
         DF_est = self.Result.Posterior.DF_estimates
@@ -357,6 +360,9 @@ class Test_1D_grid(unittest.TestCase):
 
     def test_output_deredden_flag(self):
         self.assertTrue(self.Result.deredden is False)
+
+    def test_output_extinction_is_NaN(self):  # Since we didn't deredden
+        self.assertTrue(np.isnan(self.Result.Posterior.extinction_Av))
 
     def test_parameter_estimate(self):
         """ Ensure the single parameter estimate is as expected """
