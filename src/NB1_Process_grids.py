@@ -1,10 +1,12 @@
 from __future__ import print_function, division
 from collections import OrderedDict as OD
 import itertools  # For Cartesian product
+import os
 from astropy.io import fits  # For reading FITS binary tables
 from astropy.table import Table  # For FITS table to pandas DataFrame conversion
 import numpy as np  # Core numerical library
 import pandas as pd # For tables ("DataFrame"s)
+from ..grids import __file__ as grid_loc_0  # Location of built-in grids
 
 
 """
@@ -86,13 +88,13 @@ def initialise_grids(grid_table, grid_params, lines_list, interpd_grid_shape):
     Parameters
     ----------
     grid_table : str or pandas DataFrame
-        The table of photoionisation model grid fluxes, given as either the
+        The table of photoionisation model grid fluxes, given as the
         filename of a csv, FITS (.fits) or compressed FITS (fits.gz) file,
-        or a pandas DataFrame instance.
+        a pandas DataFrame instance, or one of the strings "HII" or "NLR".
     grid_params : list of strings
         The names of the grid parameters.
-    lines_list : list of strings
-        The emission lines to to extract from the grid_table of model fluxes
+    lines_list : list of strings or None
+        The emission lines to be interpolated from the raw flux grids
     interpd_grid_shape : tuple of integers
         The size of each dimension of the interpolated flux grids.
 
@@ -102,7 +104,9 @@ def initialise_grids(grid_table, grid_params, lines_list, interpd_grid_shape):
     Interpd_grids : NB_Grid instance
     """
     # Load database table containing the model grid output
-    DF_grid = load_grid_data(grid_table, lines_list)
+    DF_grid = load_grid_data(grid_table)
+    # Process and check the table, making the lines_list if it wasn't specified
+    DF_grid, lines_list = process_raw_table(DF_grid, grid_params, lines_list)
     
     # Construct raw flux grids
     Raw_grids = construct_raw_grids(DF_grid, grid_params, lines_list)
@@ -114,50 +118,83 @@ def initialise_grids(grid_table, grid_params, lines_list, interpd_grid_shape):
 
 
 
-def load_grid_data(grid_table, lines_list):
+def load_grid_data(grid_table):
     """
-    Read the model grid data.  See initialise_grids for more info.
+    Load the model grid data.
     
     Returns
     -------
     DF_grid : pd.DataFrame instance
     """
-    print("Loading input grid data...") 
-    if isinstance(grid_table, pd.DataFrame):
-        return grid_table
-    elif isinstance(grid_table, str):
-        if grid_table.endswith(".csv"):
-            DF_grid = pd.read_table(grid_table, header=0, delimiter=",")
-        elif grid_table.endswith((".fits", ".fits.gz")):
+    print("Loading input grid data...")
+
+    if isinstance(grid_table, str):
+        if grid_table in ["HII", "NLR"]:
+            # Use a built-in grid.  Resolve shorthand string to the full path.
+            grid_dir = os.path.split(grid_loc_0)[0]
+            grid_name = "NB_{0}_grid.fits.gz".format(grid_table)
+            grid_table = os.path.join(grid_dir, grid_name)
+
+        if grid_table.endswith((".fits", ".fits.gz")):
             BinTableHDU_0 = fits.getdata(grid_table, 0)
             DF_grid = Table(BinTableHDU_0).to_pandas()
+        elif grid_table.endswith(".csv"):
+            DF_grid = pd.read_table(grid_table, header=0, delimiter=",")
         else:
-            raise ValueError("grid_table string has unknown file extension")
+            if "." in grid_table:
+                raise ValueError("grid_table has unknown file extension")
+            else:
+                raise ValueError("Unknown grid_table string '{0}'".format(
+                                                                   grid_table))
+    elif isinstance(grid_table, pd.DataFrame):
+        # Copy the table, so we don't surprise the user when we modify it!
+        DF_grid = grid_table.copy()
     else:
         raise TypeError("grid_table should be a string or DataFrame")
 
+    return DF_grid
+
+
+
+def process_raw_table(DF_grid, grid_params, lines_list):
+    """
+    Ensure grid data are double-precision, finite and non-negative.
+    Check that the grid_params are all found in the table header, and check
+    that the supplied lines are in the table header.  If the lines_list wasn't
+    specified we create it.
+
+    Returns
+    -------
+    DF_grid : pd.DataFrame instance
+    lines_list : List of strings.  The names of the lines to be interpolated.
+    """
     # Remove any whitespace from column names
     DF_grid.rename(inplace=True, columns={c:c.strip() for c in DF_grid.columns})
-    for line in lines_list:
-        # Check that all requested emission lines are present in the model data:
-        if not line in DF_grid.columns:
-            raise ValueError("Emission line " + line +
-                             " was not found in the model grid table")
-        # Ensure line flux columns are a numeric data type
-        DF_grid[line] = pd.to_numeric(DF_grid[line], errors="raise")
-        DF_grid[line] = DF_grid[line].astype("float64") # Ensure double precision
+
+    for p in grid_params:
+        if p not in DF_grid.columns:
+            raise ValueError("Grid parameter {0} not found in grid".format(p))
+
+    if lines_list is None:  # Make lines_list if not specified by user
+        lines_list = [l for l in DF_grid.columns if l not in grid_params]
 
     # Clean and check the model data:
     for line in lines_list:
+        if line not in DF_grid.columns:
+            raise ValueError("Emission line {0} not found in grid".format(line))
         # Set any non-finite model fluxes to zero.  Is this the wrong thing to
         # do?  It's documented at least, in NB0_Main.py.
         DF_grid.loc[~np.isfinite(DF_grid[line].values), line] = 0
         # Check that all model flux values are non-negative:
-        if np.sum(DF_grid[line].values < 0) != 0:
-            raise ValueError("A model flux value for emission line " +
-                             line + " is negative.")
+        if np.any(DF_grid[line].values < 0):
+            raise ValueError("A model flux value for emission line " + line +
+                             " is negative.")
 
-    return DF_grid
+        # Ensure line flux columns are a numeric data type
+        DF_grid[line] = pd.to_numeric(DF_grid[line], errors="raise")
+        DF_grid[line] = DF_grid[line].astype("float64") # Ensure double precision
+
+    return DF_grid, lines_list
 
 
 

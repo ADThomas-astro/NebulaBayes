@@ -7,6 +7,7 @@ from . import NB3_Bayes
 from .NB4_Plotting import Plot_Config, ND_PDF_Plotter
 
 
+
 """
 NebulaBayes
 Adam D. Thomas
@@ -38,20 +39,21 @@ class NB_Model(object):
     run Bayesian parameter estimation.
     """
 
-    def __init__(self, grid_table, grid_params, lines_list, **kwargs):
+    def __init__(self, grid_table, grid_params=None, lines_list=None, **kwargs):
         """
         Initialise an instance of the NB_Model class.
 
-        Parameters
+        Basic parameters
         ----------
-        grid_table : str or pandas DataFrame
-            The table of photoionisation model grid fluxes, given as either the
-            filename of a csv, FITS (.fits) or compressed FITS (fits.gz) file,
-            or a pandas DataFrame instance.
+        grid_table : "HII", "NLR", str filename, or a pandas DataFrame
+            The table of photoionisation model grid fluxes.  Allowed inputs are
+            the strings "HII" or "NLR" to use one of the NebulaBayes built-in
+            grids, a filename for a csv, FITS (.fits) or compressed FITS
+            (fits.gz) file, or a pre-loaded pandas DataFrame instance.
             Each gridpoint (point in parameter space) is a row in the table.
-            There is a column for each parameter; the location of a gridpoint is
-            defined by these parameter values.  There is a column of fluxes for
-            each modelled emission line. 
+            There is a column for each parameter; the location of a gridpoint
+            is defined by these parameter values.  There is a column of fluxes
+            for each modelled emission line.
             No assumptions are made about the order of the gridpoints (rows) or
             the order of the columns in the table.  Unnecessary columns will be
             ignored, but the number of rows must be exact - the grid must be
@@ -59,15 +61,21 @@ class NB_Model(object):
             combination of included parameter values.  Note that the sampling
             of a parameter (spacing of gridpoints) may be uneven.
             Model fluxes will be normalised by NebulaBayes (see "norm_line"
-            parameter to __call__ below).  Any non-finite fluxes (e.g. nans)
+            parameter to __call__ below).  Any non-finite fluxes (e.g. NaNs)
             will be set to zero.
-        grid_params : list of strings
-            The names of the grid parameters.  This list sets the order of the
-            grid dimensions, i.e. the order in which arrays in NebulaBayes will
-            be indexed.  Each name must match a column header in the grid_table.
-        lines_list : list of strings
-            The emission lines to use in this NB_Model instance.  Each name must
-            match a column name in grid_table.  Unused lines may be excluded.
+        grid_params : list of strings, optional
+            The names of the grid parameters, which must be specified if a grid
+            other than the "HII" or "NLR" built-in grids is used.  Each name
+            must match a column header in the grid_table.  Default lists are
+            ["log U", "log P/k", "12 + log O/H"] for grid_table == "HII", and
+            ["log U", "log P/k", "12 + log O/H", "E_peak"] for
+            grid_table == "NLR".  The list sets the order of the grid
+            dimensions, i.e. the order of array indexing in NebulaBayes and the
+            order of parameters in the outputs.
+        lines_list : list of strings, optional
+            The emission lines to use in this NB_Model instance.  Each name
+            must match a column name in grid_table.  Unused lines may be
+            excluded.  By default all non-parameter table columns are included.
 
         Optional parameters
         -------------------
@@ -84,23 +92,37 @@ class NB_Model(object):
         """
         # Initialise and do some checks...
         print("Initialising NebulaBayes model...")
+
+        if grid_params is None:
+            if isinstance(grid_table, str) and grid_table in ["HII", "NLR"]:
+                if grid_table == "HII":
+                    grid_params = ["log U", "log P/k", "12 + log O/H"]
+                elif grid_table == "NLR":
+                    grid_params = ["log U", "log P/k", "12 + log O/H", "E_peak"]
+            else:
+                raise ValueError("grid_params must be specified unless "
+                                 " grid_table is 'HII' or 'NLR'")
+            # Note that grid_table is validated when loading the table
         n_params = len(grid_params)
         if len(set(grid_params)) != n_params: # Parameter names non-unique?
             raise ValueError("grid_params are not all unique")
-        if len(set(lines_list)) != len(lines_list): # Line names non-unique?
-            raise ValueError("Line names in lines_list are not all unique")
-        if len(lines_list) < 2:
-            raise ValueError("At least two modelled lines required (one is for "
-                                                                 "normalising)")
+
+        # If lines_list isn't specified it'll be created when loading the grid
+        if lines_list is not None:
+            if len(set(lines_list)) != len(lines_list): # Lines non-unique?
+                raise ValueError("Line names in lines_list are not all unique")
+            if len(lines_list) < 2:
+                raise ValueError("At least two modelled lines required "
+                                 "(one is for normalising)")
 
         # Interpolated grid shape
         default_shape = [int(6e4**(1./n_params))] * n_params  # 6e4 point total
         interpd_grid_shape = kwargs.pop("interpd_grid_shape", default_shape)
         if len(interpd_grid_shape) != n_params:
-            raise ValueError("interpd_grid_shape has wrong length: needs "
-                             "exactly one integer for each parameter")
+            raise ValueError("Bad length for interpd_grid_shape: needs length" +
+                             " {0} (the number of parameters)".format(n_params))
 
-        grid_rel_error = kwargs.pop("grid_error", 0.35) # Default: 0.35
+        grid_rel_error = kwargs.pop("grid_error", 0.35)  # Default: 0.35
         if not 0 < grid_rel_error < 1:
             raise ValueError("grid_error must be between 0 and 1")
 
@@ -218,6 +240,8 @@ class NB_Model(object):
         """
         print("Running NebulaBayes...")
 
+        if len(set(obs_line_names)) != len(obs_line_names):
+            raise ValueError("obs_line_names are not all unique")
         line_names_upper = [l.upper() for l in obs_line_names]
         if "norm_line" not in kwargs and "HBETA" not in line_names_upper:
             raise ValueError("Can't normalise by default line 'Hbeta': not"
@@ -338,8 +362,6 @@ def _process_observed_data(obs_fluxes, obs_flux_errors, obs_line_names,
     if (obs_fluxes.size != n_measured) or (obs_flux_errors.size != n_measured):    
         raise ValueError("Inputs obs_fluxes, obs_flux_errors and " 
                          "obs_line_names don't all have the same length.")
-    if len(set(obs_line_names)) != n_measured:
-        raise ValueError("obs_line_names are not all unique")
     if n_measured < 2:
         raise ValueError("At least two observed lines are required (one is for "
                                                                  "normalising)")

@@ -320,6 +320,7 @@ class Test_1D_grid(unittest.TestCase):
     Test that a 1D grid works and gives expected results.
     We use a gaussian 1D "grid", and input a point at the peak into NB to
     ensure NB finds the correct point.
+    We also test that a DataFrame grid table is accepted.
     """
     longMessage = True  # Append messages to existing message
 
@@ -378,8 +379,20 @@ class Test_1D_grid(unittest.TestCase):
 
 
 
+###############################################################################
 
 
+class Test_default_initialisation(unittest.TestCase):
+    """
+    Test that we can initialise default HII and NLR NB models
+    """
+    longMessage = True  # Append messages to existing message
+
+    def test_default_HII_initialisation(self):
+        NB_Model("HII")
+
+    def test_default_NLR_initialisation(self):
+        NB_Model("NLR")
 
 
 
