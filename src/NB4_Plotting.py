@@ -73,6 +73,33 @@ Plot_Config_Default = Plot_Config([{}]*4)
 
 
 
+def _make_plot_annotation(Plot_Config_1, NB_nd_pdf):
+    """
+    Make the "best model table" text annotation to include on plots, set to
+    None if it wasn't requested.
+    It's added as the "table_for_plot" attribute on Plot_Config_1.
+    """
+    pdf_name = NB_nd_pdf.name  # One of the "plot_types" above
+    make_anno = ( (Plot_Config_1[pdf_name]["table_on_plots"] is True)
+                  and hasattr(NB_nd_pdf, "best_model") )
+    if not make_anno:
+        Plot_Config_1.table_for_plot = None  # Convenient storage spot
+        return
+    best_dict = NB_nd_pdf.best_model
+    plot_anno = ("Observed fluxes vs. model fluxes at the gridpoint\n"
+                 "defined by peaks of the 1D marginalised {0} PDFs\n".format(
+                                                             pdf_name.lower()))
+    plot_anno += str(best_dict["table"]) + "\n\n"
+    plot_anno += r"$\chi^2_r = ${0:.1f}\n".format(best_dict["chi2"])
+    if not isinstance(best_dict["extinction_Av_mag"], str):
+        # extinction_Av_mag only calculated when deredden is True,
+        # otherwise it's set to the string "NA (deredden is False)"
+        plot_anno += r"$A_v = ${0:.1f} mag".format(
+                                    best_dict["extinction_Av_mag"])
+    Plot_Config_1.table_for_plot = plot_anno  # Convenient storage spot
+
+
+
 class ND_PDF_Plotter(object):
     """
     Helper class for plotting "corner plots" showing all possible 2D and 1D

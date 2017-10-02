@@ -60,13 +60,14 @@ class NB_nd_pdf(object):
         # Make a parameter estimate table based on this nd_pdf
         self._make_parameter_estimate_table() # add self.DF_estimates attribute
         if DF_obs is not None:
+            self.best_model = {}
             # For the "best" model, we calculate the following 3 items:
             # 1.) Make a table comparing the model and observed fluxes
             self._make_best_model_table(DF_obs, Interpd_grids, NB_Result)
-                  # We added the self.DF_best attribute
-            # 2.) Calculate the chi2 of the fit (add self.chi2 attribute):
+                  # We added "table" to "best_model" dict
+            # 2.) Calculate chi2 of the fit (add "chi2" to "best_model" dict):
             self._calculate_chi2(NB_Result.deredden)
-            # 3.) Calculate implied extinction (self.extinction_Av attribute):
+            # 3.) Calculate implied extinction ("extinction_Av_mag" in dict):
             self._calculate_Av(NB_Result.deredden, Interpd_grids, DF_obs)
 
 
@@ -218,12 +219,12 @@ class NB_nd_pdf(object):
     def _make_best_model_table(self, DF_obs, Interpd_grids, NB_Result):
         """
         Make a pandas dataframe comparing observed emission line fluxes with
-        model fluxes for the model corresponding to the parameter estimates (the
-        'best' model).  The parameter estimates are derived from the 1D
-        mariginalised PDF, so note that this 'best' point in the parameter space
-        does not necessarily correspond to the peak of any 2D marginalised pdf
-        nor to any projection of the peak of the ND pdf to a lower parameter
-        space.
+        model fluxes for the model corresponding to the parameter estimates
+        (the 'best' model).  The parameter estimates are derived from the 1D
+        mariginalised PDFs, so note that this 'best' point in the parameter
+        space does not necessarily correspond to the peak of any 2D
+        marginalised pdf nor to any projection of the peak of the ND pdf to a
+        lower parameter space.
         """
         DF_best = DF_obs.copy() # Index: "Line"; columns: "Flux", "Flux_err"
         # DF_obs may also possibly have a "Wavelength" column
@@ -252,20 +253,20 @@ class NB_nd_pdf(object):
             # Columns to include in output and their order (index is "Line"):
             cols_to_include = ["Model", "Obs", "Obs_S/N", "Delta_(SDs)"]
         
-        self.DF_best = DF_best[cols_to_include]
+        self.best_model["table"] = DF_best[cols_to_include]
 
 
 
     def _calculate_chi2(self, deredden):
         """
-        Calculate a chi^2 value which describes how well the model corresponding
-        to the parameter best estimates matches the observations.
+        Calculate a chi^2 value which describes how well the model
+        corresponding to the parameter best estimates matches the observations.
         deredden: Boolean.  Did we deredden the observed line fluxes to match
                   the Balmer decrement at every interpolated model gridpoint?
         """
-        DF = self.DF_best # Table comparing observations with "best model"
+        DF = self.best_model["table"]  # Table comparing obs with best model
         # We'll need to reconstruct the error column
-        if deredden: # If we dereddened the observed fluxes at each gridpoint
+        if deredden:  # If we dereddened the observed fluxes at each gridpoint
             flux_err = DF["Obs_dered"].values / DF["Obs_S/N_dered"].values
             chi2_working = ( (DF["Obs_dered"].values - DF["Model"].values)**2
                                          / flux_err**2  )
@@ -282,8 +283,9 @@ class NB_nd_pdf(object):
             dof -= 1 # Halpha doesn't count as a data point; the obs fluxes are
                      # dereddened to match the Balmer decrement at every gridpoint
                      # so Halpha observations always match the prediction
-        chi2 /= dof # The "reduced chi-squared"
-        self.chi2 = chi2
+        dof = max(1, dof)  # Can't be smaller than one
+        chi2 /= dof  # The "reduced chi-squared"
+        self.best_model["chi2"] = chi2
 
 
 
@@ -296,8 +298,8 @@ class NB_nd_pdf(object):
         Interpd_grids: Object storing interpolated model emission line grids
         DF_obs: DataFrame containing the input observed line fluxes and errors
         """
-        if deredden is False:
-            self.extinction_Av = np.nan  # We didn't deredden
+        if not deredden:
+            self.best_model["extinction_Av_mag"] = "NA (deredden is False)"
             return
         # Find the Balmer decrements for both the "best" model and the raw
         # observations
@@ -308,7 +310,8 @@ class NB_nd_pdf(object):
         BD_obs = DF_obs.loc["Halpha", "Flux"] / DF_obs.loc["Hbeta", "Flux"]
 
         # If BD_model > BD_obs, the extinction will be negative
-        self.extinction_Av = Av_from_BD(BD_low=BD_model, BD_high=BD_obs)
+        Av = Av_from_BD(BD_low=BD_model, BD_high=BD_obs)
+        self.best_model["extinction_Av_mag"] = Av
 
 
 

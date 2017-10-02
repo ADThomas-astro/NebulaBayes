@@ -233,6 +233,7 @@ class Test_Obs_from_nonPeak_Gridpoint_2D_Grid_2_Lines(Base_2D_Grid_2_Lines):
     treating these fluxes as observations leads to correct estimates from
     NebulBayes.
     """
+    longMessage = True  # Append messages to existing message
     test_gridpoint = [6, 4]  # From zero.  [11, 9] total gridpoints in each dim,
                              # the line peak is at line_peaks = [8, 5]
 
@@ -251,8 +252,13 @@ class Test_Obs_from_nonPeak_Gridpoint_2D_Grid_2_Lines(Base_2D_Grid_2_Lines):
     def test_output_deredden_flag(self):
         self.assertTrue(self.Result.deredden is False)
 
-    def test_output_extinction_is_NaN(self):  # Since we didn't deredden
-        self.assertTrue(np.isnan(self.Result.Posterior.extinction_Av))
+    def test_output_chi2_positive(self):
+        chi2 = self.Result.Posterior.best_model["chi2"]
+        self.assertTrue(chi2 > 0, msg="chi2 is " + str(chi2))
+
+    def test_output_extinction_is_NA(self):  # Since we didn't deredden
+        Av = self.Result.Posterior.best_model["extinction_Av_mag"]
+        self.assertTrue(Av == "NA (deredden is False)")
 
     def test_parameters_in_output(self):
         """ Check all parameters are found in output """
@@ -361,8 +367,13 @@ class Test_1D_grid(unittest.TestCase):
     def test_output_deredden_flag(self):
         self.assertTrue(self.Result.deredden is False)
 
-    def test_output_extinction_is_NaN(self):  # Since we didn't deredden
-        self.assertTrue(np.isnan(self.Result.Posterior.extinction_Av))
+    def test_output_chi2_positive(self):
+        chi2 = self.Result.Posterior.best_model["chi2"]
+        self.assertTrue(chi2 > 0, msg="chi2 is " + str(chi2))
+
+    def test_output_extinction_is_NA(self):  # Since we didn't deredden
+        Av = self.Result.Posterior.best_model["extinction_Av_mag"]
+        self.assertTrue(Av == "NA (deredden is False)")
 
     def test_parameter_estimate(self):
         """ Ensure the single parameter estimate is as expected """

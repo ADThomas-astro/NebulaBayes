@@ -4,7 +4,7 @@ import numpy as np  # Core numerical library
 import pandas as pd # For tables ("DataFrame"s)
 from . import NB1_Process_grids
 from . import NB3_Bayes
-from .NB4_Plotting import Plot_Config, ND_PDF_Plotter
+from .NB4_Plotting import Plot_Config, _make_plot_annotation, ND_PDF_Plotter
 
 
 
@@ -316,31 +316,24 @@ class NB_Model(object):
 
         #----------------------------------------------------------------------
         # Write out the results
-        table_map = { "estimate_table"   : Result.Posterior.DF_estimates,
-                      "best_model_table" : Result.Posterior.DF_best }
+        table_map = {"estimate_table"  : Result.Posterior.DF_estimates,
+                     "best_model_table": Result.Posterior.best_model["table"]}
         for table_name, DF in table_map.items():
             out_table_name = output_locations[table_name]
             if out_table_name is not None:
                 DF.to_csv(out_table_name, index=True, float_format="%.5f")
 
         # Plot corner plots if requested:
-        ndpdf_map = { "likelihood" : Result.Likelihood, "prior" : Result.Prior,
-                      "posterior"  : Result.Posterior }
-        for ndpdf_name, NB_nd_pdf in ndpdf_map.items():
-            out_image_name = output_locations[ndpdf_name + "_plot"]
+        for NB_nd_pdf in [Result.Prior, Result.Likelihood, Result.Posterior]:
+            ndpdf_name = NB_nd_pdf.name  # A "plot_type" from NB4_Plotting.py
+            out_image_name = output_locations[ndpdf_name.lower() + "_plot"]
             if out_image_name is None:
                 continue  # Only do plotting if an image name was specified
-            plot_anno = None
-            if Plot_Config_1[ndpdf_name.capitalize()]["table_on_plots"] is True:
-                # Include a fixed-width text table on image
-                plot_anno = ("Observed fluxes vs. model fluxes at the gridpoint of"
-                             "\nparameter best estimates in the "+ndpdf_name+"\n")
-                plot_anno += str(NB_nd_pdf.DF_best) + "\n\n"
-                plot_anno += r"$\chi^2_r$ = {0:.1f}".format(NB_nd_pdf.chi2)
-            Plot_Config_1.table_for_plot = plot_anno  # Convenient storage spot
+            # Add plot annotation to Plot_Config_1 ("table_for_plot" attribute)
+            _make_plot_annotation(Plot_Config_1, NB_nd_pdf)
             NB_nd_pdf.Grid_spec.param_display_names = list(
                                                    param_display_names.values())
-            print("Plotting corner plot for the", ndpdf_name, "...")
+            print("Plotting corner plot for the", ndpdf_name.lower(), "...")
             self.Plotter(NB_nd_pdf, out_image_name, config=Plot_Config_1)
 
         self.Plot_Config = Plot_Config_1
