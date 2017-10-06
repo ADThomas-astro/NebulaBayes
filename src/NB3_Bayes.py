@@ -309,8 +309,10 @@ class NB_nd_pdf(object):
         BD_model = Ha_Hb_max[0] / Ha_Hb_max[1]  # Balmer decrement (predicted)
         BD_obs = DF_obs.loc["Halpha", "Flux"] / DF_obs.loc["Hbeta", "Flux"]
 
-        # If BD_model > BD_obs, the extinction will be negative
-        Av = Av_from_BD(BD_low=BD_model, BD_high=BD_obs)
+        if BD_model <= BD_obs:  # The expected case
+            Av = Av_from_BD(BD_low=BD_model, BD_high=BD_obs)
+        else:  # We only deredden where BD_predicted < BD_obs
+            Av = 0
         self.best_model["extinction_Av_mag"] = Av
 
 
@@ -457,44 +459,73 @@ class NB_Result(object):
         """
         Make observed flux arrays covering the entire grid, in preparation for
         calculating the likelihood.
-        If requested by the user, the observed fluxes are dereddened to match
-        the Balmer decrement everywhere in the grid.  Otherwise the flux value
-        for a line is uniform over the n-D grid.
+        If requested by the user ("deredden" is True), the observed fluxes are
+        dereddened to match the Balmer decrement everywhere in the grid.  The
+        observed fluxes are not modified wherever the observed Balmer decrement
+        is smaller than the predicted Balmer decrement.
+        If "deredden" is False, the observed flux value for a line is uniform
+        over the n-D grid.
         The observed fluxes have already been normalised to norm_line.
+
+        Creates the obs_flux_arrs and obs_flux_err_arrs attributes, which hold
+        arrays corresponding to the observed linelist in self.DF_obs.
         """
         DF_obs = self.DF_obs
-        if self.deredden:
-            # Deredden observed fluxes at every interpolated gridpoint to match
-            # the model Balmer decrement at that gridpoint.
-            if norm_line != "Hbeta":
-                raise ValueError("Dereddening is only supported for "
-                                 "norm_line = 'Hbeta'")
-            # Array of Balmer decrements across the grid:
-            grid_BD_arr = (Interpd_grids.grids["No_norm"]["Halpha"] /
-                           Interpd_grids.grids["No_norm"]["Hbeta"]    )
-            if not np.all(np.isfinite(grid_BD_arr)): # Sanity check
-                raise ValueError("Something went wrong - the array of predicted"
-                                 " Balmer decrements over the grid contains a"
-                                 " non-finite value!")
-            if not np.all(grid_BD_arr > 0): # Sanity check
-                raise ValueError("Something went wrong - the array of predicted"
-                                 " Balmer decrements over the grid contains at"
-                                 " least one non-positive value!")
-
-            obs_flux_arrs, obs_flux_err_arrs = do_dereddening(
-                        DF_obs["Wavelength"].values, DF_obs["Flux"].values,
-                        DF_obs["Flux_err"].values, BD=grid_BD_arr, normalise=True)
-            # The output fluxes and errors are normalised to Hbeta == 1.
-        
-        else: # Use the input observed fluxes, which hopefully have already
-              # been dereddened if necessary.
+        if not self.deredden:
+            # Use the input observed fluxes, which presumably have already
+            # been dereddened if necessary.
             shape = Interpd_grids.shape
-            obs_flux_arrs = [np.full(shape, f) for f in DF_obs["Flux"].values]
-            obs_flux_err_arrs = [np.full(shape, e) for e in DF_obs["Flux_err"].values]
+            self.obs_flux_arrs = [np.full(shape, f) for f in
+                                                    DF_obs["Flux"].values]
+            self.obs_flux_err_arrs = [np.full(shape, e) for e in
+                                                    DF_obs["Flux_err"].values]
+            # These fluxes/errors remain normalised to the chosen norm_line
+            return
 
+        # Deredden observed fluxes at every interpolated gridpoint to match
+        # the model Balmer decrement at that gridpoint.
+        if norm_line != "Hbeta":
+            raise ValueError("Dereddening is only supported for "
+                             "norm_line == 'Hbeta'")
+        # Array of Balmer decrements across the grid:
+        grid_BD_arr = (Interpd_grids.grids["No_norm"]["Halpha"] /
+                       Interpd_grids.grids["No_norm"]["Hbeta"]    )
+        if not np.all(np.isfinite(grid_BD_arr)): # Sanity check
+            raise ValueError("Something went wrong - the array of predicted"
+                             " Balmer decrements over the grid contains a"
+                             " non-finite value!")
+        if not np.all(grid_BD_arr > 0): # Sanity check
+            raise ValueError("Something went wrong - the array of predicted"
+                             " Balmer decrements over the grid contains at"
+                             " least one non-positive value!")
+
+        obs_flux_arrs, obs_flux_err_arrs = do_dereddening(
+                    DF_obs["Wavelength"].values, DF_obs["Flux"].values,
+                    DF_obs["Flux_err"].values, BD=grid_BD_arr, normalise=True)
+        # The output fluxes and errors are normalised to Hbeta == 1.
         # Now obs_flux_arrs is a list of arrays corresponding to the list
         # of observed fluxes, where each array has the same shape as the 
         # model grid.  The list obs_flux_err_arrs is the same, but for errors.
+
+        # Where the observed Balmer decrement was less than the theoretical
+        # Balmer decrement, we undo the dereddening.  Otherwise we're
+        # "reddening" the observed spectum for comparison with the models,
+        # which is nonsensical!
+        obs_BD = DF_obs.loc["Halpha", "Flux"] / DF_obs.loc["Hbeta", "Flux"]
+        where_bad_BD = (grid_BD_arr >= obs_BD)
+        if np.any(where_bad_BD):
+            n_bad = np.sum(where_bad_BD)
+            print("WARNING: Observed Balmer decrement is below the " +
+                  "predicted decrement at {0} ".format(n_bad) +
+                  "interpolated gridpoints.  Dereddening will not be " +
+                  "applied at these points")
+        for flux_arr, obs_flux in zip(obs_flux_arrs, DF_obs["Flux"].values):
+            flux_arr[where_bad_BD] = obs_flux
+        for err_arr, obs_err in zip(obs_flux_err_arrs, DF_obs["Flux_err"].values):
+            err_arr[where_bad_BD] = obs_err
+        if not np.allclose(obs_flux_arrs[DF_obs.index.get_loc("Hbeta")], 1.0):
+            raise ValueError("Something went wrong - fluxes not normalised")
+
         self.obs_flux_arrs = obs_flux_arrs
         self.obs_flux_err_arrs = obs_flux_err_arrs
 

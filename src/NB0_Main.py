@@ -41,7 +41,9 @@ class NB_Model(object):
 
     def __init__(self, grid_table, grid_params=None, lines_list=None, **kwargs):
         """
-        Initialise an instance of the NB_Model class.
+        Initialise an instance of the NB_Model class.  Load the model fluxes
+        and interpolate them to a higher-density grid, ready to calculate
+        likelihoods when this NB_Model instance is called with observed fluxes.
 
         Basic parameters
         ----------
@@ -69,31 +71,35 @@ class NB_Model(object):
             must match a column header in the grid_table.  Default lists are
             ["log U", "log P/k", "12 + log O/H"] for grid_table == "HII", and
             ["log U", "log P/k", "12 + log O/H", "E_peak"] for
-            grid_table == "NLR".  The list sets the order of the grid
-            dimensions, i.e. the order of array indexing in NebulaBayes and the
-            order of parameters in the outputs.
+            grid_table == "NLR".  Permute the list to change the order of the
+            grid dimensions, i.e. the order of array indexing in NebulaBayes
+            and the order of parameters in the outputs.
         lines_list : list of strings, optional
             The emission lines to use in this NB_Model instance.  Each name
-            must match a column name in grid_table.  Unused lines may be
-            excluded.  By default all non-parameter table columns are included.
+            must match a column name in grid_table.  Exclude lines which won't
+            be used in parameter estimation to save time and memory.  By
+            default all non-parameter table columns are included.
 
         Optional parameters
         -------------------
         interpd_grid_shape : list of integers, optional
-            The size of each dimension of the interpolated flux grids.  The
-            default varies with the number of dimensions to give 60000 points
-            in total in each interpolated grid.  The order of the integers
-            corresponds to the order of parameters in grid_params.  These
-            values have a major impact on the speed of the grid interpolation.
+            The size of each dimension of the interpolated flux grids - larger
+            numbers give a higher density uniform sampling of the fluxes.  The
+            order of the integers corresponds to the order of parameters in
+            grid_params.  The default is to have an equal number of points
+            along each dimension such that there are ~60000 points in total in
+            an interpolated grid.  The interpd_grid_shape has a major impact on
+            the speed of the grid interpolation and on memory usage.
         grid_error : float between 0 and 1, optional
             The systematic relative error on grid fluxes, as a linear
-            proportion.  Default is 0.35 (average of errors of 0.15 dex above
-            and below).
+            proportion.  Default is 0.35 (average of errors 0.15 dex above and
+            0.15 dex below).
         """
         # Initialise and do some checks...
         print("Initialising NebulaBayes model...")
 
         if grid_params is None:
+            # Note that grid_table is validated when loading the table
             if isinstance(grid_table, str) and grid_table in ["HII", "NLR"]:
                 if grid_table == "HII":
                     grid_params = ["log U", "log P/k", "12 + log O/H"]
@@ -102,7 +108,7 @@ class NB_Model(object):
             else:
                 raise ValueError("grid_params must be specified unless "
                                  " grid_table is 'HII' or 'NLR'")
-            # Note that grid_table is validated when loading the table
+
         n_params = len(grid_params)
         if len(set(grid_params)) != n_params: # Parameter names non-unique?
             raise ValueError("grid_params are not all unique")
@@ -112,11 +118,11 @@ class NB_Model(object):
             if len(set(lines_list)) != len(lines_list): # Lines non-unique?
                 raise ValueError("Line names in lines_list are not all unique")
             if len(lines_list) < 2:
-                raise ValueError("At least two modelled lines required "
+                raise ValueError("At least two modelled lines are required "
                                  "(one is for normalising)")
 
         # Interpolated grid shape
-        default_shape = [int(6e4**(1./n_params))] * n_params  # 6e4 point total
+        default_shape = [int(6e4**(1./n_params))] * n_params  # 6e4 pts total
         interpd_grid_shape = kwargs.pop("interpd_grid_shape", default_shape)
         if len(interpd_grid_shape) != n_params:
             raise ValueError("Bad length for interpd_grid_shape: needs length" +
@@ -170,11 +176,11 @@ class NB_Model(object):
             grids are set to zero.  Default: "Hbeta"
         deredden : bool
             De-redden observed fluxes to match the Balmer decrement at each
-            interpolated grid point?  Only supported for norm_line = "Hbeta".
-            Default: False
+            interpolated grid point?  Only supported for norm_line == "Hbeta",
+            and when "Halpha" is also supplied.  Default: False
         obs_wavelengths : list of floats
-            If deredden=True, you must also supply a list of wavelengths
-            (Angstroems) associated with obs_fluxes.  Default: None
+            A list of wavelengths (Angstroems) corresponding to obs_line_names,
+            which must be supplied if deredden == True.  Default: None
         prior : list of ("line1","line2") tuples, or "Uniform", or a callable.
             The prior to use when calculating the posterior.  Either a user-
             defined function, the string "Uniform", or a list of length at least
@@ -191,7 +197,7 @@ class NB_Model(object):
         Provide a value for a keyword to produce the corresponding output.
         param_display_names : dict
             Display names for grid parameters, for plotting purposes.  The
-            dictionary keys are parameter names from the grid file, and the
+            dictionary keys are parameter names from grid_params, and the
             corresponding values are the "display" names.  The display names can
             include markup (r"$\alpha$") to include e.g. Greek letters.  Raw
             text names will be used where a display name is not provided.
@@ -223,8 +229,8 @@ class NB_Model(object):
                     'corner' plots?  (Doesn't apply to individual line plots).
                     Default: True
                 show_legend : bool
-                    Show the legend?  Default: True
-                cmap : str or matplotlib.colors.Colormap instance
+                    Show the legend? (Doesn't apply to 1D grids). Default: True
+                cmap : str cmap name or matplotlib.colors.Colormap instance
                     The colormap for the images of the 2D marginalised PDFs.
                     Default: From black to white through green
                 callback : callable
