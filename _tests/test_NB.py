@@ -139,7 +139,7 @@ class Base_2D_Grid_2_Lines(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        """ Remove the grid file when tests in this class have finished """
+        """ Remove the output when tests in this class have finished """
         if clean_up:
             os.remove(cls.grid_file)
             if hasattr(cls, "posterior_plot"):
@@ -265,9 +265,6 @@ class Test_Obs_from_nonPeak_Gridpoint_2D_Grid_2_Lines(Base_2D_Grid_2_Lines):
         DF_est = self.Result.Posterior.DF_estimates
         self.assertTrue(all(p in DF_est.index for p in self.params))
         # THE POSTERIOR IS SHAPED LIKE A DONUT.  CHECK FOR A SINGLE LOCAL MIN?
-
-
-
 
 
 
@@ -403,13 +400,80 @@ class Test_default_initialisation(unittest.TestCase):
     """
     Test that we can initialise default HII and NLR NB models
     """
-    longMessage = True  # Append messages to existing message
-
     def test_default_HII_initialisation(self):
         NB_Model("HII")
 
     def test_default_NLR_initialisation(self):
         NB_Model("NLR")
+
+
+###############################################################################
+
+
+class Test_real_data_with_dereddening(unittest.TestCase):
+    """
+    Test some real data, from the S7 nuclear spectrum for NGC4691, a star-
+    forming galaxy.  Include dereddening in NebulaBayes.
+    """
+    longMessage = True  # Append messages to existing message
+
+    # Treat "HeI4472" as an upper bound measurement (flux of zero) 
+    lines = ["OII3726_29", "Hgamma", "OIII4363", "HeI4472", "Hbeta", "OIII5007",
+                 "NI5200", "OI6300", "Halpha", "NII6583", "SII6716", "SII6731"]
+    obs_fluxes = [1.22496, 0.3991, 0.00298, 0, 1.0, 0.44942,
+                  0.00766, 0.02923, 4.25103, 1.65312, 0.45598, 0.41482]
+    obs_errs = [0.00303, 0.00142, 0.00078, 123.456, 0.0017, 0.0012,
+                0.00059, 0.00052, 0.00268, 0.00173, 0.00102, 0.00099]
+    obs_wavelengths = [3727.3, 4340.5, 4363.2, 4472., 4861.3, 5006.8,
+                       5200.3, 6300.3, 6562.8, 6583.2, 6716.4, 6730.8]
+
+    @classmethod
+    def setUpClass(cls):
+        cls.posterior_plot = os.path.join(test_dir,
+                                          cls.__name__ + "_posterior.pdf")
+        cls.estimate_table = os.path.join(test_dir,
+                                    cls.__name__ + "_parameter_estimates.csv")
+        # Test different values along each dimension in interpd_grid_shape 
+        cls.NB_Model_1 = NB_Model("HII", grid_params=None, lines_list=cls.lines,
+                                  interpd_grid_shape=[100, 130, 80])
+
+        kwargs = {"posterior_plot": cls.posterior_plot,
+                  "estimate_table": cls.estimate_table,
+                  "deredden": True, "obs_wavelengths": cls.obs_wavelengths}
+        cls.Result = cls.NB_Model_1(cls.obs_fluxes, cls.obs_errs, cls.lines,
+                                    **kwargs)
+
+    def test_parameter_estimates(self):
+        """
+        Regression check on parameter estimates.
+        """
+        ests = self.Result.Posterior.DF_estimates["Estimate"]  # pandas Series
+        self.assertTrue(np.isclose(ests["12 + log O/H"], 8.73615, atol=0.001))
+        self.assertTrue(np.isclose(ests["log P/k"], 6.79225, atol=0.001))
+        self.assertTrue(np.isclose(ests["log U"], -2.84848, atol=0.001))
+
+    def test_estimate_bounds_checks(self):
+        """
+        Ensure that the "checking columns" in the estimate table are all
+        showing that the estimates are good.
+        """
+        DF = self.Result.Posterior.DF_estimates  # Parameter estimate table
+        for p in ["12 + log O/H", "log P/k", "log U"]:
+            for col in ["Est_in_CI68?", "Est_in_CI95?"]:
+                self.assertTrue(DF.loc[p,col] == "Y")
+            for col in ["Est_at_lower?", "Est_at_upper?", "P(lower)>50%?",
+                        "P(upper)>50%?"]:
+                self.assertTrue(DF.loc[p,col] == "N")
+            self.assertTrue(DF.loc[p,"n_local_maxima"] == 1)
+
+
+    @classmethod
+    def tearDownClass(cls):
+        """ Remove the output files when tests in this class have finished """
+        if clean_up:
+            for file_i in [cls.posterior_plot, cls.estimate_table]:
+                os.remove(file_i)
+
 
 
 
@@ -429,6 +493,7 @@ class Test_default_initialisation(unittest.TestCase):
 # for the excess ones to be deleted, and checking that they are.
 
 # Check coverage of the code, to see what isn't being run?
+
 
 
 

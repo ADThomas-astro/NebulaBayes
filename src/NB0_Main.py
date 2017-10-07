@@ -5,6 +5,7 @@ import pandas as pd # For tables ("DataFrame"s)
 from . import NB1_Process_grids
 from . import NB3_Bayes
 from .NB4_Plotting import Plot_Config, _make_plot_annotation, ND_PDF_Plotter
+from .._version import __version__
 
 
 
@@ -65,7 +66,7 @@ class NB_Model(object):
             Model fluxes will be normalised by NebulaBayes (see "norm_line"
             parameter to __call__ below).  Any non-finite fluxes (e.g. NaNs)
             will be set to zero.
-        grid_params : list of strings, optional
+        grid_params : list of strings or None, optional
             The names of the grid parameters, which must be specified if a grid
             other than the "HII" or "NLR" built-in grids is used.  Each name
             must match a column header in the grid_table.  Default lists are
@@ -74,7 +75,7 @@ class NB_Model(object):
             grid_table == "NLR".  Permute the list to change the order of the
             grid dimensions, i.e. the order of array indexing in NebulaBayes
             and the order of parameters in the outputs.
-        lines_list : list of strings, optional
+        lines_list : list of strings or None, optional
             The emission lines to use in this NB_Model instance.  Each name
             must match a column name in grid_table.  Exclude lines which won't
             be used in parameter estimation to save time and memory.  By
@@ -95,8 +96,7 @@ class NB_Model(object):
             proportion.  Default is 0.35 (average of errors 0.15 dex above and
             0.15 dex below).
         """
-        # Initialise and do some checks...
-        print("Initialising NebulaBayes model...")
+        print("Initialising NebulaBayes (v{0}) model...".format(__version__))
 
         if grid_params is None:
             # Note that grid_table is validated when loading the table
@@ -159,7 +159,8 @@ class NB_Model(object):
         Parameters
         ----------
         obs_fluxes : list of floats
-            The observed emission-line fluxes
+            The observed emission-line fluxes.  Use a flux of zero to include
+            an upper limit.
         obs_flux_errors : list of floats
             The corresponding measurement errors
         obs_line_names : list of str
@@ -377,7 +378,7 @@ def _process_observed_data(obs_fluxes, obs_flux_errors, obs_line_names,
     # Check input measured fluxes:
     if np.any(~np.isfinite(obs_fluxes)): # Any non-finite?
         raise ValueError("The measured flux for an emission line isn't finite.")
-    if np.any(obs_fluxes < 0): # Any negative?
+    if np.any(obs_fluxes < 0): # Any negative?  (Zero is allowed)
         raise ValueError("The measured flux for an emission line is negative.")
     
     # Check input measured flux errors:
