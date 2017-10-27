@@ -497,8 +497,9 @@ class NB_Result(object):
         """
         DF_obs = self.DF_obs
         if not self.deredden:
-            # Use the input observed fluxes, which presumably have already
-            # been dereddened if necessary.
+            # Use the input observed fluxes, which presumably were already
+            # dereddened if necessary.  The observed fluxes/errors have already
+            # been normalised to the norm_line.
             shape = Interpd_grids.shape
             self.obs_flux_arrs = [np.full(shape, f) for f in
                                                     DF_obs["Flux"].values]
@@ -566,11 +567,13 @@ class NB_Result(object):
     def _calculate_likelihood(self, Interpd_grids, norm_line):
         """
         Calculate the (linear) likelihood over the entire N-D grid at once.
-        The likelihood is not yet normalised - that will be done later.
+        Returns the likelihood as an nD array.  The likelihood is not yet
+        normalised - that will be done later.
         The emission line grids have been interpolated prior to being inputted
-        into this method.  The likelihood is a product of PDFs, one for each
-        contributing emission line.  We save out a plot of the PDF for each line
-        if the uses wishes.
+        into this method, and are normalised to the norm_line here if this
+        hasn't been done already.
+        The likelihood is a product of PDFs, one for each contributing emission
+        line.  We save out a plot of the PDF for each line if the uses wishes.
         """
         # Systematic relative error in normalised grid fluxes as a linear
         # proportion:

@@ -74,7 +74,7 @@ class NB_Model(object):
             ["log U", "log P/k", "12 + log O/H", "E_peak"] for
             grid_table == "NLR".  Permute the list to change the order of the
             grid dimensions, i.e. the order of array indexing in NebulaBayes
-            and the order of parameters in the outputs.
+            and the order of parameters in the output plots.
         lines_list : list of strings or None, optional
             The emission lines to use in this NB_Model instance.  Each name
             must match a column name in grid_table.  Exclude lines which won't
@@ -95,6 +95,11 @@ class NB_Model(object):
             The systematic relative error on grid fluxes, as a linear
             proportion.  Default is 0.35 (average of errors 0.15 dex above and
             0.15 dex below).
+
+        Returns
+        -------
+        An NB_Model instance with attributes Interpd_grids, Raw_grids and
+        Plotter. 
         """
         print("Initialising NebulaBayes (v{0}) model...".format(__version__))
 
@@ -146,8 +151,8 @@ class NB_Model(object):
         self.Interpd_grids = Interpd_grids
         # Creat a ND_PDF_Plotter instance to plot corner plots
         self.Plotter = ND_PDF_Plotter(Raw_grids.paramName2paramValueArr)
-        # The ND_PDF_Plotter instance will be an attribute on both this NB_Model
-        # instance and on all "NB_Result" instances created later.
+        # The ND_PDF_Plotter instance will be an attribute on both this
+        # NB_Model instance and on all "NB_Result" instances created later.
 
 
 
@@ -160,7 +165,7 @@ class NB_Model(object):
         ----------
         obs_fluxes : list of floats
             The observed emission-line fluxes.  Use a flux of minus infinity
-            (-np.inf) to signal that the measurement is an upper limit.
+            (-np.inf) to indicate that the measurement is an upper limit.
         obs_flux_errors : list of floats
             The corresponding measurement errors
         obs_line_names : list of str
@@ -171,10 +176,10 @@ class NB_Model(object):
         ----------------------------------------------
         norm_line : str
             Observed and grid fluxes will be normalised to this emission line.
-            Because the likelihood calculation will use fluxes that are actually
-            ratios to this line, the choice may affect parameter estimation.
-            Where the model grid for norm_line has value zero, the normalised
-            grids are set to zero.  Default: "Hbeta"
+            Because the likelihood calculation will use fluxes that are
+            actually ratios to this line, the choice may affect parameter
+            estimation.  Where the interpolated model grid for norm_line has
+            value zero, the normalised grids are set to zero.  Default: "Hbeta"
         deredden : bool
             De-redden observed fluxes to match the Balmer decrement at each
             interpolated grid point?  Only supported for norm_line == "Hbeta",
@@ -186,8 +191,8 @@ class NB_Model(object):
         prior : list of ("line1","line2") tuples, or "Uniform", or a callable.
             The prior to use when calculating the posterior.  Either a user-
             defined function, the string "Uniform", or a list of length at least
-            one. Entries in the list are tuples such as ("SII6716","SII6731") to
-            specify a line ratio to use as a prior.  The listed line-ratio
+            one. Entries in the list are tuples such as ("SII6716","SII6731")
+            to specify a line ratio to use as a prior.  The listed line-ratio
             priors will all be multiplied together (weighted equally) and then
             normalised before being used in Bayes' Theorem.  See the code file
             "src/NB2_Prior.py" for the details of the prior calculations,
@@ -242,9 +247,33 @@ class NB_Model(object):
 
         Returns
         -------
-        NB_Result
-            Object (defined in src/NB3_Bayes.py), which contains the data
-            relevant to the Bayesian parameter estimation.
+        NB_Result : src.NB3_Bayes.NB_Result instance
+            An object (class defined in src/NB3_Bayes.py) that contains the
+            data relevant to the Bayesian parameter estimation.  Attributes:
+            DF_obs : pandas DataFrame
+                Contains the observed emission line fluxes, errors, and
+                wavelengths (if provided), with a row for each line.
+            Grid_spec : src.NB1_Process_grids.Grid_description instance
+                Contains attributes describing the interpolated grids,
+                including lists of parameter names and values, and mappings to
+                and from indices along the dimensions.
+            Likelihood : src.NB3_Bayes.NB_nd_pdf instance
+                Object which holds important information...
+            Plot_Config : src.NB4_Plotting.Plot_Config instance
+
+            Plotter : src.NB4_Plotting.ND_PDF_Plotter instance
+
+            Posterior : src.NB3_Bayes.NB_nd_pdf instance
+                As for the Likelihood attribute, but for the posterior PDF
+            Prior : src.NB3_Bayes.NB_nd_pdf instance
+                As for the Likelihood attribute, but for the prior PDF
+            deredden : bool
+                Value of the "deredden" keyword.  Were observed fluxes
+                dereddened all over the parameter space?
+            obs_flux_arrs : list of numpy arrays
+
+            obs_flux_err_arrs : list of numpy arrays
+
         """
         print("Running NebulaBayes...")
 
@@ -355,6 +384,11 @@ def _process_observed_data(obs_fluxes, obs_flux_errors, obs_line_names,
     """
     Error-check the input observed emission line data, form it into a pandas
     DataFrame table, and normalise by the specified line.
+
+    Returns
+    -------
+    DF_obs : DataFrame
+        Table of observed emission line data with a row for each emission line.
     """
     obs_fluxes = np.asarray(obs_fluxes, dtype=float)  # Ensure numpy array
     obs_flux_errors = np.asarray(obs_flux_errors, dtype=float)
