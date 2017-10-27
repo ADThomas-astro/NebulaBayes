@@ -159,8 +159,8 @@ class NB_Model(object):
         Parameters
         ----------
         obs_fluxes : list of floats
-            The observed emission-line fluxes.  Use a flux of zero to include
-            an upper limit.
+            The observed emission-line fluxes.  Use a flux of minus infinity
+            (-np.inf) to signal that the measurement is an upper limit.
         obs_flux_errors : list of floats
             The corresponding measurement errors
         obs_line_names : list of str
@@ -178,7 +178,8 @@ class NB_Model(object):
         deredden : bool
             De-redden observed fluxes to match the Balmer decrement at each
             interpolated grid point?  Only supported for norm_line == "Hbeta",
-            and when "Halpha" is also supplied.  Default: False
+            when "Halpha" is also supplied, and if there are no upper bounds in
+            the measurements.  Default: False
         obs_wavelengths : list of floats
             A list of wavelengths (Angstroems) corresponding to obs_line_names,
             which must be supplied if deredden == True.  Default: None
@@ -355,7 +356,7 @@ def _process_observed_data(obs_fluxes, obs_flux_errors, obs_line_names,
     Error-check the input observed emission line data, form it into a pandas
     DataFrame table, and normalise by the specified line.
     """
-    obs_fluxes = np.asarray(obs_fluxes, dtype=float) # Ensure numpy array
+    obs_fluxes = np.asarray(obs_fluxes, dtype=float)  # Ensure numpy array
     obs_flux_errors = np.asarray(obs_flux_errors, dtype=float)
     # Check measured data inputs:
     n_measured = len(obs_line_names)
@@ -371,21 +372,22 @@ def _process_observed_data(obs_fluxes, obs_flux_errors, obs_line_names,
             raise ValueError("obs_wavelengths must have same length as obs_fluxes")
         # Check input wavelengths:
         if np.any(~np.isfinite(obs_wavelengths)): # Any non-finite?
-            raise ValueError("The wavelength for an emission line isn't finite.")
+            raise ValueError("An emission line wavelength isn't finite")
         if np.any(obs_wavelengths <= 0): # Any non-positive?
-            raise ValueError("The wavelength for an emission line not positive.")
+            raise ValueError("An emission line wavelength isn't positive")
 
     # Check input measured fluxes:
-    if np.any(~np.isfinite(obs_fluxes)): # Any non-finite?
-        raise ValueError("The measured flux for an emission line isn't finite.")
-    if np.any(obs_fluxes < 0): # Any negative?  (Zero is allowed)
-        raise ValueError("The measured flux for an emission line is negative.")
+    if np.any(np.isnan(obs_fluxes)) or np.any(obs_fluxes == np.inf):
+        # Any NaNs or +infs? (-inf is allowed, and means "upper bound")
+        raise ValueError("A measured emission line flux is NaN or +inf")
+    if np.any((obs_fluxes <= 0) & (obs_fluxes != -np.inf)):
+        raise ValueError("A measured emission line flux isn't positive")
     
     # Check input measured flux errors:
     if np.any(~np.isfinite(obs_flux_errors)): # Any non-finite?
-        raise ValueError("The flux error for an emission line isn't finite.")
+        raise ValueError("The flux error for an emission line isn't finite")
     if np.any(obs_flux_errors <= 0): # All positive?
-        raise ValueError("The flux error for an emission line is not positive.")
+        raise ValueError("The flux error for an emission line isn't positive")
 
     # Form the data from the observations into a pandas DataFrame table.
     obs_dict = OD([("Line", obs_line_names)])

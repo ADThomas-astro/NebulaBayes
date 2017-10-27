@@ -408,6 +408,31 @@ def make_single_parameter_estimate(param_name, val_arr, pdf_1D):
 
 
 
+def erf(x):
+    """
+    Approximation to the error function, good to a maximum absolute error of
+    3e-7, from Abramowitz and Stegun (equations 7.1.25-28) via
+    https://en.wikipedia.org/wiki/Error_function
+    The error function is defined as erf(x) = 2 \pi^{-0.5} \int_0^x e^{-t^2} dt.
+    This particular approximation was chosen because all of the polynomial
+    coefficients are positive, so the formula must be monotonic (a property
+    that is desired due to how we use this function).
+    An approximation formula is used so that NB doesn't need to depend on
+    scipy for the scipy.special.erf function.
+    This function was compared against scipy.special.erf for 10000 values
+    logarithmically spaced between 0.0001 and 10, and for the negatives of
+    these values.  It was confirmed that there is an absolute error of 3e-7.
+    """
+    # The approximation formula is valid for x >= 0, so we use the fact that
+    # erf is an odd function to cover negative values of x
+    sign = np.sign(x)  # -1 where negative, 0 where 0, +1 where positive
+    x = np.abs(x)
+    poly = (  (((((0.0000430638*x + 0.0002765672)*x + 0.0001520143)*x +
+                    0.0092705272)*x + 0.0422820123)*x + 0.0705230784)*x + 1  )
+    return sign * (1. - (1. / poly**16))
+
+
+
 class NB_Result(object):
     """
     Class to hold the NebulaBayes results including the likelihood, prior and
@@ -487,6 +512,8 @@ class NB_Result(object):
         if norm_line != "Hbeta":
             raise ValueError("Dereddening is only supported for "
                              "norm_line == 'Hbeta'")
+        if np.any(DF_obs["Flux"].values == -np.inf):
+            raise ValueError("Upper bounds can't be included when dereddening.")
         # Array of Balmer decrements across the grid:
         grid_BD_arr = (Interpd_grids.grids["No_norm"]["Halpha"] /
                        Interpd_grids.grids["No_norm"]["Hbeta"]    )
@@ -526,6 +553,11 @@ class NB_Result(object):
         if not np.allclose(obs_flux_arrs[DF_obs.index.get_loc("Hbeta")], 1.0):
             raise ValueError("Something went wrong - fluxes not normalised")
 
+        for arr, err_arr in zip(obs_flux_arrs, obs_flux_err_arrs):
+            if not np.all(np.isfinite(arr)) and np.all(np.isfinite(err_arr)):
+                raise ValueError("Something went wrong - the dereddened "
+                                 "fluxes and errors are not all finite")
+
         self.obs_flux_arrs = obs_flux_arrs
         self.obs_flux_err_arrs = obs_flux_err_arrs
 
@@ -549,7 +581,6 @@ class NB_Result(object):
         obs_flux_arrs = self.obs_flux_arrs
         obs_flux_err_arrs = self.obs_flux_err_arrs
 
-        norm_name = norm_line + "_norm"
         # Normalise the interpolated grid fluxes if necessary (if we don't
         # already have a dict of grids with the desired normalisation).
         # When we normalise we may lose information (where the normalising grid
@@ -559,62 +590,62 @@ class NB_Result(object):
         # normalising interpolated grids on every call (maybe this is a waste
         # of memory, I don't know...).  When we want a new normalisation, we add
         # another dict to the "grids" dict.
+        norm_name = norm_line + "_norm"
         if norm_name not in Interpd_grids.grids:
-            # print("Normalising grids to {0}...".format(norm_line))
-            Interpd_grids.grids[norm_name] = OD() # New dict of grids
+            Interpd_grids.grids[norm_name] = OD()  # New dict of grids
             norm_grid = Interpd_grids.grids["No_norm"][norm_line]#.copy()
             # Note: copy norm_grid so it won't become all "1.0" in the middle of
             # normalising if we're normalising the same set of grids (we're not)
-            bad = (norm_grid == 0) # For when we divide by norm_grid
+            bad = (norm_grid == 0)  # For when we divide by norm_grid
             for line, grid in Interpd_grids.grids["No_norm"].items():
                 Interpd_grids.grids[norm_name][line] = grid / norm_grid
                 # Replace any NaNs we produced by dividing by zero:
                 Interpd_grids.grids[norm_name][line][bad] = 0
-            if len(Interpd_grids.grids) > 3:
+            if len(Interpd_grids.grids) > 2:
                 # Don't store too many copies of the interpolated grids for
                 # different normalisations - this might take a lot of memory
                 oldest_norm = list(Interpd_grids.grids.keys())[1]
                 # The 0th key is "No_norm"; 1st key is for oldest normalisation
                 Interpd_grids.grids.popitem(oldest_norm)
 
-        # Initialise log likelihood with 0 everywhere
-        log_likelihood = np.zeros(Interpd_grids.shape, dtype="float")
-        # # Initialise linear likelihood with 1 everywhere
-        # likelihood = np.ones(Interpd_grids.shape, dtype="float")
+        # Initialise likelihood with 1 everywhere
+        likelihood = np.ones(Interpd_grids.shape, dtype="float")
         for i, line in enumerate(self.DF_obs.index):
             pred_flux_i = Interpd_grids.grids[norm_name][line]
             obs_flux_i = obs_flux_arrs[i]
             obs_flux_err_i = obs_flux_err_arrs[i]
             assert obs_flux_i.shape == pred_flux_i.shape
             
-            # Use a log version of equation 3 on pg 4 of Blanc et al. 2015 (IZI)
-            # N.B. var is the sum of variances due to both the measured and
-            # modelled fluxes
+            # Calculate the total variance, which is the sum of variances due
+            # to both the measured and modelled fluxes
             var = obs_flux_err_i**2 + (pred_flux_rel_err * pred_flux_i)**2
-            line_contribution = ( - (( obs_flux_i - pred_flux_i )**2 / 
-                                     ( 2.0 * var ))  -  0.5*np.log( var ) )
-            log_likelihood += line_contribution
-            # N.B. "log" is base e
-            # # Linear version:
-            # line_contribution = ((1./np.sqrt(var)) *
-            #         np.exp( -(( obs_flux_i - pred_flux_i )**2 / ( 2.0 * var )))  
-            # log_likelihood *= line_contribution
+
+            if obs_flux_i[tuple(0 for _ in obs_flux_i.shape)] != -np.inf:
+                # Minus infinity signals an upper bound
+                # The line contribution if we have both observed flux and error:
+                line_contribution = ((1. / np.sqrt(var)) *
+                    np.exp( -(obs_flux_i - pred_flux_i)**2 / (2.0 * var) ) )
+            else:  # We have an upper bound
+                # Line contribution with only the observed error, not flux
+                denom = np.sqrt(2 * var)
+                line_contribution = (erf(pred_flux_i / denom) -
+                                  erf((pred_flux_i  - obs_flux_err_i) / denom))
+
+            likelihood *= line_contribution
 
             # Plot the ND PDF for each line if requested:
             if self._line_plot_dir is not None:
-                # Assume we're using the log version of the likelihood equation
-                line_pdf = np.exp(line_contribution - line_contribution.max())
+                line_pdf = line_contribution / line_contribution.max()
                 outname = os.path.join(self._line_plot_dir,
                                     line + "_PDF_contributes_to_likelihood.pdf")
                 Line_PDF = NB_nd_pdf(line_pdf, self, Interpd_grids,
-                                     name="Indivual line")  # We include this
+                                     name="Individual_line") # We include this
                                     # "name" for information when we're plotting
                 Line_PDF.Grid_spec.param_display_names = Interpd_grids.param_display_names
                 print("Plotting pdf for line {0}...".format(line))
                 self.Plotter(Line_PDF, outname, config=self.Plot_Config)
 
-        # log_likelihood += np.log(2 * np.pi)
-        log_likelihood -= log_likelihood.max() # Ensure max is 0 (log space); 1 (linear)
-        return np.exp(log_likelihood) # The linear likelihood N-D array   
+        likelihood /= likelihood.max()  # Ensure max is 1
+        return likelihood  # The linear likelihood N-D array
 
 

@@ -19,7 +19,7 @@ Adam D. Thomas 2015 - 2017
 
 # These are the only allowed "plot_types", which an ND_PDF_Plotter (defined
 # below) will be used for. 
-plot_types = ["Prior", "Likelihood", "Posterior", "Individual_lines"]
+plot_types = ["Prior", "Likelihood", "Posterior", "Individual_line"]
 
 
 
@@ -424,7 +424,7 @@ class ND_PDF_Plotter(object):
                                 + gridspec["wspace"]) + 0.01), gridspec["top"]]
             if n == 1:
                 anno_location[1] -= 0.02  # Slightly lower
-            if plot_type != "Individual_lines":  # If table available
+            if plot_type != "Individual_line":  # If table available
                 pd.set_option("display.precision", 4)
                 ax_k.annotate(config.table_for_plot, anno_location,
                             xycoords="figure fraction", annotation_clip=False, 

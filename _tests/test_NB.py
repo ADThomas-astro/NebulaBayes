@@ -225,13 +225,13 @@ class Test_Obs_from_Peak_Gridpoint_2D_Grid_2_Lines(Base_2D_Grid_2_Lines):
 
 
 
-#  THIS ISN'T VERY USEFUL YET - NEDD A WAY TO CHECK POSTERIOR!
+#  THIS ISN'T VERY USEFUL YET - NEED A WAY TO CHECK POSTERIOR!
 class Test_Obs_from_nonPeak_Gridpoint_2D_Grid_2_Lines(Base_2D_Grid_2_Lines):
     """
     Test for a grid from Base_2D_Grid_2_Lines:  Take a gridpoint that is NOT at
     the peak of the Gaussian ball of emission line fluxes, and check that
     treating these fluxes as observations leads to correct estimates from
-    NebulBayes.
+    NebulaBayes.
     """
     longMessage = True  # Append messages to existing message
     test_gridpoint = [6, 4]  # From zero.  [11, 9] total gridpoints in each dim,
@@ -398,7 +398,7 @@ class Test_1D_grid(unittest.TestCase):
 
 class Test_default_initialisation(unittest.TestCase):
     """
-    Test that we can initialise default HII and NLR NB models
+    Test that we can initialise fully default HII and NLR NB models
     """
     def test_default_HII_initialisation(self):
         NB_Model("HII")
@@ -417,14 +417,13 @@ class Test_real_data_with_dereddening(unittest.TestCase):
     """
     longMessage = True  # Append messages to existing message
 
-    # Treat "HeI4472" as an upper bound measurement (flux of zero) 
-    lines = ["OII3726_29", "Hgamma", "OIII4363", "HeI4472", "Hbeta", "OIII5007",
+    lines = ["OII3726_29", "Hgamma", "OIII4363", "Hbeta", "OIII5007",
                  "NI5200", "OI6300", "Halpha", "NII6583", "SII6716", "SII6731"]
-    obs_fluxes = [1.22496, 0.3991, 0.00298, 0, 1.0, 0.44942,
+    obs_fluxes = [1.22496, 0.3991, 0.00298, 1.0, 0.44942,
                   0.00766, 0.02923, 4.25103, 1.65312, 0.45598, 0.41482]
-    obs_errs = [0.00303, 0.00142, 0.00078, 123.456, 0.0017, 0.0012,
+    obs_errs = [0.00303, 0.00142, 0.00078, 0.0017, 0.0012,
                 0.00059, 0.00052, 0.00268, 0.00173, 0.00102, 0.00099]
-    obs_wavelengths = [3727.3, 4340.5, 4363.2, 4472., 4861.3, 5006.8,
+    obs_wavelengths = [3727.3, 4340.5, 4363.2, 4861.3, 5006.8,
                        5200.3, 6300.3, 6562.8, 6583.2, 6716.4, 6730.8]
 
     @classmethod
@@ -476,6 +475,62 @@ class Test_real_data_with_dereddening(unittest.TestCase):
 
 
 
+###############################################################################
+
+
+
+class Test_upper_bounds_1D(unittest.TestCase):
+    """
+    Test the treatment of upper bounds.  We use a 1D grid.
+    """
+    longMessage = True  # Append messages to existing message
+
+    lines       = ["line1", "line2", "line3", "line4", "line5", "line6"]
+    obs_fluxes  = [    1.0,     8.0,    10.2, -np.inf, -np.inf, -np.inf]
+    obs_errs    = [   0.05,     0.3,     3.1,     0.3,     0.4,     0.2]
+    pred_fluxes = [    1.0,     5.0,    10.2,     0.1,     0.4,     0.4]
+    # The pred_fluxes are at the "peak" of the grid, that we'll input to NB.
+
+    @classmethod
+    def setUpClass(cls):
+        n = 100  # Length of grid
+        best_i = 65
+        DF_grid1D = pd.DataFrame()
+        DF_grid1D["p0"] = np.arange(n) - 572.3  # Linear
+        DF_grid1D["dummy"] = np.exp(-((DF_grid1D["p0"] -
+                                      DF_grid1D["p0"].values[best_i])/17.2)**2)
+        DF_grid1D["dummy"] = DF_grid1D["dummy"].values / DF_grid1D["dummy"].max()
+        for line, pred_flux in zip(cls.lines, cls.pred_fluxes):
+            DF_grid1D[line] = DF_grid1D["dummy"].values * pred_flux
+            # All of the fluxes peak at the point we'll input to NB
+        DF_grid1D["line1"] = np.ones_like(DF_grid1D["line1"].values)
+        cls.expected_p0 = DF_grid1D["p0"].values[best_i]
+
+        cls.NB_Model_1 = NB_Model(DF_grid1D, grid_params=["p0"],
+                                lines_list=cls.lines, interpd_grid_shape=[500])
+        kwargs = {"deredden": False, "norm_line": "line1",
+                  "line_plot_dir": test_dir}
+        cls.Result = cls.NB_Model_1(cls.obs_fluxes, cls.obs_errs, cls.lines,
+                                    **kwargs)
+
+    def test_parameter_estimates(self):
+        """
+        Regression test - check the parameter estimate is as expected.
+        """
+        DF_est = self.Result.Posterior.DF_estimates  # DataFrame
+        p0_est = DF_est.loc["p0", "Estimate"]
+        self.assertTrue(np.isclose(p0_est, self.expected_p0, atol=1))
+
+    @classmethod
+    def tearDownClass(cls):
+        """ Remove the output files when tests in this class have finished """
+        if clean_up:
+            files = [os.path.join(test_dir, l +
+                     "_PDF_contributes_to_likelihood.pdf") for l in cls.lines]
+            for file_i in files:
+                os.remove(file_i)
+
+
 
 ###############################################################################
 # Ideas for more tests:
@@ -494,6 +549,7 @@ class Test_real_data_with_dereddening(unittest.TestCase):
 
 # Check coverage of the code, to see what isn't being run?
 
+# Test writing out all four types of corner plot
 
 
 
