@@ -19,7 +19,7 @@ Australian National University
 The NB_Model class in this module is the entry point for performing Bayesian
 parameter estimation.  The data are a set of emission line flux measurements
 with associated errors.  The model is a photoionisation model, varied in a grid
-over n=2 or more parameters, input as n-dimensional grids of fluxes for each
+over n=1 or more parameters, input as n-dimensional grids of fluxes for each
 emission line.  The model is for an HII region or AGN Narrow Line Region, for
 example.
 The measured and modelled emission line fluxes are compared to calculate a
@@ -28,7 +28,7 @@ produce an n-dimensional "posterior" probability distribution for the values of
 the parameters.  The parameter values are estimated from 1D marginalised
 posteriors.
 
-NebulaBayes is heavily based on IZI (Blanc+2015).
+NebulaBayes is heavily based on IZI (Blanc+ 2015).
 """
 
 
@@ -98,8 +98,19 @@ class NB_Model(object):
 
         Returns
         -------
-        An NB_Model instance with attributes Interpd_grids, Raw_grids and
-        Plotter. 
+        An NB_Model instance with the following two attributes:
+        Interpd_grids : NB1_Process_grids.NB_Grid instance
+            Object which holds the interpolated model line fluxes in its
+            "grids" attribute.  A flux array can be accessed with e.g.
+            Interpd_grids.grids["No_norm"]["OIII5007"] (for the un-normalised
+            grids).  Other attributes include "param_names",
+            "param_values_arrs" and "shape", which are in the order
+            corresponding to the indexing of the flux arrays, "ndim" and
+            "n_gridpoints".
+        Raw_grids : NB1_Process_grids.NB_Grid instance
+            As for Interpd_grids, but holds the flux arrays exactly
+            corresponding to the input grid, before interpolation.  Arrays are
+            accessed as e.g. Raw_grids.grids["OIII5007"]
         """
         print("Initialising NebulaBayes (v{0}) model...".format(__version__))
 
@@ -134,7 +145,7 @@ class NB_Model(object):
                              " {0} (the number of parameters)".format(n_params))
 
         grid_rel_error = kwargs.pop("grid_error", 0.35)  # Default: 0.35
-        if not 0 < grid_rel_error < 1:
+        if not 0 <= grid_rel_error < 1:
             raise ValueError("grid_error must be between 0 and 1")
 
         # Are there any remaining keyword arguments that weren't used?
@@ -149,8 +160,8 @@ class NB_Model(object):
         Interpd_grids.grid_rel_error = grid_rel_error
         self.Raw_grids = Raw_grids
         self.Interpd_grids = Interpd_grids
-        # Creat a ND_PDF_Plotter instance to plot corner plots
-        self.Plotter = ND_PDF_Plotter(Raw_grids.paramName2paramValueArr)
+        # Creat an ND_PDF_Plotter instance to plot corner plots
+        self._Plotter = ND_PDF_Plotter(Raw_grids.paramName2paramValueArr)
         # The ND_PDF_Plotter instance will be an attribute on both this
         # NB_Model instance and on all "NB_Result" instances created later.
 
@@ -165,7 +176,7 @@ class NB_Model(object):
         ----------
         obs_fluxes : list of floats
             The observed emission-line fluxes.  Use a flux of minus infinity
-            (-np.inf) to indicate that the measurement is an upper limit.
+            (-np.inf) to indicate that a measurement is an upper limit.
         obs_flux_errors : list of floats
             The corresponding measurement errors
         obs_line_names : list of str
@@ -182,9 +193,9 @@ class NB_Model(object):
             value zero, the normalised grids are set to zero.  Default: "Hbeta"
         deredden : bool
             De-redden observed fluxes to match the Balmer decrement at each
-            interpolated grid point?  Only supported for norm_line == "Hbeta",
-            when "Halpha" is also supplied, and if there are no upper bounds in
-            the measurements.  Default: False
+            interpolated grid point?  Only supported if norm_line == "Hbeta",
+            "Halpha" is also supplied, and there are no upper bounds in the
+            measurements.  Default: False
         obs_wavelengths : list of floats
             A list of wavelengths (Angstroems) corresponding to obs_line_names,
             which must be supplied if deredden == True.  Default: None
@@ -247,25 +258,26 @@ class NB_Model(object):
 
         Returns
         -------
-        NB_Result : src.NB3_Bayes.NB_Result instance
-            An object (class defined in src/NB3_Bayes.py) that contains the
-            data relevant to the Bayesian parameter estimation.  Attributes:
+        NB_Result : NB3_Bayes.NB_Result instance
+            An object containing the data relevant to the Bayesian parameter
+            estimation.  Attributes:
             DF_obs : pandas DataFrame
-                Contains the observed emission line fluxes, errors, and
+                Table of the observed emission line fluxes, errors, and
                 wavelengths (if provided), with a row for each line.
-            Grid_spec : src.NB1_Process_grids.Grid_description instance
-                Contains attributes describing the interpolated grids,
+            Grid_spec : NB1_Process_grids.Grid_description instance
+                Object containing attributes describing the interpolated grids,
                 including lists of parameter names and values, and mappings to
                 and from indices along the dimensions.
-            Likelihood : src.NB3_Bayes.NB_nd_pdf instance
+            Likelihood : NB3_Bayes.NB_nd_pdf instance
                 Object which holds important information...
-            Plot_Config : src.NB4_Plotting.Plot_Config instance
+            Plot_Config : NB4_Plotting.Plot_Config instance
 
-            Plotter : src.NB4_Plotting.ND_PDF_Plotter instance
-
-            Posterior : src.NB3_Bayes.NB_nd_pdf instance
+            Plotter : NB4_Plotting.ND_PDF_Plotter instance
+                Object which is called with an NB3_Bayes.NB_nd_pdf object and
+                an output filename to plot an nD PDF, e.g. the posterior.
+            Posterior : NB3_Bayes.NB_nd_pdf instance
                 As for the Likelihood attribute, but for the posterior PDF
-            Prior : src.NB3_Bayes.NB_nd_pdf instance
+            Prior : NB3_Bayes.NB_nd_pdf instance
                 As for the Likelihood attribute, but for the prior PDF
             deredden : bool
                 Value of the "deredden" keyword.  Were observed fluxes
@@ -346,7 +358,7 @@ class NB_Model(object):
         #----------------------------------------------------------------------
         # Create a "NB_Result" object instance, which involves calculating
         # the prior, likelihood and posterior, along with parameter estimates:
-        Result = NB3_Bayes.NB_Result(self.Interpd_grids, DF_obs, self.Plotter,
+        Result = NB3_Bayes.NB_Result(self.Interpd_grids, DF_obs, self._Plotter,
                                      Plot_Config=Plot_Config_1,
                                      input_prior=input_prior, deredden=deredden,
                                 line_plot_dir=output_locations["line_plot_dir"])
@@ -371,9 +383,8 @@ class NB_Model(object):
             NB_nd_pdf.Grid_spec.param_display_names = list(
                                                    param_display_names.values())
             print("Plotting corner plot for the", ndpdf_name.lower(), "...")
-            self.Plotter(NB_nd_pdf, out_image_name, config=Plot_Config_1)
+            self._Plotter(NB_nd_pdf, out_image_name, config=Plot_Config_1)
 
-        self.Plot_Config = Plot_Config_1
         print("NebulaBayes finished.")
         return Result
 

@@ -389,9 +389,9 @@ class ND_PDF_Plotter(object):
             # Plot a vertical line to show the parameter estimate (peak of 1D pdf)
             y_lim = (0, 1.14*pdf_1D.max())
             if plot_type == "Posterior":
-                label1 = "Parameter estimate: peak of 1D\nmarginalised pdf"
+                label1 = "Parameter estimate: peak of 1D\nmarginalised PDF"
             else:
-                label1 = "Peak of 1D marginalised pdf"
+                label1 = "Peak of 1D marginalised PDF"
             ax_k.plot([p_estimates[G.param_names[ind]]]*2, y_lim, lw=0.6,
                         linestyle='--', dashes=(3, 1.4), color="maroon",
                         zorder=5, label=label1)

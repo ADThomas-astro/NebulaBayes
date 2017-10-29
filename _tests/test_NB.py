@@ -27,16 +27,6 @@ test_dir = os.path.join(this_file_dir_path, "test_outputs") # For outputs
 
 
 
-
-# Note about output structure:
-# print("NB_Model dir:", [i for i in dir(self.NB_Model_1) if i[0] != "_"])
-# ['Interpd_grids', 'Raw_grids']
-# print("NB_Result dir:", [i for i in dir(self.Result) if i[0] != "_"])
-# Result dir: ['DF_obs', 'Grid_spec', 'Likelihood', 'Plotter', 'Posterior',
-#              'Prior', 'deredden', 'obs_flux_arrs', 'obs_flux_err_arrs']
-
-
-
 ###############################################################################
 # Helper functions
 def build_grid(param_range_dict, line_peaks_dict, n_gridpts_list, std_frac=0.25):
@@ -110,6 +100,7 @@ def extract_grid_fluxes_i(DF, p_name_ind_map, line_names):
 
 
 ###############################################################################
+
 # Helper class
 class Base_2D_Grid_2_Lines(unittest.TestCase):
     """
@@ -148,7 +139,7 @@ class Base_2D_Grid_2_Lines(unittest.TestCase):
 
 
 ###############################################################################
-# Check parameter estimates
+
 class Test_Obs_from_Peak_Gridpoint_2D_Grid_2_Lines(Base_2D_Grid_2_Lines):
     """
     Test for a grid from Base_2D_Grid_2_Lines:  Take a gridpoint that is at
@@ -184,17 +175,9 @@ class Test_Obs_from_Peak_Gridpoint_2D_Grid_2_Lines(Base_2D_Grid_2_Lines):
             value = self.val_arrs[p][test_ind]  # Expected parameter value
             est = DF_est.loc[p, "Estimate"]  # NebulaBayes estimate
             self.assertTrue(np.isclose(est, value, atol=tol))
-        # print("Result dir:", [i for i in dir(self.Result) if i[0] != "_"])
-        # print("Posterior dir:", [i for i in dir(self.Result.Posterior) if i[0] != "_"])
-        # print("DF_estimates", DF_est)
-
 
     def test_raw_Grid_spec(self):
         """ Ensure the raw grid spec is as expected """
-        # print("Raw_grids dir:", [i for i in dir(self.NB_Model_1.Raw_grids) if i[0] != "_"])
-        # ['grid_rel_error', 'grids', 'n_gridpoints', 'ndim', 'paramName2ind',
-        # 'paramName2paramMinMax', 'paramName2paramValueArr', 'paramNameAndValue2arrayInd',
-        # 'param_names', 'param_values_arrs', 'shape']
         RGrid_spec = self.NB_Model_1.Raw_grids
         self.assertEqual(RGrid_spec.param_names, self.params)
         self.assertEqual(RGrid_spec.ndim, len(self.params))
@@ -203,14 +186,8 @@ class Test_Obs_from_Peak_Gridpoint_2D_Grid_2_Lines(Base_2D_Grid_2_Lines):
         for a1, a2 in zip(RGrid_spec.param_values_arrs, self.val_arrs.values()):
             self.assertTrue(np.allclose(np.asarray(a1), np.asarray(a2)))
 
-
     def test_interpolated_Grid_spec(self):
         """ Ensure the interpolated grid spec is as expected """
-        # print("Gridspec dir:", [i for i in dir(self.Result.Grid_spec) if i[0] != "_"])
-        # ['double_indices', 'double_names', 'n_gridpoints', 'ndim',
-        # 'paramName2ind', 'paramName2paramMinMax', 'paramName2paramValueArr',
-        # 'paramNameAndValue2arrayInd', 'param_display_names', 'param_names',
-        # 'param_values_arrs', 'shape']
         IGrid_spec = self.Result.Grid_spec
         self.assertEqual(IGrid_spec.param_names, self.params)
         self.assertEqual(IGrid_spec.param_display_names, self.params)
@@ -218,20 +195,15 @@ class Test_Obs_from_Peak_Gridpoint_2D_Grid_2_Lines(Base_2D_Grid_2_Lines):
         self.assertEqual(IGrid_spec.n_gridpoints, np.product(self.interpd_shape))
 
 
-    # def test_grid_interpolation(self):
-    #     """ Check some aspects of the grid interpolation """
-    #     pass
 
+###############################################################################
 
-
-
-#  THIS ISN'T VERY USEFUL YET - NEED A WAY TO CHECK POSTERIOR!
 class Test_Obs_from_nonPeak_Gridpoint_2D_Grid_2_Lines(Base_2D_Grid_2_Lines):
     """
     Test for a grid from Base_2D_Grid_2_Lines:  Take a gridpoint that is NOT at
-    the peak of the Gaussian ball of emission line fluxes, and check that
-    treating these fluxes as observations leads to correct estimates from
-    NebulaBayes.
+    the peak of the Gaussian ball of emission line fluxes.
+    Note that we don't check the values in the posterior or parameter
+    estimates - there isn't an obvious way to do this here.
     """
     longMessage = True  # Append messages to existing message
     test_gridpoint = [6, 4]  # From zero.  [11, 9] total gridpoints in each dim,
@@ -264,8 +236,7 @@ class Test_Obs_from_nonPeak_Gridpoint_2D_Grid_2_Lines(Base_2D_Grid_2_Lines):
         """ Check all parameters are found in output """
         DF_est = self.Result.Posterior.DF_estimates
         self.assertTrue(all(p in DF_est.index for p in self.params))
-        # THE POSTERIOR IS SHAPED LIKE A DONUT.  CHECK FOR A SINGLE LOCAL MIN?
-
+        # Posterior is shaped like a donut.  Check for a single local min?
 
 
 
@@ -318,10 +289,10 @@ class test_linear_interpolation_3D(unittest.TestCase):
                                                  [-500., -6000.]] ]))
 
 
+
 ###############################################################################
 
-
-class Test_1D_grid(unittest.TestCase):
+class Test_1D_grid_and_public_attributes(unittest.TestCase):
     """
     Test that a 1D grid works and gives expected results.
     We use a gaussian 1D "grid", and input a point at the peak into NB to
@@ -382,6 +353,22 @@ class Test_1D_grid(unittest.TestCase):
         self.assertTrue(lower < est < upper, msg="{0}, {1}, {2}".format(
                                                             lower, est, upper))
 
+    def test_NB_Model_attributes(self):
+        """ Check that the list of public attributes is what is documented """
+        public_attrs = sorted([a for a in dir(self.NB_Model_1)
+                                                    if not a.startswith("_")])
+        expected_attrs = ["Interpd_grids", "Raw_grids"]
+        self.assertTrue(public_attrs == expected_attrs, msg=str(public_attrs))
+
+    def test_NB_Result_attributes(self):
+        """ Check that the list of public attributes is what is documented """
+        public_attrs = sorted([a for a in dir(self.Result)
+                                                    if not a.startswith("_")])
+        expected_attrs = ["DF_obs", "Grid_spec", "Likelihood", "Plot_Config",
+                          "Plotter", "Posterior", "Prior", "deredden",
+                          "obs_flux_arrs", "obs_flux_err_arrs"]
+        self.assertTrue(public_attrs == expected_attrs, msg=str(public_attrs))
+
     @classmethod
     def tearDownClass(cls):
         """ Remove the output when tests in this class have finished """
@@ -395,7 +382,6 @@ class Test_1D_grid(unittest.TestCase):
 
 ###############################################################################
 
-
 class Test_default_initialisation(unittest.TestCase):
     """
     Test that we can initialise fully default HII and NLR NB models
@@ -407,13 +393,14 @@ class Test_default_initialisation(unittest.TestCase):
         NB_Model("NLR")
 
 
-###############################################################################
 
+###############################################################################
 
 class Test_real_data_with_dereddening(unittest.TestCase):
     """
     Test some real data, from the S7 nuclear spectrum for NGC4691, a star-
-    forming galaxy.  Include dereddening in NebulaBayes.
+    forming galaxy.  Include a line ratio prior and dereddening in NebulaBayes.
+    Test saving plots for all 3 Bayes Theorem PDFs.
     """
     longMessage = True  # Append messages to existing message
 
@@ -428,6 +415,10 @@ class Test_real_data_with_dereddening(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        cls.prior_plot = os.path.join(test_dir,
+                                          cls.__name__ + "_prior.pdf")
+        cls.likelihood_plot = os.path.join(test_dir,
+                                          cls.__name__ + "_likelihood.pdf")
         cls.posterior_plot = os.path.join(test_dir,
                                           cls.__name__ + "_posterior.pdf")
         cls.estimate_table = os.path.join(test_dir,
@@ -436,9 +427,14 @@ class Test_real_data_with_dereddening(unittest.TestCase):
         cls.NB_Model_1 = NB_Model("HII", grid_params=None, lines_list=cls.lines,
                                   interpd_grid_shape=[100, 130, 80])
 
-        kwargs = {"posterior_plot": cls.posterior_plot,
+        kwargs = {"prior_plot": cls.prior_plot,
+                  "likelihood_plot": cls.likelihood_plot,
+                  "posterior_plot": cls.posterior_plot,
                   "estimate_table": cls.estimate_table,
-                  "deredden": True, "obs_wavelengths": cls.obs_wavelengths}
+                  "deredden": True, "obs_wavelengths": cls.obs_wavelengths,
+                  "prior":[("SII6716","SII6731")],
+                  "plot_configs": [{"table_on_plots": True}]*4,
+                  }
         cls.Result = cls.NB_Model_1(cls.obs_fluxes, cls.obs_errs, cls.lines,
                                     **kwargs)
 
@@ -447,9 +443,12 @@ class Test_real_data_with_dereddening(unittest.TestCase):
         Regression check on parameter estimates.
         """
         ests = self.Result.Posterior.DF_estimates["Estimate"]  # pandas Series
-        self.assertTrue(np.isclose(ests["12 + log O/H"], 8.73615, atol=0.001))
-        self.assertTrue(np.isclose(ests["log P/k"], 6.79225, atol=0.001))
-        self.assertTrue(np.isclose(ests["log U"], -2.84848, atol=0.001))
+        self.assertTrue(np.isclose(ests["12 + log O/H"], 8.73615, atol=0.001),
+                        msg=str(ests["12 + log O/H"]))
+        self.assertTrue(np.isclose(ests["log P/k"], 6.82636, atol=0.001),
+                        msg=str(ests["log P/k"]))
+        self.assertTrue(np.isclose(ests["log U"], -2.84848, atol=0.001),
+                        msg=str(ests["log U"]))
 
     def test_estimate_bounds_checks(self):
         """
@@ -470,14 +469,14 @@ class Test_real_data_with_dereddening(unittest.TestCase):
     def tearDownClass(cls):
         """ Remove the output files when tests in this class have finished """
         if clean_up:
-            for file_i in [cls.posterior_plot, cls.estimate_table]:
+            files = [cls.prior_plot, cls.likelihood_plot, cls.posterior_plot,
+                     cls.estimate_table]
+            for file_i in files:
                 os.remove(file_i)
 
 
 
 ###############################################################################
-
-
 
 class Test_upper_bounds_1D(unittest.TestCase):
     """
@@ -506,7 +505,8 @@ class Test_upper_bounds_1D(unittest.TestCase):
         DF_grid1D["line1"] = np.ones_like(DF_grid1D["line1"].values)
         cls.expected_p0 = DF_grid1D["p0"].values[best_i]
 
-        cls.NB_Model_1 = NB_Model(DF_grid1D, grid_params=["p0"],
+        # Note that we set grid_error to zero!
+        cls.NB_Model_1 = NB_Model(DF_grid1D, grid_params=["p0"], grid_error=0,
                                 lines_list=cls.lines, interpd_grid_shape=[500])
         kwargs = {"deredden": False, "norm_line": "line1",
                   "line_plot_dir": test_dir}
@@ -535,26 +535,12 @@ class Test_upper_bounds_1D(unittest.TestCase):
 ###############################################################################
 # Ideas for more tests:
 
-# Test in more dimensions, i.e. 3 or 4
-
-# - multiple lines that are simply linear, but with different gradients and
-# so on...
-
-# - Check calculation of line ratio priors
-
 # Check that parameter estimates are inside the CIs, and check the flags for this
 
 # Test normalising to different lines, and having enough interpolated grids
 # for the excess ones to be deleted, and checking that they are.
 
 # Check coverage of the code, to see what isn't being run?
-
-# Test writing out all four types of corner plot
-
-
-
-
-
 
 
 

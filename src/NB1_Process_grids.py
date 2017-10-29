@@ -31,7 +31,8 @@ class Grid_description(object):
         param_names: List of parameter names as strings
         param_value_arrs: List of lists of parameter values over the grid,
                           where sublists correspond to param_names.
-        Note that NebulaBayes code relies on the dictionaries below being ordered.
+        Note that NebulaBayes code relies on the dictionaries below being
+        ordered.
         """
         assert len(param_names) == len(param_value_arrs)
         # Record some basic info
