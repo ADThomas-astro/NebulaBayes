@@ -71,7 +71,7 @@ def calculate_line_ratio_prior(DF_obs, grids_dict, grid_rel_err, line_1, line_2)
 
 
 
-def calculate_prior(user_input, DF_obs, grids_dict, grid_rel_err):
+def calculate_prior(user_input, DF_obs, grids_dict, grid_spec, grid_rel_err):
     """
     Calculate the (linear probability space) prior over the grid, selecting the
     type of prior based on the request of the user (or the default).
@@ -87,11 +87,14 @@ def calculate_prior(user_input, DF_obs, grids_dict, grid_rel_err):
                 These interpolated arrays are based on the input grid and
                 haven't been normalised yet, but this doesn't matter if the
                 prior only involves ratios.
+    grid_spec:  A NB1_Process_grids.Grid_description instance holding basic
+                information for the interpolated grids, such as the parameter
+                names, parameter values and the grid shape.
     grid_rel_err: The systematic relative error on grid fluxes, as a linear
                   proportion.
     """
     if callable(user_input):
-        prior = user_input(DF_obs, grids_dict, grid_rel_err)
+        prior = user_input(DF_obs, grids_dict, grid_spec, grid_rel_err)
     elif isinstance(user_input, str):
         if user_input.upper() == "UNIFORM":  # Case-insensitive
             prior = calculate_uniform_prior(grids_dict)

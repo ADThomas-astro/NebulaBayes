@@ -39,7 +39,7 @@ class Grid_description(object):
         self.param_names = param_names
         self.param_values_arrs = param_value_arrs
         self.ndim = len(param_names)
-        self.shape = tuple( [len(arr) for arr in param_value_arrs ] )
+        self.shape = tuple([len(arr) for arr in param_value_arrs ])
         self.n_gridpoints = np.product( self.shape )
 
         # Define mappings for easily extracting data about the grid
@@ -64,11 +64,16 @@ class NB_Grid(Grid_description):
     """
     Simple class to hold n_dimensional grid arrays, along with a description of
     the grid.
-    Will hold an grid of the same shape for each emission line.
+    Will hold a grid of the same shape for each emission line.
     """
     def __init__(self, param_names, param_value_arrs):
-        """ Initialise """
+        """
+        Initialise an NB_Grid instance.  The attributes describing the grid are
+        stored as attributes both on the instance and in the attribute
+        "_Grid_spec".
+        """
         super(NB_Grid, self).__init__(param_names, param_value_arrs)
+        self._Grid_spec = Grid_description(param_names, param_value_arrs)
         self.grids = OD()  # We rely on this being ordered
         # For the raw grids, this "grids" dict holds arrays under the line name
         # directly.  For the interpolated grids, the "grids" attribute holds

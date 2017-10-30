@@ -98,9 +98,9 @@ class NB_Model(object):
 
         Returns
         -------
-        An NB_Model instance with the following two attributes:
+        An NB_Model instance with the following two public attributes:
         Interpd_grids : NB1_Process_grids.NB_Grid instance
-            Object which holds the interpolated model line fluxes in its
+            Object which holds the interpolated model line fluxes in the
             "grids" attribute.  A flux array can be accessed with e.g.
             Interpd_grids.grids["No_norm"]["OIII5007"] (for the un-normalised
             grids).  Other attributes include "param_names",
@@ -108,8 +108,8 @@ class NB_Model(object):
             corresponding to the indexing of the flux arrays, "ndim" and
             "n_gridpoints".
         Raw_grids : NB1_Process_grids.NB_Grid instance
-            As for Interpd_grids, but holds the flux arrays exactly
-            corresponding to the input grid, before interpolation.  Arrays are
+            As for Interpd_grids, but holds the flux arrays corresponding to
+            the input grid table, before interpolation.  Arrays are
             accessed as e.g. Raw_grids.grids["OIII5007"]
         """
         print("Initialising NebulaBayes (v{0}) model...".format(__version__))
@@ -213,12 +213,9 @@ class NB_Model(object):
         Optional parameters - outputs
         -----------------------------
         Provide a value for a keyword to produce the corresponding output.
-        param_display_names : dict
-            Display names for grid parameters, for plotting purposes.  The
-            dictionary keys are parameter names from grid_params, and the
-            corresponding values are the "display" names.  The display names can
-            include markup (r"$\alpha$") to include e.g. Greek letters.  Raw
-            text names will be used where a display name is not provided.
+        estimate_table : str
+            A filename for a csv file containing Bayesian parameter estimates
+            for the grid parameters
         posterior_plot : str
             A filename for a 'corner' plot of 1D and 2D marginalised posterior
             PDFs. The image file type is specified by the file extension.
@@ -226,9 +223,6 @@ class NB_Model(object):
             As for posterior_plot but for the prior
         likelihood_plot : str
             As for posterior_plot but for the likelihood
-        estimate_table : str
-            A filename for a csv file containing Bayesian parameter estimates
-            for the grid parameters
         best_model_table : str
             A filename for a csv file which will compare observed and model
             fluxes at the point defined by the Bayesian parameter estimates.
@@ -237,6 +231,12 @@ class NB_Model(object):
             will be saved.  These PDFs are the contribution to the likelihood
             from each line, and the plots show the constraints each line
             provides.  Saving these plots is slow; a ".pdf" file type is used.
+        param_display_names : dict
+            Display names for grid parameters, for plotting purposes.  The
+            dictionary keys are parameter names from grid_params, and the
+            corresponding values are the "display" names.  The display names
+            can include markup (r"$\alpha$") to include e.g. Greek letters.
+            Raw text names will be used where a display name is not provided.
         plot_configs : list of dicts
             A list of four dictionaries which update plotting options for the
             0) Prior, 1) Likelihood, 2) Posterior, and 3) Individual line plots.

@@ -34,7 +34,7 @@ class Plot_Config(object):
                                       [(0,0,0), (56./255,132./255,0), (1,1,1)] )
     default_config = { # Include a text "best model" flux comparison table on
                        # the 'corner' plots?
-                       "table_on_plots": True,
+                       "table_on_plots": False,
                        "show_legend": True,  # Show the legend?
                        # The colormap for the images of 2D marginalised PDFs:
                        "cmap": default_cmap,
@@ -143,7 +143,8 @@ class ND_PDF_Plotter(object):
         if hasattr(self, "_fig"):  # Resuse the saved figure and axes objects
             # This provides a significant speedup compared to making new ones.
             for ax in self._axes.ravel():
-                ax.clear()  # Clear images, lines, annotations, and legend
+                if ax.get_visible():
+                    ax.clear()  # Clear images, lines, annotations, and legend
             return
 
         # Create a new figure and 2D-array of axes objects

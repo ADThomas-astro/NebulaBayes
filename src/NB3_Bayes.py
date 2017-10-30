@@ -466,8 +466,10 @@ class NB_Result(object):
 
         # Calculate the prior over the grid:
         print("Calculating prior...")
-        raw_prior = calculate_prior(input_prior, DF_obs, Interpd_grids.grids["No_norm"],
-                                                   Interpd_grids.grid_rel_error)
+        raw_prior = calculate_prior(input_prior, DF_obs,
+                                    Interpd_grids.grids["No_norm"],
+                                    grid_spec=Interpd_grids._Grid_spec,
+                                    grid_rel_err=Interpd_grids.grid_rel_error)
         self.Prior = NB_nd_pdf(raw_prior, self, Interpd_grids, name="Prior",
                                                                   DF_obs=DF_obs)
 

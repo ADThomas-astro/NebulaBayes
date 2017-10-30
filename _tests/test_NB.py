@@ -7,9 +7,9 @@ import unittest
 import numpy as np
 import pandas as pd
 
-# Some work to ensure we can import NebulaBayes:
+# Some work to ensure we're importing this version of NebulaBayes:
 this_file_dir_path = os.path.dirname(os.path.realpath(__file__))
-sys.path.append(os.path.split(os.path.split(this_file_dir_path)[0])[0])
+sys.path.insert(1, os.path.split(os.path.split(this_file_dir_path)[0])[0])
 from NebulaBayes import NB_Model, __version__
 from NebulaBayes.src.NB1_Process_grids import RegularGridResampler
 
@@ -443,11 +443,11 @@ class Test_real_data_with_dereddening(unittest.TestCase):
         Regression check on parameter estimates.
         """
         ests = self.Result.Posterior.DF_estimates["Estimate"]  # pandas Series
-        self.assertTrue(np.isclose(ests["12 + log O/H"], 8.73615, atol=0.001),
+        self.assertTrue(np.isclose(ests["12 + log O/H"], 8.73615, atol=0.0001),
                         msg=str(ests["12 + log O/H"]))
-        self.assertTrue(np.isclose(ests["log P/k"], 6.82636, atol=0.001),
+        self.assertTrue(np.isclose(ests["log P/k"], 6.82636, atol=0.0001),
                         msg=str(ests["log P/k"]))
-        self.assertTrue(np.isclose(ests["log U"], -2.84848, atol=0.001),
+        self.assertTrue(np.isclose(ests["log U"], -2.84848, atol=0.0001),
                         msg=str(ests["log U"]))
 
     def test_estimate_bounds_checks(self):
