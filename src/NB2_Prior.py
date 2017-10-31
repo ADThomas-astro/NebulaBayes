@@ -76,12 +76,13 @@ def calculate_prior(user_input, DF_obs, grids_dict, grid_spec, grid_rel_err):
     Calculate the (linear probability space) prior over the grid, selecting the
     type of prior based on the request of the user (or the default).
     In the case where the user has not provided a custom function to calculate
-    the prior over the grid, we use either a uniform prior (the default), or
-    calculate a prior based on one or more line ratios.
+    the prior over the grid or provided the prior as an array, we use either a
+    uniform prior (the default), or calculate a prior based on one or more line
+    ratios.  We check that the prior is finite and non-negative.
     user_input: The input prior description.  Either the string "Uniform", a
                 list of tuples such as [("HeI5876","HeII4686"),("SII6716",
-                "SII6731")] (specifying line ratios), or a python "callable"
-                (custom user function).
+                "SII6731")] (specifying line ratios), a python "callable"
+                (custom user function), or a numpy array.
     DF_obs:     The pandas DataFrame table holding the observed fluxes.
     grids_dict: Dictionary that maps line names to nD interpolated flux arrays.
                 These interpolated arrays are based on the input grid and
@@ -95,6 +96,11 @@ def calculate_prior(user_input, DF_obs, grids_dict, grid_spec, grid_rel_err):
     """
     if callable(user_input):
         prior = user_input(DF_obs, grids_dict, grid_spec, grid_rel_err)
+    elif isinstance(user_input, np.ndarray):
+        prior = user_input
+        if prior.shape != grid_spec.shape:
+            raise ValueError("The prior array must have the same shape as the "
+                             "interpolated grid")
     elif isinstance(user_input, str):
         if user_input.upper() == "UNIFORM":  # Case-insensitive
             prior = calculate_uniform_prior(grids_dict)
@@ -111,7 +117,7 @@ def calculate_prior(user_input, DF_obs, grids_dict, grid_spec, grid_rel_err):
         prior = np.product(priors, axis=0)
     else:
         raise ValueError("The input 'prior' must be one of: 'Uniform', a list"
-                         " of tuples, or a callable")
+                         " of tuples, a callable, or a numpy array")
 
     # Check that the prior is sensible:
     if np.any(~np.isfinite(prior)):

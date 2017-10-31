@@ -199,16 +199,19 @@ class NB_Model(object):
         obs_wavelengths : list of floats
             A list of wavelengths (Angstroems) corresponding to obs_line_names,
             which must be supplied if deredden == True.  Default: None
-        prior : list of ("line1","line2") tuples, or "Uniform", or a callable.
-            The prior to use when calculating the posterior.  Either a user-
-            defined function, the string "Uniform", or a list of length at least
-            one. Entries in the list are tuples such as ("SII6716","SII6731")
-            to specify a line ratio to use as a prior.  The listed line-ratio
-            priors will all be multiplied together (weighted equally) and then
-            normalised before being used in Bayes' Theorem.  See the code file
-            "src/NB2_Prior.py" for the details of the prior calculations,
-            including to see the required inputs and output for a user-defined
-            prior function.  Default: "Uniform"
+        prior : list of ("line1","line2") tuples, or "Uniform", or a callable,
+            or a numpy array.
+            The prior to use in Bayes' Theorem when calculating the posterior.
+            Either the string "Uniform", a user-defined callback function, a
+            numpy array over the whole parameter space (with shape matching
+            interpd_grid_shape), or a list of length at least one.  Entries in
+            the list are tuples such as ("SII6716","SII6731") to specify a line
+            ratio to use as a prior.  The listed line-ratio priors will all be
+            multiplied together (weighted equally) and then normalised before
+            being used in Bayes' Theorem.  See the "docs/Example-advanced.py"
+            file to see an example user-defined callback function, showing the
+            arguments it must accept.
+            Default: "Uniform"
 
         Optional parameters - outputs
         -----------------------------

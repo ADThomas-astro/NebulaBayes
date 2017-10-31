@@ -204,6 +204,7 @@ class Test_Obs_from_nonPeak_Gridpoint_2D_Grid_2_Lines(Base_2D_Grid_2_Lines):
     the peak of the Gaussian ball of emission line fluxes.
     Note that we don't check the values in the posterior or parameter
     estimates - there isn't an obvious way to do this here.
+    We also test that a numpy array prior is accepted.
     """
     longMessage = True  # Append messages to existing message
     test_gridpoint = [6, 4]  # From zero.  [11, 9] total gridpoints in each dim,
@@ -217,7 +218,9 @@ class Test_Obs_from_nonPeak_Gridpoint_2D_Grid_2_Lines(Base_2D_Grid_2_Lines):
         obs_errors = [f / 7. for f in obs_fluxes]
 
         cls.posterior_plot = os.path.join(test_dir, cls.__name__ + "_posterior.pdf")
-        kwargs = {"posterior_plot":cls.posterior_plot, "norm_line":"L1"}
+        kwargs = {"posterior_plot": cls.posterior_plot, "norm_line": "L1",
+                  "prior": np.ones(cls.NB_Model_1.Interpd_grids.shape)
+                 }
 
         cls.Result = cls.NB_Model_1(obs_fluxes, obs_errors, cls.lines, **kwargs)
 
