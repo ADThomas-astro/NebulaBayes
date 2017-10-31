@@ -647,7 +647,7 @@ class NB_Result(object):
                                      name="Individual_line") # We include this
                                     # "name" for information when we're plotting
                 Line_PDF.Grid_spec.param_display_names = Interpd_grids.param_display_names
-                print("Plotting pdf for line {0}...".format(line))
+                print("    Plotting PDF for line {0}...".format(line))
                 self.Plotter(Line_PDF, outname, config=self.Plot_Config)
 
         likelihood /= likelihood.max()  # Ensure max is 1

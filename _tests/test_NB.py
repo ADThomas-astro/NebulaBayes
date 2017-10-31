@@ -372,6 +372,14 @@ class Test_1D_grid_and_public_attributes(unittest.TestCase):
                           "obs_flux_arrs", "obs_flux_err_arrs"]
         self.assertTrue(public_attrs == expected_attrs, msg=str(public_attrs))
 
+    def test_NB_nd_pdf_attributes(self):
+        """ Check that the list of public attributes is what is documented """
+        public_attrs = sorted([a for a in dir(self.Result.Posterior)
+                                                    if not a.startswith("_")])
+        expected_attrs = sorted(["DF_estimates", "Grid_spec", "best_model",
+                        "marginalised_1D", "marginalised_2D", "name", "nd_pdf"])
+        self.assertTrue(public_attrs == expected_attrs, msg=str(public_attrs))
+
     @classmethod
     def tearDownClass(cls):
         """ Remove the output when tests in this class have finished """
@@ -436,7 +444,8 @@ class Test_real_data_with_dereddening(unittest.TestCase):
                   "estimate_table": cls.estimate_table,
                   "deredden": True, "obs_wavelengths": cls.obs_wavelengths,
                   "prior":[("SII6716","SII6731")],
-                  "plot_configs": [{"table_on_plots": True}]*4,
+                  "plot_configs": [{"table_on_plots": True,
+                                    "legend_fontsize": 5}]*4,
                   }
         cls.Result = cls.NB_Model_1(cls.obs_fluxes, cls.obs_errs, cls.lines,
                                     **kwargs)

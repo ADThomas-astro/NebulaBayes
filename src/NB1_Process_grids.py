@@ -29,8 +29,8 @@ class Grid_description(object):
         Initialise an instance with useful attributes, including mappings
         between important quantities that define the grid.
         param_names: List of parameter names as strings
-        param_value_arrs: List of lists of parameter values over the grid,
-                          where sublists correspond to param_names.
+        param_value_arrs: List of 1D arrays of parameter values over the grid.
+                          The list ordering corresponds to param_names.
         Note that NebulaBayes code relies on the dictionaries below being
         ordered.
         """
@@ -44,9 +44,7 @@ class Grid_description(object):
 
         # Define mappings for easily extracting data about the grid
         self.paramName2ind = OD(zip(param_names, range(self.ndim)))
-        #self.ind2paramName = OD(zip(range(self.ndim), param_names))
         self.paramName2paramValueArr = OD(zip(param_names, param_value_arrs))
-        # self.ind2paramValueArr = OD(zip(range(self.ndim), param_value_arrs))
 
         self.paramNameAndValue2arrayInd = OD()
         for p, arr in self.paramName2paramValueArr.items():
@@ -262,12 +260,6 @@ def construct_raw_grids(DF_grid, grid_params, lines_list):
             # location in the flux array for this line:
             Raw_grids.grids[line][tuple(row_p_inds)] = row_vals[line]
 
-    arr_n_bytes = Raw_grids.grids[lines_list[0]].nbytes
-    n_lines = len(lines_list)
-    print( """Number of bytes in raw grid flux arrays: {0} for 1 emission line, 
-    {1} total for all {2} lines""".format( arr_n_bytes, arr_n_bytes*n_lines,
-                                                                    n_lines ) )
-
     return Raw_grids
 
 
@@ -307,7 +299,7 @@ def interpolate_flux_arrays(Raw_grids, interpd_shape):
     Interpolator = RegularGridResampler(Raw_grids.param_values_arrs, Interpd_grids.shape)
     # Iterate emission lines, doing the interpolation:
     for emission_line, raw_flux_arr in Raw_grids.grids.items():
-        print("Interpolating for {0}...".format(emission_line))
+        print("    Interpolating for {0}...".format(emission_line))
         interp_vals, interp_arr = Interpolator(raw_flux_arr)
         assert np.all(np.isfinite(interp_arr))
         Interpd_grids.grids["No_norm"][emission_line] = interp_arr
@@ -317,9 +309,11 @@ def interpolate_flux_arrays(Raw_grids, interpd_shape):
 
     n_lines = len(Interpd_grids.grids["No_norm"])
     line_0, arr_0 = list(Interpd_grids.grids["No_norm"].items())[0]
-    print("Number of bytes in interpolated grid flux arrays:")
-    print("  {0} for 1 emission line, {1} total for all {2} lines".format(
-                                   arr_0.nbytes, arr_0.nbytes*n_lines, n_lines))
+    arr_MB = arr_0.nbytes / 1e6
+    print("Interpolated flux grid size is {0:.2f}MB for 1 line".format(
+                                                               arr_MB), end="")
+    print(" and {0:.2f}MB total for all {1} lines".format(arr_MB*n_lines,
+                                                          n_lines))
 
     # Set negative values to zero: (there shouldn't be any, since we're using
     # linear interpolation)

@@ -36,6 +36,7 @@ class Plot_Config(object):
                        # the 'corner' plots?
                        "table_on_plots": False,
                        "show_legend": True,  # Show the legend?
+                       "legend_fontsize": 4.5,  # Fontsize of labels in legend
                        # The colormap for the images of 2D marginalised PDFs:
                        "cmap": default_cmap,
                        "callback": None,  # Callback to modify plot
@@ -75,9 +76,9 @@ Plot_Config_Default = Plot_Config([{}]*4)
 
 def _make_plot_annotation(Plot_Config_1, NB_nd_pdf):
     """
-    Make the "best model table" text annotation to include on plots, set to
-    None if it wasn't requested.
-    It's added as the "table_for_plot" attribute on Plot_Config_1.
+    Make the "best model table" text annotation to include on plots, and store
+    it as the "table_for_plot" attribute on Plot_Config_1.  This attribute is
+    set to None if the "table_on_plots" option is False (the default).
     """
     pdf_name = NB_nd_pdf.name  # One of the "plot_types" above
     make_anno = ( (Plot_Config_1[pdf_name]["table_on_plots"] is True)
@@ -102,11 +103,11 @@ def _make_plot_annotation(Plot_Config_1, NB_nd_pdf):
 
 class ND_PDF_Plotter(object):
     """
-    Helper class for plotting "corner plots" showing all possible 2D and 1D
-    marginalised PDFs derived from an ND PDF.
-    We use a class in order to save some information about the raw grids, so we
-    can overplot the locations of the raw gridpoints without passing in raw
-    grid information whenever we want to make a corner plot.
+    Helper class for plotting "corner plots" showing a grid of all possible 2D
+    and 1D marginalised PDFs derived from an ND PDF.
+    Each instance stores the locations of the raw (un-interpolated) gridpoints,
+    so we can overplot the locations of the raw gridpoints without passing in
+    raw grid information whenever a plot is produced.
 
     The plotting method includes many specific constraints (such as how to
     place ticks) that are designed to ensure that NebulaBayes plots look
@@ -121,7 +122,7 @@ class ND_PDF_Plotter(object):
                                        # grid parameter values (optional)
 
         # Some hard-coded plotting configuration
-        self.fs1 = 4.5 # Fontsize of annotation table (if shown) and legend
+        self.fs1 = 4.5  # Fontsize of annotation table (if shown)
         self.label_fontsize = 8
         self.tick_fontsize = 7
         self.tick_size = 2
@@ -216,7 +217,7 @@ class ND_PDF_Plotter(object):
                        which="minor")
 
 
-    def _add_legend(self, ax_1D, ax_2D, gridspec):
+    def _add_legend(self, ax_1D, ax_2D, gridspec, fontsize):
         """
         Add a legend to the figure.  The inputs ax_1D and ax_2D are axes which
         have 1- and 2-dimensional PDFs plotted on them, respectively.
@@ -236,7 +237,7 @@ class ND_PDF_Plotter(object):
                           scatterpoints=1, bbox_to_anchor=legend_anchor, 
                           bbox_transform=self._fig.transFigure,  # Needed
                                     # because we use figure fraction coords
-                          fontsize=self.fs1, fancybox=False)
+                          fontsize=fontsize, fancybox=False)
         leg_frame = lgd.get_frame()
         leg_frame.set_linewidth(0.5)
         leg_frame.set_edgecolor("black")
@@ -417,7 +418,8 @@ class ND_PDF_Plotter(object):
 
         if config1["show_legend"] is True and n > 1:
             # Add legend to current axes.  Legend not required for n = 1.
-            self._add_legend(ax_k, ax_i, gridspec)
+            self._add_legend(ax_k, ax_i, gridspec,
+                             fontsize=config1["legend_fontsize"])
 
         # Add fluxes table and chisquared as text annotation if requested
         if config1["table_on_plots"] is True:

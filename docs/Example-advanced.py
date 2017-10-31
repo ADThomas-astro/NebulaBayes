@@ -93,8 +93,7 @@ def calculate_custom_prior(DF_obs, grids_dict, grid_spec, grid_rel_err):
     # to a grid dimension; this is the index of that grid dimension):
     param_ind = grid_spec.param_names.index("log U")
     # The list of interpolated parameter values for the "log U" grid parameter:
-    all_U_values = grid_spec.param_values_arrs[param_ind]  # Sorted list
-    all_U_values = np.asarray(all_U_values)
+    all_U_values = grid_spec.param_values_arrs[param_ind]  # Sorted 1D array
 
     # Construct a prior on log U which is uniform in log space below
     # log U = -2.0, and exponentially decreasing (in a half-Gaussian) above

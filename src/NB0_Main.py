@@ -251,6 +251,8 @@ class NB_Model(object):
                     Default: True
                 show_legend : bool
                     Show the legend? (Doesn't apply to 1D grids). Default: True
+                legend_fontsize : float
+                    Fontsize for label text in legend.  Default: 4.5 pts
                 cmap : str cmap name or matplotlib.colors.Colormap instance
                     The colormap for the images of the 2D marginalised PDFs.
                     Default: From black to white through green
@@ -262,32 +264,69 @@ class NB_Model(object):
         Returns
         -------
         NB_Result : NB3_Bayes.NB_Result instance
-            An object containing the data relevant to the Bayesian parameter
-            estimation.  Attributes:
-            DF_obs : pandas DataFrame
-                Table of the observed emission line fluxes, errors, and
-                wavelengths (if provided), with a row for each line.
-            Grid_spec : NB1_Process_grids.Grid_description instance
-                Object containing attributes describing the interpolated grids,
-                including lists of parameter names and values, and mappings to
-                and from indices along the dimensions.
-            Likelihood : NB3_Bayes.NB_nd_pdf instance
-                Object which holds important information...
-            Plot_Config : NB4_Plotting.Plot_Config instance
-
-            Plotter : NB4_Plotting.ND_PDF_Plotter instance
-                Object which is called with an NB3_Bayes.NB_nd_pdf object and
-                an output filename to plot an nD PDF, e.g. the posterior.
+        This object holds the working and results of the Bayesian parameter
+        estimation.  It has the following attributes, listed here roughly in
+        order of decreasing importance:
             Posterior : NB3_Bayes.NB_nd_pdf instance
-                As for the Likelihood attribute, but for the posterior PDF
+                Holds data for the posterior PDF, and has these attributes:
+                DF_estimates : pandas DataFrame table holding the parameter
+                    estimates, limits of 68\% and 95\% credible intervals, and
+                    results of checks for the PDF being up against the edge of
+                    the parameter space or having a pathological shape.  Access
+                    as 'NB_Result.Posterior.DF_estimates'
+                best_model : dict describing the model at the point in the PDF
+                    defined by the parameter estimates, with the following keys
+                    and values:
+                    "table" : pandas DataFrame table comparing model and
+                              observed fluxes for the "best model".  There is a
+                              row per emission line.  Accessed as
+                              'NB_Result.Posterior.best_model["table"]'
+                    "chi2" :  The reduced chi^2 of the fit
+                    "extinction_Av_mag" : The visual extinction in magnitudes
+                              (if "deredden" was True)
+                nd_pdf : The numpy ndarray which samples the posterior PDF over
+                    the full interpolated parameter space
+                Grid_spec : NB1_Process_grids.Grid_description instance which
+                    has attributes "param_names", "param_values_arrs", "shape",
+                    etc., describing the geometry of the interpolated grid.
+                marginalised_1D : dict that maps parameter names to numpy
+                                  arrays that sample the 1D marginalised PDFs
+                marginalised_2D : dict mapping tuples of two parameter names to
+                                  numpy arrays that sample 2D marginalised PDFs
+                name : str giving the PDF name - "Posterior"
+            Likelihood : NB3_Bayes.NB_nd_pdf instance
+                As for the Posterior attribute, but for the likelihood PDF.
+                The parameter estimates and best model are therefore for the
+                "maximum likelihood estimates", rather than the full Bayesian
+                parameter estimates.
             Prior : NB3_Bayes.NB_nd_pdf instance
-                As for the Likelihood attribute, but for the prior PDF
+                As for the Posterior and Likelihood attributes, but for the
+                prior PDF.  The parameter estimates are for the "best" model
+                according to the prior information, without updating for the
+                observational data.
             deredden : bool
                 Value of the "deredden" keyword.  Were observed fluxes
                 dereddened all over the parameter space?
+            DF_obs : pandas DataFrame
+                Table of the observed emission line fluxes, errors, and
+                wavelengths (if provided), with a row for each line.  Fluxes
+                and errors are normalised to the norm_line flux.
             obs_flux_arrs : list of numpy arrays
-
+                The observed fluxes used at each point in the parameter space.
+                The fluxes will be the same everywhere unless deredden=True,
+                in which case the fluxes were dereddened to match the Balmer
+                decrement at each point in the parameter space.  The arrays are
+                ordered to correspond to the emission lines listed in DF_obs.
             obs_flux_err_arrs : list of numpy arrays
+                Same as obs_flux_arrs, but for the observed flux errors.
+            Grid_spec : NB1_Process_grids.Grid_description instance
+                As for NB_Result.Posterior.Grid_spec
+            Plotter : NB4_Plotting.ND_PDF_Plotter instance
+                Object which is called with an NB3_Bayes.NB_nd_pdf object and
+                an output filename to plot an nD PDF, e.g. the posterior.
+            Plot_Config : NB4_Plotting.Plot_Config instance
+                Object with a "configs" attribute, which is a dict storing
+                options for each of the types of plots
 
         """
         print("Running NebulaBayes...")
@@ -309,13 +348,13 @@ class NB_Model(object):
             else:
                 raise ValueError("norm_line '{0}'".format(norm_line) +
                                  " not found in obs_line_names")
-        deredden = kwargs.pop("deredden", False) # Default False
+        deredden = kwargs.pop("deredden", False)  # Default False
         assert isinstance(deredden, bool)
         if deredden and not all((l in obs_line_names) for l in ["Halpha","Hbeta"]):
-            raise ValueError("'Halpha' and 'Hbeta' must be provided for deredden=True")
-        obs_wavelengths = kwargs.pop("obs_wavelengths", None) # Default None
+            raise ValueError("'Halpha' and 'Hbeta' must be provided for deredden==True")
+        obs_wavelengths = kwargs.pop("obs_wavelengths", None)  # Default None
         if deredden and (obs_wavelengths is None):
-            raise ValueError("Must supply obs_wavelengths for deredden=True")
+            raise ValueError("Must supply obs_wavelengths for deredden==True")
         if deredden is False and (obs_wavelengths is not None):
             pass # obs_wavelengths is unnecessary but will be checked anyway.
         # Process the input observed data; DF_obs is a pandas DataFrame table
@@ -388,7 +427,7 @@ class NB_Model(object):
             print("Plotting corner plot for the", ndpdf_name.lower(), "...")
             self._Plotter(NB_nd_pdf, out_image_name, config=Plot_Config_1)
 
-        print("NebulaBayes finished.")
+        print("NebulaBayes finished")
         return Result
 
 
