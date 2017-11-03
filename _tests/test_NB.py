@@ -16,11 +16,15 @@ from NebulaBayes.src.NB1_Process_grids import RegularGridResampler
 
 
 """
-Unit test suite to test NebulaBayes
+Test suite to test NebulaBayes.  Mostly functional and regression tests, with
+some unit tests as well.
+
+Works with Python 2 and Python 3.
+
 Adam D. Thomas 2017
 """
 
-clean_up = True  # Delete test outputs after running?
+clean_up = True  # Delete test output files after running?
 test_dir = os.path.join(this_file_dir_path, "test_outputs") # For outputs
 
 
@@ -157,7 +161,8 @@ class Test_Obs_from_Peak_Gridpoint_2D_Grid_2_Lines(Base_2D_Grid_2_Lines):
         obs_errors = [f / 7. for f in obs_fluxes]
 
         cls.posterior_plot = os.path.join(test_dir, cls.__name__ + "_posterior.pdf")
-        kwargs = {"posterior_plot":cls.posterior_plot, "norm_line":"L1"}
+        kwargs = {"posterior_plot": cls.posterior_plot,
+                  "line_plot_dir": test_dir, "norm_line": "L1"}
 
         cls.Result = cls.NB_Model_1(obs_fluxes, obs_errors, cls.lines, **kwargs)
 
@@ -434,7 +439,7 @@ class Test_real_data_with_dereddening(unittest.TestCase):
                                           cls.__name__ + "_posterior.pdf")
         cls.estimate_table = os.path.join(test_dir,
                                     cls.__name__ + "_parameter_estimates.csv")
-        # Test different values along each dimension in interpd_grid_shape 
+        # Test different values along each dimension in interpd_grid_shape
         cls.NB_Model_1 = NB_Model("HII", grid_params=None, lines_list=cls.lines,
                                   interpd_grid_shape=[100, 130, 80])
 
@@ -444,7 +449,7 @@ class Test_real_data_with_dereddening(unittest.TestCase):
                   "estimate_table": cls.estimate_table,
                   "deredden": True, "obs_wavelengths": cls.obs_wavelengths,
                   "prior":[("SII6716","SII6731")],
-                  "plot_configs": [{"table_on_plots": True,
+                  "plot_configs": [{"table_on_plot": True,
                                     "legend_fontsize": 5}]*4,
                   }
         cls.Result = cls.NB_Model_1(cls.obs_fluxes, cls.obs_errs, cls.lines,
@@ -475,6 +480,22 @@ class Test_real_data_with_dereddening(unittest.TestCase):
                         "P(upper)>50%?"]:
                 self.assertTrue(DF.loc[p,col] == "N")
             self.assertTrue(DF.loc[p,"n_local_maxima"] == 1)
+
+    def test_chi2(self):
+        """
+        Regression check that chi2 doesn't change
+        """
+        chi2 = self.Result.Posterior.best_model["chi2"]
+        self.assertTrue(np.isclose(chi2, 1401.3, atol=0.2))
+
+    def test_all_zero_prior(self):
+        """
+        We permit an all-zero prior - check that it works (a warning should
+        be printed).
+        """
+        shape = self.NB_Model_1.Interpd_grids.shape
+        self.Result1 = self.NB_Model_1(self.obs_fluxes, self.obs_errs,
+                                       self.lines, prior=np.zeros(shape))
 
 
     @classmethod
@@ -545,12 +566,89 @@ class Test_upper_bounds_1D(unittest.TestCase):
 
 
 ###############################################################################
+
+class Test_all_zero_likelihood(unittest.TestCase):
+    """
+    Test forcing a log_likelihood of all -inf, so the likelihood is all zero.
+    """
+    longMessage = True  # Append messages to existing message
+
+    lines       = ["Halpha", "Hbeta", "OIII4363", "OIII5007", "NII6583"]
+    obs_fluxes  = [   1e250,       1,    1.2e250,    1.2e250,     1e250]
+    obs_errs    = [   0.004,       1,      0.005,      0.003,     0.002]
+
+    @classmethod
+    def setUpClass(cls):
+        cls.NB_Model_1 = NB_Model("HII", lines_list=cls.lines, grid_error=0.01,
+                                  interpd_grid_shape=[30,30,30])
+        kwargs = {"deredden": False, "norm_line": "Hbeta",
+                  "prior":[("NII6583","Halpha")]}
+        cls.Result = cls.NB_Model_1(cls.obs_fluxes, cls.obs_errs, cls.lines,
+                                    **kwargs)
+
+    def test_likelihood_all_zero(self):
+        """
+        Regression test - check likelihood is all zero.
+        """
+        likelihood = self.Result.Likelihood.nd_pdf
+        self.assertTrue(np.all(likelihood == 0))
+
+    def test_posterior_all_zero(self):
+        """
+        Regression test - check posterior is all zero.
+        """
+        posterior = self.Result.Posterior.nd_pdf
+        self.assertTrue(np.all(posterior == 0))
+
+
+
+###############################################################################
+
+class Test_data_that_matches_models_poorly(unittest.TestCase):
+    """
+    Test inputting fluxes and errors that are very poorly fit by the entire
+    model grid.  In this case most of the likelihood is zero, and using a
+    reasonable-ish prior gives a posterior that is zero everywhere.
+    """
+    longMessage = True  # Append messages to existing message
+
+    lines       = ["Halpha", "Hbeta", "OIII4363", "OIII5007", "NII6583"]
+    obs_fluxes  = [     3.1,       1,        1.8,        5.1,       1.2]
+    obs_errs    = [    0.01,       1,       0.01,       0.01,      0.01]
+    # Note the very small errors
+
+    @classmethod
+    def setUpClass(cls):
+        cls.NB_Model_1 = NB_Model("HII", lines_list=cls.lines, grid_error=0.01,
+                                  interpd_grid_shape=[30,30,30])
+        kwargs = {"deredden": False, "norm_line": "Hbeta",
+                  "prior":[("NII6583", "OIII4363")]}
+        cls.Result = cls.NB_Model_1(cls.obs_fluxes, cls.obs_errs, cls.lines,
+                                    **kwargs)
+
+    def test_likelihood_mostly_zero(self):
+        """
+        Regression test - check likelihood is mostly zero.
+        """
+        likelihood = self.Result.Likelihood.nd_pdf
+        self.assertTrue(np.sum(likelihood != 0) < 65)
+
+    def test_posterior_all_zero(self):
+        """
+        Regression test - check posterior is all zero.
+        """
+        posterior = self.Result.Posterior.nd_pdf
+        self.assertTrue(np.all(posterior == 0))
+
+
+###############################################################################
+
 # Ideas for more tests:
 
 # Check that parameter estimates are inside the CIs, and check the flags for this
 
-# Test normalising to different lines, and having enough interpolated grids
-# for the excess ones to be deleted, and checking that they are.
+# Test normalising to different lines repeatedly, and checking that the
+# unnecessary interpolated grids are deleted.
 
 # Check coverage of the code, to see what isn't being run?
 

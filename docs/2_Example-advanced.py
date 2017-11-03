@@ -4,14 +4,15 @@ import sys
 
 from astropy.io import fits  # For FITS file I/O
 from astropy.table import Table  # Used in converting to pandas DataFrame 
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
+# import pandas as pd
 
-# Cheat to import NB before it has been installed, assuming this script is
-# in a subdirectory of the NebulaBayes package:
-this_file_dir_path = os.path.dirname(os.path.realpath(__file__))
-NB_parent_dir = os.path.split(os.path.split(this_file_dir_path)[0])[0]
+# Manipulate path names to load this version of NB, and also to save output
+# file in the NebulaBayes/docs subdirectory.
+# in the "docs" subdirectory of the NebulaBayes package:
+docs_path = os.path.dirname(os.path.realpath(__file__))
+NB_parent_dir = os.path.split(os.path.split(docs_path)[0])[0]
 sys.path.insert(1, NB_parent_dir)
 from NebulaBayes import NB_Model
 from NebulaBayes.src.NB2_Prior import calculate_line_ratio_prior
@@ -24,8 +25,10 @@ This script shows examples of more advanced usage of NebulaBayes.
 There are examples of how to:
  - Filter a model grid table to consider a smaller parameter space than the
    full grid
+ - Include an upper bound
  - Include a custom prior
  - Use a custom plotting callback to add annotations to plots
+ - Use the built-in dereddening
  - Retrieve information on the parameter estimates and comparison of the
    "best model" from output tables using the NebulaBayes API.
 
@@ -36,7 +39,7 @@ change... ?
 
 
 
-def filter_grid():
+def filter_NLR_grid():
     """
     Filter the built-in NLR grid to reduce the covered parameter space.
     """
@@ -56,7 +59,21 @@ def filter_grid():
 
     return DF_grid
 
-DF_grid = filter_grid()
+
+
+DF_grid = filter_NLR_grid()
+grid_params = ["12 + log O/H", "log U", "log P/k"]  # E_peak was removed
+interp_shape = [100, 40, 50]  # Interpolated points along each dimension
+linelist = ["OII3726_29", "Hbeta", "OIII5007", "OI6300", "Halpha", "NII6583",
+            "SII6716", "SII6731"]
+obs_fluxes = [1.225,  1,    0.4494, 0.02923, 4.251,  1.653,   0.4560,  0.4148]
+obs_errs =  [0.003, 0.0017, 0.0012, 0.00052, 0.0027, 0.00173, 0.00102, 0.00099]
+# Must supply wavelengths for dereddening; see NebulaBayes/grids/Linelist.csv
+wavelengths = [3727, 4861, 5007, 6300, 6562.8, 6583, 6716.4, 6731]  # Angstroem
+
+# Set up interpolated grids, neglecting any systematic grid error:
+NB_Model_1 = NB_Model(DF_grid, grid_params, linelist,
+                      interpd_grid_shape=interp_shape, grid_error=0)
 
 
 
@@ -116,23 +133,67 @@ def calculate_custom_prior(DF_obs, grids_dict, grid_spec, grid_rel_err):
 
 
 
+# def plotting_callback():
+#     """
 
-
-def plotting_callback():
-    """
-
-    """
-    # In a plotting callback, adjust the grid with subplots_adjust:
-    # fig.subplots_adjust(left=grid_bounds["left"], bottom=grid_bounds["bottom"],
-    #         #                                                   wspace=0.04, hspace=0.04)
+#     """
+#     # In a plotting callback, adjust the grid with subplots_adjust:
+#     # fig.subplots_adjust(left=grid_bounds["left"], bottom=grid_bounds["bottom"],
+#     #         #                                                   wspace=0.04, hspace=0.04)
 
 
 
 
-    # Close and delete the figure to ensure NB doesn't try to reuse this figure
-    plt.close(fig)
-    del fig
+#     # Close and delete the figure to ensure NB doesn't try to reuse this figure
+#     plt.close(fig)
+#     del fig
 
+
+
+
+# Configure options for a NB run:
+out_path = docs_path
+kwargs = {"posterior_plot": os.path.join(out_path,"2_posterior_plot.pdf"),
+          "prior_plot": os.path.join(out_path, "2_prior_plot.pdf"),
+          "estimate_table": os.path.join(out_path, "2_param_estimates.csv"),
+          "prior": calculate_custom_prior,
+          "deredden": True,  # Match model Balmer decrement everywhere in grid
+          "obs_wavelengths": wavelengths,  # Needed for dereddening
+          "norm_line": "Hbeta",  # Obs and model fluxes normalised to Hbeta
+          "param_display_names": {"log U": r"$\log U$",
+                "log P/k": r"$\log P/k$", "12 + log O/H": r"$12 + \log $O/H"},
+          "plot_configs": [{}, {}, {}, {}], # Prior, like, posterior, per-line
+          }
+# Add "Best model" table to prior plot:
+kwargs["plot_configs"][0]["table_on_plot"] = True
+# # Use our custom callback function when making the posterior plot:
+# kwargs["plot_configs"][2]["callback"] = plotting_callback
+
+# Do parameter estimation once:
+Result = NB_Model_1(obs_fluxes, obs_errs, linelist, **kwargs)
+# The NB_Model instance can be called repeatedly to do Bayesian parameter
+# estimation on different sets of observed fluxes with the same grid (which
+# only needs to be interpolated once).
+# You can access all the NebulaBayes internal data, PDFs, results, etc. on the
+# Result object.
+
+
+
+# Now we extract some data:
+
+
+
+
+
+
+# Example of use of upper bound
+linelist1 = ["OII3726_29", "Hbeta", "OIII5007", "OI6300", "Halpha", "NII6583",
+            "SII6716", "SII6731"]
+# Include an upper bound on OI6300, signaled by the -inf placeholder:
+obs_fluxes1 = [1.225,  1,    0.4494, -np.inf, 4.251,  1.653,   0.4560,  0.4148]
+obs_errs1 =  [0.003, 0.0017, 0.0012, 0.04,   0.0027, 0.00173, 0.00102, 0.00099]
+kwargs1 = {}  # Use defaults - don't write outputs or deredden
+Result1 = NB_Model_1(obs_fluxes1, obs_errs1, linelist1, **kwargs1)
 
 
 

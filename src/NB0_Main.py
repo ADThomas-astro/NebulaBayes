@@ -71,7 +71,7 @@ class NB_Model(object):
             other than the "HII" or "NLR" built-in grids is used.  Each name
             must match a column header in the grid_table.  Default lists are
             ["log U", "log P/k", "12 + log O/H"] for grid_table == "HII", and
-            ["log U", "log P/k", "12 + log O/H", "E_peak"] for
+            ["log U", "log P/k", "12 + log O/H", "log E_peak"] for
             grid_table == "NLR".  Permute the list to change the order of the
             grid dimensions, i.e. the order of array indexing in NebulaBayes
             and the order of parameters in the output plots.
@@ -120,7 +120,8 @@ class NB_Model(object):
                 if grid_table == "HII":
                     grid_params = ["log U", "log P/k", "12 + log O/H"]
                 elif grid_table == "NLR":
-                    grid_params = ["log U", "log P/k", "12 + log O/H", "E_peak"]
+                    grid_params = ["log U", "log P/k", "12 + log O/H",
+                                   "log E_peak"]
             else:
                 raise ValueError("grid_params must be specified unless "
                                  " grid_table is 'HII' or 'NLR'")
@@ -245,9 +246,9 @@ class NB_Model(object):
             0) Prior, 1) Likelihood, 2) Posterior, and 3) Individual line plots.
             To use the same config dict object for all four plot types, write
             "plot_configs=[my_dict]*4".  Valid items in each dictionary are:
-                table_on_plots : bool
+                table_on_plot : bool
                     Include a text "best model" flux comparison table on the
-                    'corner' plots?  (Doesn't apply to individual line plots).
+                    'corner' plot?  (Doesn't apply to individual line plots).
                     Default: True
                 show_legend : bool
                     Show the legend? (Doesn't apply to 1D grids). Default: True
@@ -329,7 +330,7 @@ class NB_Model(object):
                 options for each of the types of plots
 
         """
-        print("Running NebulaBayes...")
+        print("\nRunning NebulaBayes parameter estimation...")
 
         if len(set(obs_line_names)) != len(obs_line_names):
             raise ValueError("obs_line_names are not all unique")
@@ -427,7 +428,7 @@ class NB_Model(object):
             print("Plotting corner plot for the", ndpdf_name.lower(), "...")
             self._Plotter(NB_nd_pdf, out_image_name, config=Plot_Config_1)
 
-        print("NebulaBayes finished")
+        print("NebulaBayes parameter estimation finished.")
         return Result
 
 

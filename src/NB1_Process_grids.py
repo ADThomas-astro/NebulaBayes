@@ -193,6 +193,9 @@ def process_raw_table(DF_grid, grid_params, lines_list):
         if np.any(DF_grid[line].values < 0):
             raise ValueError("A model flux value for emission line " + line +
                              " is negative.")
+        if np.all(DF_grid[line].values == 0):
+            print("WARNING: All model fluxes for emission line " + line +
+                  " are zero.")
 
         # Ensure line flux columns are a numeric data type
         DF_grid[line] = pd.to_numeric(DF_grid[line], errors="raise")

@@ -47,9 +47,9 @@ class NB_nd_pdf(object):
         The nd_pdf will be normalised.
         """
         if np.any(~np.isfinite(nd_pdf)):
-            raise ValueError("The nd_pdf is not entirely finite")
+            raise ValueError("The {0} nd_pdf is not entirely finite".format(name))
         if nd_pdf.min() < 0:
-            raise ValueError("The nd_pdf contains a negative value")
+            raise ValueError("The {0} nd_pdf contains a negative value".format(name))
         self.nd_pdf = nd_pdf
         self.Grid_spec = NB_Result.Grid_spec
         self.name = name
@@ -66,7 +66,7 @@ class NB_nd_pdf(object):
             self._make_best_model_table(DF_obs, Interpd_grids, NB_Result)
                   # We added "table" to "best_model" dict
             # 2.) Calculate chi2 of the fit (add "chi2" to "best_model" dict):
-            self._calculate_chi2(NB_Result.deredden)
+            self._calculate_chi2(NB_Result.deredden, DF_obs)
             # 3.) Calculate implied extinction ("extinction_Av_mag" in dict):
             self._calculate_Av(NB_Result.deredden, Interpd_grids, DF_obs)
 
@@ -75,14 +75,13 @@ class NB_nd_pdf(object):
     def _marginalise_pdf(self):
         """
         Calculate normalised 1D and 2D marginalised pdfs for all possible
-        combinations of parameters.
+        combinations of parameters.  Store them as dictionaries in the
+        attributes self.marginalised_2D and self.marginalised_1D.
         """
-        #print("Calculating 2D and 1D marginalised pdfs...")
-
         # The interpolated grids have uniform spacing:
         spacing = [(v[1] - v[0]) for v in self.Grid_spec.param_values_arrs]
         n = self.Grid_spec.ndim
-        #--------------------------------------------------------------------------
+        #----------------------------------------------------------------------
         # Calculate the 2D marginalised pdf for every possible combination
         # of 2 parameters
         # List of all possible pairs of two parameter names:
@@ -144,31 +143,38 @@ class NB_nd_pdf(object):
             assert param_inds_double[0] == 0 
             param = param_names[param_inds_double[1]]
             # Integrate over first dimension (parameter) using Simpson's rule:
-            marginalised_1D[param] = simps(marginalised_2D[double_name], axis=0,
-                                                                  dx=spacing[0])
+            marginalised_1D[param] = simps(marginalised_2D[double_name],
+                                                         axis=0, dx=spacing[0])
+            # if np.all(marginalised_1D[param] == 0):
+            #     print("WARNING: 1D PDF for {0} is all zero".format(param))
             # marginalised_1D[param] = np.trapz(marginalised_2D[double_name],
-            #                                             axis=0, dx=spacing[0])
+            #                                            axis=0, dx=spacing[0])
 
 
-        #--------------------------------------------------------------------------
-        # Calculate the 0D marginalised pdf (by which I mean find
-        # the normalisation constant - the 0D marginalised pdf should be 1!)
-        # Then normalise the 1D and 2D marginalised PDFs:
+        #----------------------------------------------------------------------
+        # Calculate the 0D marginalised pdf (by which I mean find the
+        # normalisation constant - the 0D marginalised pdf should be 1!), then
+        # normalise all the PDFs.
 
-        # Firstly find the integral over all n dimensions by picking
-        # any 1D marginalised pdf (we use the first) and integrating over it:
+        # Find the integral over all n dimensions.  We integrate over all the
+        # 1D PDFs, and take the median of these values.
+        integrals = [simps(pdf_1D, dx=spacing[0]) for
+                                            pdf_1D in marginalised_1D.values()]
+        integral = np.median(integrals)
         # integral = np.trapz(marginalised_1D[param_names[0]], dx=spacing[0])
-        integral = simps(marginalised_1D[param_names[0]], dx=spacing[0])
-        # Now actually normalise each 2D and 1D marginalised pdf:
-        for double_name in double_names:
-            # Divide arrays in-place in memory:
-            marginalised_2D[double_name] /= integral
-        for param in param_names:
-            # Divide arrays in-place in memory:
-            marginalised_1D[param] /= integral
-        # Now normalise the full pdf.  In the case of the likelihood and prior,
-        # this normalisation is important; for the posterior it's probably not.
-        self.nd_pdf /= integral
+        # Now normalise each 2D and 1D marginalised pdf and the full nD pdf.
+        # In the case that all models in the grid are a poor fit to the data,
+        # the likelihood may be zero everywhere.  In this case the integral
+        # will be zero, and we don't normalise.
+        if integral > 0:
+            for double_name in double_names:
+                # Divide arrays in-place in memory:
+                marginalised_2D[double_name] /= integral
+            for param in param_names:
+                marginalised_1D[param] /= integral
+            # Normalise the full pdf.  For the likelihood and prior, the
+            # normalisation is important; for the posterior it's probably not.
+            self.nd_pdf /= integral
 
         self.marginalised_2D = marginalised_2D
         self.marginalised_1D = marginalised_1D
@@ -257,32 +263,41 @@ class NB_nd_pdf(object):
 
 
 
-    def _calculate_chi2(self, deredden):
+    def _calculate_chi2(self, deredden, DF_obs):
         """
         Calculate a chi^2 value which describes how well the model
         corresponding to the parameter best estimates matches the observations.
+        Any upper bounds are not included in the calculation.
         deredden: Boolean.  Did we deredden the observed line fluxes to match
                   the Balmer decrement at every interpolated model gridpoint?
+        DF_obs: pandas DataFrame holding observed fluxes and errors
         """
         DF = self.best_model["table"]  # Table comparing obs with best model
-        # We'll need to reconstruct the error column
+        grid_n = self.Grid_spec.ndim   # Number of grid dimensions
+        # Notes on degrees of freedom calculation: The normalisation line
+        # doesn't count as a data point, since its flux is normalised to 1.  If
+        # we're dereddening, Halpha also doesn't count because we match the
+        # Balmer decrement, so Halpha always matches the prediction.
+        # Also, upper bounds aren't included in the chi2 calculation.
         if deredden:  # If we dereddened the observed fluxes at each gridpoint
+            # Note that upper bounds can't be used with dereddening.
+            # Reconstruct the error column:
             flux_err = DF["Obs_dered"].values / DF["Obs_S/N_dered"].values
-            chi2_working = ( (DF["Obs_dered"].values - DF["Model"].values)**2
+            chi2 = np.sum( (DF["Obs_dered"].values - DF["Model"].values)**2
                                          / flux_err**2  )
-        else:
-            flux_err = DF["Obs"].values / DF["Obs_S/N"].values
-            chi2_working = ( (DF["Obs"].values - DF["Model"].values)**2
-                                         / flux_err**2  )
-        chi2 = np.sum(chi2_working)
-        grid_n = self.Grid_spec.ndim
-        # Degrees of freedom (the normalisation line doesn't count as a data
-        # point, since its flux is normalised to 1)
-        dof = (len(DF) - 1) - grid_n
-        if deredden:
-            dof -= 1 # Halpha doesn't count as a data point; the obs fluxes are
-                     # dereddened to match the Balmer decrement at every gridpoint
-                     # so Halpha observations always match the prediction
+            dof = (len(DF) - 1 - 1) - grid_n  # Degrees of freedom
+        else: # If there wasn't dereddening
+            # There may be upper bounds, for which the observed flux is -inf;
+            # these can't make a contribution to the chi2.
+            flux_err = DF_obs["Flux_err"].values
+            chi2, dof = 0.0, 0
+            for obs_flux, obs_err, mod_val in zip(DF["Obs"].values, flux_err,
+                                                  DF["Model"].values):
+                if obs_flux != -np.inf:  # If not an upper bound
+                    chi2 += (obs_flux - mod_val)**2 / obs_err**2
+                    dof += 1
+            dof = (dof - 1) - grid_n  # Degrees of freedom (exclude norm line)
+
         dof = max(1, dof)  # Can't be smaller than one
         chi2 /= dof  # The "reduced chi-squared"
         self.best_model["chi2"] = chi2
@@ -321,27 +336,46 @@ def make_single_parameter_estimate(param_name, val_arr, pdf_1D):
     """
     Bayesian parameter estimate for a single parameter, including the credible
     intervals.  This function is also used to make "estimates" using the prior
-    and likelihood pdfs, which may be of interest but isn't full Bayesian
+    and likelihood PDFs, which may be of interest but this isn't full Bayesian
     parameter estimation.
     param_name: String giving name of the parameter.
     val_arr: 1D numpy array of parameter co-ordinate values associated with
              the values listed in pdf_1D
-    pdf_1D: 1D numpy array of the marginalised 1D pdf for the parameter
-            param_name; the pdf values correspond to the parameter values listed
-            in val_arr.
+    pdf_1D: 1D numpy array of the marginalised 1D PDF for the parameter
+            param_name; the PDF values correspond to the parameter values
+            listed in val_arr.
     Returns a dictionary.  See "_make_parameter_estimate_table" for contents.
     """
-    if np.any(~np.isfinite(pdf_1D)):
-        raise ValueError("The 1D pdf for {0} is not all finite".format(param_name))
+    if not np.all(np.isfinite(pdf_1D)):
+        raise ValueError("The 1D PDF for "
+                         "{0} is not all finite".format(param_name))
     if np.any(pdf_1D < 0):
-        raise ValueError("The 1D pdf for {0} has a negative value".format(param_name))
-    length = val_arr.size
-    assert length == pdf_1D.size # Sanity check
-    index_array = np.arange(length)
-    bool_map = {True:"Y", False:"N"}
+        raise ValueError("The 1D PDF for "
+                         "{0} has a negative value".format(param_name))
+    assert val_arr.size == pdf_1D.size  # Sanity check
+    index_array = np.arange(val_arr.size)
+    bool_map = {True: "Y", False: "N"}
+    CIs = [68, 95]  # Credible intervals to consider
     out_dict = {}  # To hold results for this parameter
-    
     out_dict["Parameter"] = param_name
+
+    if np.all(pdf_1D == 0):
+        # This is possible if all models are a terrible fit to the data
+        out_dict["Estimate"] = val_arr[0]  # Take lowest parameter value
+        for CI in CIs:
+            CI_code = "CI" + str(CI)  # e.g. "CI68"
+            out_dict[CI_code+"_low"] = -np.inf
+            out_dict[CI_code+"_high"] = +np.inf
+            out_dict["Est_in_"+CI_code+"?"] = bool_map[False]
+        other_checks = {
+            "n_local_maxima": 0,
+            "P(lower)": 0., "P(lower)>50%?": bool_map[False],
+            "P(upper)": 0., "P(upper)>50%?": bool_map[False],
+            "Est_at_lower?": bool_map[True], "Est_at_upper?": bool_map[True],
+            }
+        out_dict.update(other_checks)
+        return out_dict
+
     # Calculate estimate of parameter value (location of max in 1D pdf)
     # (This is the Bayesian parameter estimate if pdf_1D is from the posterior)
     est_ind = np.argmax(pdf_1D)
@@ -355,7 +389,7 @@ def make_single_parameter_estimate(param_name, val_arr, pdf_1D):
     cdf_1D /= cdf_1D[-1]
 
     # Calculate credible intervals
-    for CI in [68, 95]:
+    for CI in CIs:
         # Find the percentiles of lower and upper bounds of CI:
         lower_prop = (1.0 - CI/100.0) / 2.0 # Lower percentile as proportion
         upper_prop = 1.0 - lower_prop       # Upper percentile as proportion
@@ -364,7 +398,7 @@ def make_single_parameter_estimate(param_name, val_arr, pdf_1D):
         lower_ind_arr = index_array[cdf_1D < lower_prop]
         if lower_ind_arr.size == 1:
             # The 1st CDF value (0) is the only value below the lower bound
-            lower_val = -np.inf # Indicate that we don't have a lower bound
+            lower_val = -np.inf  # Indicate that we don't have a lower bound
         else: # Use the first value below the lower bound, to be conservative
             lower_val = val_arr[ lower_ind_arr[-1] ]
 
@@ -386,7 +420,7 @@ def make_single_parameter_estimate(param_name, val_arr, pdf_1D):
         out_dict["Est_in_"+CI_code+"?"] = bool_map[is_in_CI]
 
     # Count local maxima
-    tup_max_inds = argrelextrema( pdf_1D, np.greater )
+    tup_max_inds = argrelextrema(pdf_1D, np.greater)
     out_dict["n_local_maxima"] = tup_max_inds[0].size
     # argrelextrema doesn't pick up maxima on the ends, so check ends:
     if pdf_1D[0] > pdf_1D[1]:
@@ -455,14 +489,11 @@ class NB_Result(object):
                            list(Interpd_grids.paramName2paramValueArr.values()))
         self.Grid_spec = Grid_spec
 
-        # Calculate arrays of observed fluxes over the grid (possibly dereddening)
+        # Make arrays of observed fluxes over the grid (possibly dereddening)
         self._make_obs_flux_arrays(Interpd_grids, DF_obs.norm_line)
 
-        # Calculate the likelihood over the grid:
-        print("Calculating likelihood...")
-        raw_likelihood = self._calculate_likelihood(Interpd_grids, DF_obs.norm_line)
-        self.Likelihood = NB_nd_pdf(raw_likelihood, self, Interpd_grids,
-                                    name="Likelihood", DF_obs=DF_obs)
+        # Ensure there are interpolated arrays normalised to the norm_line
+        self._normalise_grid_arrays(Interpd_grids, DF_obs.norm_line)
 
         # Calculate the prior over the grid:
         print("Calculating prior...")
@@ -471,14 +502,25 @@ class NB_Result(object):
                                     grid_spec=Interpd_grids._Grid_spec,
                                     grid_rel_err=Interpd_grids.grid_rel_error)
         self.Prior = NB_nd_pdf(raw_prior, self, Interpd_grids, name="Prior",
-                                                                  DF_obs=DF_obs)
+                                                                DF_obs=DF_obs)
+
+        # Calculate the likelihood over the grid:
+        print("Calculating likelihood...")
+        raw_likelihood = self._calculate_likelihood(Interpd_grids,
+                                                    DF_obs.norm_line)
+        self.Likelihood = NB_nd_pdf(raw_likelihood, self, Interpd_grids,
+                                    name="Likelihood", DF_obs=DF_obs)
 
         # Calculate the posterior using Bayes' Theorem:
         # (note that the prior and likelihood pdfs are now normalised)
         print("Calculating posterior using Bayes' Theorem...")
-        raw_posterior = self.Likelihood.nd_pdf * self.Prior.nd_pdf # Bayes' theorem
+        raw_posterior = self.Likelihood.nd_pdf * self.Prior.nd_pdf
+        if np.all(raw_posterior == 0):
+            print("WARNING: The posterior is all zero.  The prior and "
+                  "likelihood have together completely excluded all models in "
+                  "the grid, within the numerical precision")
         self.Posterior = NB_nd_pdf(raw_posterior, self, Interpd_grids,
-                                                name="Posterior", DF_obs=DF_obs)
+                                   name="Posterior", DF_obs=DF_obs)
 
 
 
@@ -566,6 +608,40 @@ class NB_Result(object):
 
 
 
+    def _normalise_grid_arrays(self, Interpd_grids, norm_line):
+        """
+        Normalise the interpolated model grid fluxes if necessary (if we don't
+        already have a dict of grids with the desired normalisation, from a
+        previous NebulaBayes parameter estimation run).
+        When we normalise we may lose information (where the normalising grid
+        has value zero), so the "No_norm" dict of grids is stored to be able
+        to normalise on the fly without this problem.  We store the
+        interpolated grids for the last used normalisation to try to avoid
+        normalising interpolated grids on every call, which means we store
+        two sets of interpolated grids at any time ("No_norm" and the last
+        used interpolation).  When we want a new normalisation, we add another
+        dict to the "grids" dict and remove the old normalisation.
+        """
+        norm_name = norm_line + "_norm"
+        if norm_name not in Interpd_grids.grids:
+            Interpd_grids.grids[norm_name] = OD()  # New dict of grids
+            norm_grid = Interpd_grids.grids["No_norm"][norm_line]#.copy()
+            # Copy norm_grid so it won't become all "1.0" in the middle of
+            # normalising if normalising the same set of grids (we're not)
+            bad = (norm_grid == 0)  # For when we divide by norm_grid
+            for line, grid in Interpd_grids.grids["No_norm"].items():
+                Interpd_grids.grids[norm_name][line] = grid / norm_grid
+                # Replace any NaNs we produced by dividing by zero:
+                Interpd_grids.grids[norm_name][line][bad] = 0
+            if len(Interpd_grids.grids) > 2:
+                # Don't store too many copies of the interpolated grids for
+                # different normalisations - this might take a lot of memory
+                oldest_norm = list(Interpd_grids.grids.keys())[1]
+                # The 0th key is "No_norm"; 1st key is for oldest normalisation
+                Interpd_grids.grids.popitem(oldest_norm)
+
+
+
     def _calculate_likelihood(self, Interpd_grids, norm_line):
         """
         Calculate the (linear) likelihood over the entire N-D grid at once.
@@ -586,37 +662,14 @@ class NB_Result(object):
         obs_flux_arrs = self.obs_flux_arrs
         obs_flux_err_arrs = self.obs_flux_err_arrs
 
-        # Normalise the interpolated grid fluxes if necessary (if we don't
-        # already have a dict of grids with the desired normalisation).
-        # When we normalise we may lose information (where the normalising grid
-        # has value zero), so we store the "No_norm" dict of grids to be able
-        # to normalise on the fly without this problem.  We store a few copies
-        # of the interpolated grids for different normalisations to try to avoid
-        # normalising interpolated grids on every call (maybe this is a waste
-        # of memory, I don't know...).  When we want a new normalisation, we add
-        # another dict to the "grids" dict.
-        norm_name = norm_line + "_norm"
-        if norm_name not in Interpd_grids.grids:
-            Interpd_grids.grids[norm_name] = OD()  # New dict of grids
-            norm_grid = Interpd_grids.grids["No_norm"][norm_line]#.copy()
-            # Note: copy norm_grid so it won't become all "1.0" in the middle of
-            # normalising if we're normalising the same set of grids (we're not)
-            bad = (norm_grid == 0)  # For when we divide by norm_grid
-            for line, grid in Interpd_grids.grids["No_norm"].items():
-                Interpd_grids.grids[norm_name][line] = grid / norm_grid
-                # Replace any NaNs we produced by dividing by zero:
-                Interpd_grids.grids[norm_name][line][bad] = 0
-            if len(Interpd_grids.grids) > 2:
-                # Don't store too many copies of the interpolated grids for
-                # different normalisations - this might take a lot of memory
-                oldest_norm = list(Interpd_grids.grids.keys())[1]
-                # The 0th key is "No_norm"; 1st key is for oldest normalisation
-                Interpd_grids.grids.popitem(oldest_norm)
-
-        # Initialise likelihood with 1 everywhere
-        likelihood = np.ones(Interpd_grids.shape, dtype="float")
+        # We calculate the log of the likelihood, which helps avoid numerical
+        # issues in parts of the grid where the models fit the data very badly.
+        # Initialise log likelihood with 0 everywhere
+        log_likelihood = np.zeros(Interpd_grids.shape, dtype="float")
         for i, line in enumerate(self.DF_obs.index):
-            pred_flux_i = Interpd_grids.grids[norm_name][line]
+            pred_flux_i = Interpd_grids.grids[norm_line + "_norm"][line]
+            if np.all(pred_flux_i == 0):
+                raise ValueError("Pred flux for {0} all zero".format(line))
             obs_flux_i = obs_flux_arrs[i]
             obs_flux_err_i = obs_flux_err_arrs[i]
             assert obs_flux_i.shape == pred_flux_i.shape
@@ -626,31 +679,50 @@ class NB_Result(object):
             var = obs_flux_err_i**2 + (pred_flux_rel_err * pred_flux_i)**2
 
             if obs_flux_i[tuple(0 for _ in obs_flux_i.shape)] != -np.inf:
-                # Minus infinity signals an upper bound
-                # The line contribution if we have both observed flux and error:
-                line_contribution = ((1. / np.sqrt(var)) *
-                    np.exp( -(obs_flux_i - pred_flux_i)**2 / (2.0 * var) ) )
+                # Minus infinity would signal an upper bound
+                # Line contribution with both observed flux and error:
+                log_line_contribution = (-0.5 * np.log(var)
+                    - ((obs_flux_i - pred_flux_i)**2 / (2.0 * var)) )
             else:  # We have an upper bound
-                # Line contribution with only the observed error, not flux
+                # Line contribution with only the observed error, not flux:
                 denom = np.sqrt(2 * var)
                 line_contribution = (erf(pred_flux_i / denom) -
-                                  erf((pred_flux_i  - obs_flux_err_i) / denom))
+                                  erf((pred_flux_i - obs_flux_err_i) / denom))
+                # There can be zeroes in the line_contribution array where
+                # pred_flux_i / denom is very large.  We temporarily disable
+                # warnings about taking a log of zero here.  The locations
+                # with a zero will end up being zero in the final likelihood.
+                # There is a risk this will override the information in other
+                # lines - but we can't do anything about it.
+                np.seterr(divide="ignore")
+                log_line_contribution = np.log(line_contribution)  # log base e
+                np.seterr(divide="warn")
 
-            likelihood *= line_contribution
+            log_likelihood += log_line_contribution
 
             # Plot the ND PDF for each line if requested:
             if self._line_plot_dir is not None:
-                line_pdf = line_contribution / line_contribution.max()
+                log_line_contribution -= log_line_contribution.max()
+                line_pdf = np.exp(log_line_contribution)
                 outname = os.path.join(self._line_plot_dir,
-                                    line + "_PDF_contributes_to_likelihood.pdf")
+                                   line + "_PDF_contributes_to_likelihood.pdf")
                 Line_PDF = NB_nd_pdf(line_pdf, self, Interpd_grids,
-                                     name="Individual_line") # We include this
-                                    # "name" for information when we're plotting
-                Line_PDF.Grid_spec.param_display_names = Interpd_grids.param_display_names
+                                     name="Individual_line")  # This name is
+                                    # to choose the correct plot config options
+                Line_PDF.Grid_spec.param_display_names = \
+                                            Interpd_grids.param_display_names
                 print("    Plotting PDF for line {0}...".format(line))
                 self.Plotter(Line_PDF, outname, config=self.Plot_Config)
 
-        likelihood /= likelihood.max()  # Ensure max is 1
-        return likelihood  # The linear likelihood N-D array
+        # Roughly normalise; will be properly normalised later
+        log_max = log_likelihood.max()  # "max" chooses any number over -inf
+        if log_max != -np.inf:  # log_likelihood could be all -inf
+            log_likelihood -= log_likelihood.max()
+
+        likelihood = np.exp(log_likelihood)  # The linear likelihood n-D array
+        if np.all(likelihood == 0):  # If log_likelihood was all -inf
+            print("WARNING: The likelihood is all zero - no models are a "
+                  "reasonable fit to the data")
+        return likelihood
 
 

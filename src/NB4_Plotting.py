@@ -33,8 +33,8 @@ class Plot_Config(object):
     default_cmap = LinearSegmentedColormap.from_list( "NB_default",
                                       [(0,0,0), (56./255,132./255,0), (1,1,1)] )
     default_config = { # Include a text "best model" flux comparison table on
-                       # the 'corner' plots?
-                       "table_on_plots": False,
+                       # the 'corner' plot?
+                       "table_on_plot": False,
                        "show_legend": True,  # Show the legend?
                        "legend_fontsize": 4.5,  # Fontsize of labels in legend
                        # The colormap for the images of 2D marginalised PDFs:
@@ -78,10 +78,10 @@ def _make_plot_annotation(Plot_Config_1, NB_nd_pdf):
     """
     Make the "best model table" text annotation to include on plots, and store
     it as the "table_for_plot" attribute on Plot_Config_1.  This attribute is
-    set to None if the "table_on_plots" option is False (the default).
+    set to None if the "table_on_plot" option is False (the default).
     """
     pdf_name = NB_nd_pdf.name  # One of the "plot_types" above
-    make_anno = ( (Plot_Config_1[pdf_name]["table_on_plots"] is True)
+    make_anno = ( (Plot_Config_1[pdf_name]["table_on_plot"] is True)
                   and hasattr(NB_nd_pdf, "best_model") )
     if not make_anno:
         Plot_Config_1.table_for_plot = None  # Convenient storage spot
@@ -390,6 +390,8 @@ class ND_PDF_Plotter(object):
                       zorder=6)
             # Plot a vertical line to show the parameter estimate (peak of 1D pdf)
             y_lim = (0, 1.14*pdf_1D.max())
+            if y_lim[1] == 0:
+                y_lim = (0, 1)  # If pdf_1D is all zeros
             if plot_type == "Posterior":
                 label1 = "Parameter estimate: peak of 1D\nmarginalised PDF"
             else:
@@ -422,7 +424,7 @@ class ND_PDF_Plotter(object):
                              fontsize=config1["legend_fontsize"])
 
         # Add fluxes table and chisquared as text annotation if requested
-        if config1["table_on_plots"] is True:
+        if config1["table_on_plot"] is True:
             anno_location = [gridspec["left"] + (n//2 * (gridspec["axes_width"]
                                 + gridspec["wspace"]) + 0.01), gridspec["top"]]
             if n == 1:

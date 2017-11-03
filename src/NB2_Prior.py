@@ -120,10 +120,12 @@ def calculate_prior(user_input, DF_obs, grids_dict, grid_spec, grid_rel_err):
                          " of tuples, a callable, or a numpy array")
 
     # Check that the prior is sensible:
-    if np.any(~np.isfinite(prior)):
+    if not np.all(np.isfinite(prior)):
         raise ValueError("The prior is not entirely finite")
     if prior.min() < 0:
         raise ValueError("The prior contains a negative value")
+    if np.all(prior == 0):
+        print("WARNING: The prior is entirely zero")
 
     # Return linear prior, which will be normalised later
     return prior
