@@ -59,7 +59,7 @@ class Plot_Config(object):
             for key, val in input_dict.items(): # input_dict may be empty
                 if key not in self.option_keys:
                     raise ValueError("Unknown plot config key " + str(key))
-                if key == "callback" and not callable(key):
+                if key == "callback" and not callable(val):
                     raise TypeError("callback must be a callable")
                 self.configs[plot_type][key] = val
 
@@ -141,7 +141,8 @@ class ND_PDF_Plotter(object):
         same figure and axes.
         n: The number of dimensions of the grid
         """
-        if hasattr(self, "_fig"):  # Resuse the saved figure and axes objects
+        if hasattr(self, "_fig") and hasattr(self, "_axes"):
+            # Resuse the saved figure and axes objects
             # This provides a significant speedup compared to making new ones.
             for ax in self._axes.ravel():
                 if ax.get_visible():
@@ -215,6 +216,7 @@ class ND_PDF_Plotter(object):
         ax.tick_params(direction="out", length=self.tick_size, which="major")
         ax.tick_params(direction="out", length=(0.7 * self.tick_size),
                        which="minor")
+
 
 
     def _add_legend(self, ax_1D, ax_2D, gridspec, fontsize):
@@ -436,10 +438,16 @@ class ND_PDF_Plotter(object):
                             horizontalalignment="left", verticalalignment="top", 
                             family="monospace", fontsize=self.fs1)
 
-        # Call the user's "callback" function, if it was supplied
+        # Call the user's "callback" function, if it was supplied, otherwise
+        # we save the figure
         callback = config1["callback"]
         if callback is not None:
-            callback(self._fig, self._axes, config1, out_filename)
+            callback(out_filename, self._fig, self._axes, self, config1)
+            # To be safe, delete the figure and axes and regenerate next time
+            # The callback may have modified them in undesirable ways
+            plt.close(self._fig)
+            del self._fig
+            del self._axes
         else:
             # Save the figure
             self._fig.savefig(out_filename)

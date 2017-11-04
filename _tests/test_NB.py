@@ -641,6 +641,35 @@ class Test_data_that_matches_models_poorly(unittest.TestCase):
         self.assertTrue(np.all(posterior == 0))
 
 
+
+###############################################################################
+
+class Test_raising_errors(unittest.TestCase):
+    """
+    Test raising errors on bad inputs
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            # Python 3
+            cls.assertRaisesRE = cls.assertRaisesRegex
+        except AttributeError:
+            # Python 2
+            cls.assertRaisesRE = cls.assertRaisesRegexp
+
+    def test_bad_grid_parameter_with_too_few_unique_values(self):
+        """
+        Test correct error is raised if there are too few unique values for
+        a grid parameter.
+        """
+        DF = pd.DataFrame({"p1": [4, 4, 4, 4], "p2": [1, 2, 3, 4],
+                           "l2": [5, 6, 7, 8]})
+        self.assertRaisesRE(ValueError, "3 unique values are required",
+                            NB_Model, DF, ["p1", "p2"])
+
+
+
 ###############################################################################
 
 # Ideas for more tests:

@@ -120,6 +120,9 @@ def calculate_prior(user_input, DF_obs, grids_dict, grid_spec, grid_rel_err):
                          " of tuples, a callable, or a numpy array")
 
     # Check that the prior is sensible:
+    if not prior.shape == grid_spec.shape:
+        raise ValueError("The prior shape {0} differs from the interpolated "
+                         "grid shape {1}".format(prior.shape, grid_spec.shape))
     if not np.all(np.isfinite(prior)):
         raise ValueError("The prior is not entirely finite")
     if prior.min() < 0:

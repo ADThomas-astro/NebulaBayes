@@ -172,6 +172,9 @@ def process_raw_table(DF_grid, grid_params, lines_list):
     DF_grid : pd.DataFrame instance
     lines_list : List of strings.  The names of the lines to be interpolated.
     """
+    if len(DF_grid) == 0:
+        raise ValueError("Input model grid table contains no rows")
+
     # Remove any whitespace from column names
     DF_grid.rename(inplace=True, columns={c:c.strip() for c in DF_grid.columns})
 
@@ -213,14 +216,17 @@ def construct_raw_grids(DF_grid, grid_params, lines_list):
     lines_list: list of names of emission lines of interest, corresponding to
                 columns in DF_grid.
     """
-    # Set up raw grid...
-
     # Determine the list of parameter values for the raw grid:
     # List of arrays; each array holds the grid values for a parameter:
     param_val_arrs_raw = []
     for p in grid_params:
         # Ensure we have a sorted list of unique values for each parameter:
-        param_val_arrs_raw.append( np.sort( np.unique( DF_grid[p].values ) ) )
+        p_arr = np.sort(np.unique(DF_grid[p].values))
+        n_p = p_arr.size
+        if n_p < 3:
+            raise ValueError("At least 3 unique values are required for each "
+                  "grid parameter. '{0}' has only {1} value(s)".format(p, n_p))
+        param_val_arrs_raw.append(p_arr)
     # Initialise a grid object to hold the raw grids:
     Raw_grids = NB_Grid(grid_params, param_val_arrs_raw)
 
@@ -380,11 +386,13 @@ class RegularGridResampler(object):
         self.ndim = len(in_points)
         self.out_shape = tuple(out_shape)
         
-        for p in self.in_points:
-            if p.ndim != 1:
+        for p_arr in self.in_points:
+            if p_arr.ndim != 1:
                 raise ValueError("Points arrays must be 1D")
-            if np.any(np.diff(p) <= 0.):
+            if np.any(np.diff(p_arr) <= 0.):
                 raise ValueError("Points arrays must be strictly ascending")
+            if p_arr.size < 2:
+                raise ValueError("Points arrays must have at least 2 values")
         if len(out_shape) != self.ndim:
             raise ValueError("The output array must have the same number of "
                              "dimensions as the input array")
