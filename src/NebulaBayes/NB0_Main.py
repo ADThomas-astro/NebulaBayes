@@ -239,7 +239,7 @@ class NB_Model(object):
             Display names for grid parameters, for plotting purposes.  The
             dictionary keys are parameter names from grid_params, and the
             corresponding values are the "display" names.  The display names
-            can include markup (r"$\alpha$") to include e.g. Greek letters.
+            can include markup (r"$\\alpha$") to include e.g. Greek letters.
             Raw text names will be used where a display name is not provided.
         plot_configs : list of dicts
             A list of four dictionaries which update plotting options for the

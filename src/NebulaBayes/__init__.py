@@ -16,6 +16,10 @@ n-dimensional "posterior" probability distribution for the values of the
 parameters.  The parameter values are estimated from 1D marginalised
 posteriors.
 
+To use this package:
+from NebulaBayes import NB_Model
+help(NB_model)
+
 NebulaBayes is heavily based on IZI (Blanc+2015).
 """
 
