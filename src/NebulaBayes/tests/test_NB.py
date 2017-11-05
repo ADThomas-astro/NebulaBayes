@@ -7,12 +7,14 @@ import unittest
 import numpy as np
 import pandas as pd
 
-# Some work to ensure we're importing this version of NebulaBayes:
+# Use relative paths to load NebulaBayes.  This allows us to
+# load NB even when it's not installed, and also ensures we're
+# testing the correct version.
 THIS_FILE_DIR = os.path.dirname(os.path.realpath(__file__))
-NB_PARENT_DIR = os.path.join(os.path.split(THIS_FILE_DIR)[0], "src")
+NB_PARENT_DIR = os.path.split(os.path.split(THIS_FILE_DIR)[0])[0]
 sys.path.insert(1, NB_PARENT_DIR)
 from NebulaBayes import NB_Model, __version__
-from NebulaBayes.src.NB1_Process_grids import RegularGridResampler
+from NebulaBayes.NB1_Process_grids import RegularGridResampler
 
 
 
@@ -21,6 +23,13 @@ Test suite to test NebulaBayes.  Mostly functional and regression tests, with
 some unit tests as well.
 
 Works with Python 2 and Python 3.
+
+To run only a particular test, type (e.g.):
+python3 test_NB.py Test_real_data_with_dereddening
+
+When NebulaBayes is installed, this test suite can be run in-place in the
+installation directory (but use the correct python version for the
+installation location).
 
 Adam D. Thomas 2017
 """
@@ -199,6 +208,16 @@ class Test_Obs_from_Peak_Gridpoint_2D_Grid_2_Lines(Base_2D_Grid_2_Lines):
         self.assertEqual(IGrid_spec.param_display_names, self.params)
         self.assertEqual(IGrid_spec.shape, tuple(self.interpd_shape))
         self.assertEqual(IGrid_spec.n_gridpoints, np.product(self.interpd_shape))
+
+    @classmethod
+    def tearDownClass(cls):
+        """ Remove the output files when tests in this class have finished """
+        super(Test_Obs_from_Peak_Gridpoint_2D_Grid_2_Lines,cls).tearDownClass()
+        if clean_up:
+            files = [os.path.join(test_dir, l +
+                  "_PDF_contributes_to_likelihood.pdf") for l in ["L1", "L2"]]
+            for file_i in files:
+                os.remove(file_i)
 
 
 

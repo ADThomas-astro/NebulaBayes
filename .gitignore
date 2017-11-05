@@ -3,4 +3,5 @@ __pycache__
 *.pyc
 dist
 build
+NebulaBayes.egg-info
 src/NebulaBayes/grids/

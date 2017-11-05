@@ -50,7 +50,12 @@ if __name__ == "__main__":
         long_description="FILL ME IN",
         packages=["NebulaBayes"],
         package_dir={"": "src"},
-        package_data={"NebulaBayes": ["grids/*", "docs/*"]},
+        package_data={"NebulaBayes": [
+                        "grids/*", "docs/*", "tests/*.py",
+                        "tests/run_tests.sh",
+                        "tests/test_outputs/test_outputs_go_here"]},
+                        # Last file is a hack to include the test_outputs dir,
+                        # but no other files in this dir
         include_package_data=True,
         zip_safe=False,
         classifiers=CLASSIFIERS,

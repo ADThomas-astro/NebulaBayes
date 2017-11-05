@@ -8,15 +8,14 @@ import numpy as np
 # import pandas as pd
 
 
-
 # Manipulate path names to load the correct version of NB, and also to save the
 # output files in the NebulaBayes/docs subdirectory.
-docs_path = os.path.dirname(os.path.realpath(__file__))
-NB_parent_dir = os.path.split(os.path.split(docs_path)[0])[0]
-sys.path.insert(1, NB_parent_dir)
+DOCS_PATH = os.path.dirname(os.path.realpath(__file__))
+NB_PARENT_DIR = os.path.split(DOCS_PATH)[0]
+sys.path.insert(1, NB_PARENT_DIR)
 
 from NebulaBayes import NB_Model
-from NebulaBayes.src.NB2_Prior import calculate_line_ratio_prior
+from NebulaBayes.NB2_Prior import calculate_line_ratio_prior
 
 
 
@@ -35,10 +34,10 @@ There are examples of how to:
 
 This script may be run unchanged if it is still in the NebulaBayes/docs
 directory.  Otherwise (assuming NebulaBayes is installed) remove the three
-lines ending with "sys.path.insert..." above, and edit the "out_dir" below.
+lines ending with "sys.path.insert..." above, and edit the "OUT_DIR" below.
 The outputs are saved in the NebulaBayes/docs directory by default.
 """
-out_dir = docs_path
+OUT_DIR = DOCS_PATH
 
 
 
@@ -50,8 +49,8 @@ def filter_HII_grid():
     Filter the built-in HII grid to reduce the covered parameter space.
     """
     # First load the binary grid table and convert to a pandas DataFrame table
-    grid_table_file = os.path.join(NB_parent_dir, "NebulaBayes", "grids",
-                             "NB_HII_grid.fits.gz")
+    grid_table_file = os.path.join(NB_PARENT_DIR, "grids",
+                                    "NB_HII_grid.fits.gz")
     BinTableHDU_0 = fits.getdata(grid_table_file, 0)
     DF_grid = Table(BinTableHDU_0).to_pandas()
 
@@ -190,9 +189,9 @@ def plotting_callback(out_filename, fig, axes, Plotter, config_dict):
 
 
 # Configure options for a NB run:
-kwargs = {"posterior_plot": os.path.join(out_dir,"2_posterior_plot.pdf"),
-          "prior_plot": os.path.join(out_dir, "2_prior_plot.pdf"),
-          "estimate_table": os.path.join(out_dir, "2_param_estimates.csv"),
+kwargs = {"posterior_plot": os.path.join(OUT_DIR,"2_posterior_plot.pdf"),
+          "prior_plot": os.path.join(OUT_DIR, "2_prior_plot.pdf"),
+          "estimate_table": os.path.join(OUT_DIR, "2_param_estimates.csv"),
           "prior": calculate_custom_prior,  # The callback function
           "deredden": True,  # Match model Balmer decrement everywhere in grid
           "obs_wavelengths": wavelengths,  # Needed for dereddening

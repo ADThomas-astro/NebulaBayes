@@ -6,8 +6,9 @@ from astropy.io import fits  # For reading FITS binary tables
 from astropy.table import Table  # For FITS table to pandas DataFrame conversion
 import numpy as np  # Core numerical library
 import pandas as pd # For tables ("DataFrame"s)
-# from ...grids import __file__ as grid_loc_0  # Location of built-in grids
-grid_loc_0=""
+
+# Find directory of built-in grids
+GRIDS_LOCATION = os.path.join(os.path.dirname(__file__), "grids")
 
 
 """
@@ -136,11 +137,11 @@ def load_grid_data(grid_table):
     if isinstance(grid_table, str):
         if grid_table in ["HII", "NLR"]:
             # Use a built-in grid.  Resolve shorthand string to the full path.
-            grid_dir = os.path.split(grid_loc_0)[0]
             grid_name = "NB_{0}_grid.fits.gz".format(grid_table)
-            grid_table = os.path.join(grid_dir, grid_name)
+            grid_table = os.path.join(GRIDS_LOCATION, grid_name)
 
         if grid_table.endswith((".fits", ".fits.gz")):
+            # This includes the built-in grids
             BinTableHDU_0 = fits.getdata(grid_table, 0)
             DF_grid = Table(BinTableHDU_0).to_pandas()
         elif grid_table.endswith(".csv"):

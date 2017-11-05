@@ -1,10 +1,16 @@
 from __future__ import print_function, division
+import os
 # import numpy as np
 # import pandas as pd
 import sys
-# Add location of NebulaBayes package to path before importing it:
-# (we're not installing it yet)
-sys.path.append("/Users/PATH TO NEBULABAYES PARENT DIRECTORY HERE/")
+
+
+# Manipulate path names to load the correct version of NB, and also to save the
+# output files in the NebulaBayes/docs subdirectory.
+DOCS_PATH = os.path.dirname(os.path.realpath(__file__))
+NB_PARENT_DIR = os.path.split(DOCS_PATH)[0]
+sys.path.insert(1, NB_PARENT_DIR)
+
 from NebulaBayes import NB_Model
 
 
