@@ -1,0 +1,4 @@
+include LICENSE.txt
+recursive-include docs *.py *.rst *.txt
+recursive-include grids *.csv *.fits.gz
+recursive-include tests *.py *.sh

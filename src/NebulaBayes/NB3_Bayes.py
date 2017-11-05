@@ -6,6 +6,7 @@ import os.path
 import pandas as pd # For tables ("DataFrame"s)
 from scipy.integrate import cumtrapz, simps
 from scipy.signal import argrelextrema
+from scipy.special import erf  # Error function
 from .dereddening import deredden as do_dereddening
 from .dereddening import Av_from_BD
 from .NB1_Process_grids import Grid_description
@@ -439,31 +440,6 @@ def make_single_parameter_estimate(param_name, val_arr, pdf_1D):
     out_dict["Est_at_upper?"] = bool_map[ (est_ind >= cdf_1D.size - 4) ]
     
     return out_dict
-
-
-
-def erf(x):
-    """
-    Approximation to the error function, good to a maximum absolute error of
-    3e-7, from Abramowitz and Stegun (equations 7.1.25-28) via
-    https://en.wikipedia.org/wiki/Error_function
-    The error function is defined as erf(x) = 2 \pi^{-0.5} \int_0^x e^{-t^2} dt.
-    This particular approximation was chosen because all of the polynomial
-    coefficients are positive, so the formula must be monotonic (a property
-    that is desired due to how we use this function).
-    An approximation formula is used so that NB doesn't need to depend on
-    scipy for the scipy.special.erf function.
-    This function was compared against scipy.special.erf for 10000 values
-    logarithmically spaced between 0.0001 and 10, and for the negatives of
-    these values.  It was confirmed that there is an absolute error of 3e-7.
-    """
-    # The approximation formula is valid for x >= 0, so we use the fact that
-    # erf is an odd function to cover negative values of x
-    sign = np.sign(x)  # -1 where negative, 0 where 0, +1 where positive
-    x = np.abs(x)
-    poly = (  (((((0.0000430638*x + 0.0002765672)*x + 0.0001520143)*x +
-                    0.0092705272)*x + 0.0422820123)*x + 0.0705230784)*x + 1  )
-    return sign * (1. - (1. / poly**16))
 
 
 

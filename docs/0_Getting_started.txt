@@ -1,0 +1,26 @@
+
+The following requirements must be satistfied before using NebulaBayes:
+
+
+
+
+
+If these requirements are met, the following resources are available to learn
+how to run Nebulabayes:
+ 1. The 1_Example-basic.py script in this directory
+ 2. The 2_Example-advanced.py script in this directory
+ 3. The documentation available in the code, especially the detailed docstrings
+    in NebulaBayes/NB0_Main.py.  This documentation may be easily accessed
+    interactively in the ipython terminal by typing
+    "from NebulaBayes import NB_Model"
+    "NB_model?"
+    This documentation describes the input arguments and outputs in detail,
+    including the descriptions of the objects returned programmatically.
+
+
+
+Adam D. Thomas
+Research School of Astronomy and Astrophysics
+Australian National University
+adam.thomas AT anu.edu.au
+2017

@@ -5,7 +5,7 @@ import pandas as pd # For tables ("DataFrame"s)
 from . import NB1_Process_grids
 from . import NB3_Bayes
 from .NB4_Plotting import Plot_Config, _make_plot_annotation, ND_PDF_Plotter
-from .._version import __version__
+from ._version import __version__
 
 
 

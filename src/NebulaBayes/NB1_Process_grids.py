@@ -6,7 +6,7 @@ from astropy.io import fits  # For reading FITS binary tables
 from astropy.table import Table  # For FITS table to pandas DataFrame conversion
 import numpy as np  # Core numerical library
 import pandas as pd # For tables ("DataFrame"s)
-from ..grids import __file__ as grid_loc_0  # Location of built-in grids
+from ...grids import __file__ as grid_loc_0  # Location of built-in grids
 
 
 """

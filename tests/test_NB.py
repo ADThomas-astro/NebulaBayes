@@ -8,8 +8,9 @@ import numpy as np
 import pandas as pd
 
 # Some work to ensure we're importing this version of NebulaBayes:
-this_file_dir_path = os.path.dirname(os.path.realpath(__file__))
-sys.path.insert(1, os.path.split(os.path.split(this_file_dir_path)[0])[0])
+THIS_FILE_DIR = os.path.dirname(os.path.realpath(__file__))
+NB_PARENT_DIR = os.path.join(os.path.split(THIS_FILE_DIR)[0], "src")
+sys.path.insert(1, NB_PARENT_DIR)
 from NebulaBayes import NB_Model, __version__
 from NebulaBayes.src.NB1_Process_grids import RegularGridResampler
 
@@ -25,7 +26,7 @@ Adam D. Thomas 2017
 """
 
 clean_up = True  # Delete test output files after running?
-test_dir = os.path.join(this_file_dir_path, "test_outputs") # For outputs
+test_dir = os.path.join(THIS_FILE_DIR, "test_outputs")  # For outputs
 
 
 

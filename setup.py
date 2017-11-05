@@ -1,5 +1,5 @@
 import os
-from setuptools import setup, find_packages
+from setuptools import setup
 from _version import __version__
 
 
@@ -7,7 +7,6 @@ from _version import __version__
 ###################################################################
 
 NAME = "NebulaBayes"
-PACKAGES = find_packages(where="src")
 # META_PATH = os.path.join("src", "NebulaBayes", "__init__.py")
 KEYWORDS = ["astronomy", "Bayesian statistics"]
 CLASSIFIERS = [
@@ -27,6 +26,7 @@ INSTALL_REQUIRES = [  # Required packages to use NebulaBayes
     "matplotlib",
     "numpy",
     "pandas",
+    "scipy",
 ]
 
 ###################################################################
@@ -52,7 +52,7 @@ if __name__ == "__main__":
         # maintainer_email="adam.thomas@anu.edu.au",
         keywords=KEYWORDS,
         long_description="FILL ME IN",
-        packages=PACKAGES,
+        packages=["NebulaBayes"],
         package_dir={"": "src"},
         include_package_data=True,
         zip_safe=False,
