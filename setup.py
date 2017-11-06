@@ -18,8 +18,9 @@ CLASSIFIERS = [
     "Programming Language :: Python :: 3",
     "Topic :: Scientific/Engineering :: Astronomy",
 ]
-INSTALL_REQUIRES = [  # Required packages to use NebulaBayes
-    "astropy",
+INSTALL_REQUIRES = [  # Required packages to install NebulaBayes
+    "astropy >= 1.1.0",  # Need Table -> DataFrame conversion feature
+                         # (https://github.com/astropy/astropy/pull/3504)
     "matplotlib",
     "numpy",
     "pandas",

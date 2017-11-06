@@ -1,7 +1,8 @@
 from __future__ import print_function, division
 from collections import OrderedDict as OD
 import itertools  # For Cartesian product
-import os
+import os  # For path manipulations
+
 from astropy.io import fits  # For reading FITS binary tables
 from astropy.table import Table  # For FITS table to pandas DataFrame conversion
 import numpy as np  # Core numerical library

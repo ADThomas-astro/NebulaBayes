@@ -460,7 +460,7 @@ class Test_real_data_with_dereddening(unittest.TestCase):
         cls.estimate_table = os.path.join(test_dir,
                                     cls.__name__ + "_parameter_estimates.csv")
         # Test different values along each dimension in interpd_grid_shape
-        cls.NB_Model_1 = NB_Model("HII", grid_params=None, lines_list=cls.lines,
+        cls.NB_Model_1 = NB_Model("HII", grid_params=None, line_list=cls.lines,
                                   interpd_grid_shape=[100, 130, 80])
 
         kwargs = {"prior_plot": cls.prior_plot,
@@ -560,7 +560,7 @@ class Test_upper_bounds_1D(unittest.TestCase):
 
         # Note that we set grid_error to zero!
         cls.NB_Model_1 = NB_Model(DF_grid1D, grid_params=["p0"], grid_error=0,
-                                lines_list=cls.lines, interpd_grid_shape=[500])
+                                line_list=cls.lines, interpd_grid_shape=[500])
         kwargs = {"deredden": False, "norm_line": "line1",
                   "line_plot_dir": test_dir}
         cls.Result = cls.NB_Model_1(cls.obs_fluxes, cls.obs_errs, cls.lines,
@@ -599,7 +599,7 @@ class Test_all_zero_likelihood(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.NB_Model_1 = NB_Model("HII", lines_list=cls.lines, grid_error=0.01,
+        cls.NB_Model_1 = NB_Model("HII", line_list=cls.lines, grid_error=0.01,
                                   interpd_grid_shape=[30,30,30])
         kwargs = {"deredden": False, "norm_line": "Hbeta",
                   "prior":[("NII6583","Halpha")]}
@@ -639,7 +639,7 @@ class Test_data_that_matches_models_poorly(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.NB_Model_1 = NB_Model("HII", lines_list=cls.lines, grid_error=0.01,
+        cls.NB_Model_1 = NB_Model("HII", line_list=cls.lines, grid_error=0.01,
                                   interpd_grid_shape=[30,30,30])
         kwargs = {"deredden": False, "norm_line": "Hbeta",
                   "prior":[("NII6583", "OIII4363")]}

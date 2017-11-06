@@ -1,8 +1,9 @@
 from __future__ import print_function, division
 from collections import OrderedDict as OD
 import itertools    # For combinatorial combinations
-import numpy as np  # Core numerical library
 import os.path
+
+import numpy as np  # Core numerical library
 import pandas as pd # For tables ("DataFrame"s)
 from scipy.integrate import cumtrapz, simps
 from scipy.signal import argrelextrema
@@ -150,7 +151,6 @@ class NB_nd_pdf(object):
             #     print("WARNING: 1D PDF for {0} is all zero".format(param))
             # marginalised_1D[param] = np.trapz(marginalised_2D[double_name],
             #                                            axis=0, dx=spacing[0])
-
 
         #----------------------------------------------------------------------
         # Calculate the 0D marginalised pdf (by which I mean find the

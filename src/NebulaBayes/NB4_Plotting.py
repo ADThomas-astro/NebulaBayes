@@ -1,12 +1,12 @@
 from __future__ import print_function, division
-# For finding Cartesian product and combinatorial combinations:
-import itertools
+import itertools  # For Cartesian product
+
 import matplotlib.pyplot as plt  # Plotting
 # For generating a custom colourmap:
 from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.ticker as ticker  # Customise tick placement
 import numpy as np  # Core numerical library
-import pandas as pd
+import pandas as pd # For tables ("DataFrame"s)
 
 
 """

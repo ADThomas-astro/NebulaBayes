@@ -1,21 +1,59 @@
 
-The following requirements must be satistfied before using NebulaBayes:
+--------------------------------
+Getting Started with NebulaBayes
+--------------------------------
 
 
+General information
+-------------------
+Here are some general notes and suggestions for starting out with NebulaBayes:
+ -  NebulaBayes compares a set of observed line fluxes from a single spectrum
+    to a grid of models (e.g. photoionization models).  The assumptions used in
+    the models should be compatible with the observations.  E.g. Emission line
+    diagnostics might be used to ensure that e.g. a HII region spectrum is
+    being compared to a HII model grid.
+ -  Configure the inputs using the example scripts in this directory and the
+    documentation, with a uniform prior at first.
+ -  Manually inspect the initial NebulaBayes results (tables and plots) to see
+    if they are reasonable.  Are parameter estimates physical, and if they're
+    at the edge of the parameter space is this plausible?  What's the shape of
+    the posterior?
+ -  The question "Is there a good fit to the data anywhere in the parameter
+    space?" cannot be answered by the calculated parameter estimates or plots
+    of the posterior PDF.  Inspect the "best model" table to see if observed
+    emission line fluxes are well fit, and which fluxes are inconsistent with
+    the "best" model.
+ -  It may be helpful to iterate to gain a sense of how different choices
+    affect the results, for example by choosing a different set of emission
+    lines, a  different line for normalisation, or a different systematic grid
+    error.
+ -  Once the results are reasonable, consider using a non-uniform prior.  There
+    might be particular diagnostic line ratios that could help constrain the
+    posterior further.  Is it necessary to depend heavily on a prior to
+    constrain the parameter space?
+ -  NebulaBayes may be easily used on a large number of spectra once the
+    various NebulaBayes settings and results for test spectra are satisfactory.
 
 
-
-If these requirements are met, the following resources are available to learn
-how to run Nebulabayes:
+Resources
+---------
+The following additional resources are available to learn about running
+Nebulabayes and the available options:
  1. The 1_Example-basic.py script in this directory
  2. The 2_Example-advanced.py script in this directory
  3. The documentation available in the code, especially the detailed docstrings
-    in NebulaBayes/NB0_Main.py.  This documentation may be easily accessed
-    interactively in the ipython terminal by typing
-    "from NebulaBayes import NB_Model"
-    "NB_model?"
-    This documentation describes the input arguments and outputs in detail,
-    including the descriptions of the objects returned programmatically.
+    in NebulaBayes/NB0_Main.py.  This documentation may be explored
+    interactively in the ipython terminal in various ways by typing:
+        >>> from NebulaBayes import NB_Model
+        >>> NB_Model?  # Shows class and __init__ docstrings
+        >>> help(NB_Model)  # Similar; also shows __call__ docstring
+        >>> NB_model.__init__?
+        >>> NB_model.__call__?
+        >>> NB_Model??  # Shows source for entire class
+    The docstrings describe the input arguments and outputs in detail,
+    including descriptions of the objects returned programmatically.
+    Type the following at the terminal to show the location of the code files:
+        $ python -c "import NebulaBayes; print(NebulaBayes.__file__)"
 
 
 

@@ -1,5 +1,6 @@
 from __future__ import print_function, division
 from collections import OrderedDict as OD
+
 import numpy as np  # Core numerical library
 import pandas as pd # For tables ("DataFrame"s)
 from . import NB1_Process_grids
@@ -40,7 +41,7 @@ class NB_Model(object):
     run Bayesian parameter estimation.
     """
 
-    def __init__(self, grid_table, grid_params=None, lines_list=None, **kwargs):
+    def __init__(self, grid_table, grid_params=None, line_list=None, **kwargs):
         """
         Initialise an instance of the NB_Model class.  Load the model fluxes
         and interpolate them to a higher-density grid, ready to calculate
@@ -75,7 +76,7 @@ class NB_Model(object):
             grid_table == "NLR".  Permute the list to change the order of the
             grid dimensions, i.e. the order of array indexing in NebulaBayes
             and the order of parameters in the output plots.
-        lines_list : list of strings or None, optional
+        line_list : list of strings or None, optional
             The emission lines to use in this NB_Model instance.  Each name
             must match a column name in grid_table.  Exclude lines which won't
             be used in parameter estimation to save time and memory.  By
@@ -130,11 +131,11 @@ class NB_Model(object):
         if len(set(grid_params)) != n_params: # Parameter names non-unique?
             raise ValueError("grid_params are not all unique")
 
-        # If lines_list isn't specified it'll be created when loading the grid
-        if lines_list is not None:
-            if len(set(lines_list)) != len(lines_list): # Lines non-unique?
-                raise ValueError("Line names in lines_list are not all unique")
-            if len(lines_list) < 2:
+        # If line_list isn't specified it'll be created when loading the grid
+        if line_list is not None:
+            if len(set(line_list)) != len(line_list):  # Lines non-unique?
+                raise ValueError("Line names in line_list are not all unique")
+            if len(line_list) < 2:
                 raise ValueError("At least two modelled lines are required "
                                  "(one is for normalising)")
 
@@ -156,7 +157,7 @@ class NB_Model(object):
 
         # Call grid initialisation:
         Raw_grids, Interpd_grids = NB1_Process_grids.initialise_grids(grid_table,
-                                    grid_params, lines_list, interpd_grid_shape)
+                                    grid_params, line_list, interpd_grid_shape)
         Raw_grids.grid_rel_error = grid_rel_error
         Interpd_grids.grid_rel_error = grid_rel_error
         self.Raw_grids = Raw_grids
@@ -258,9 +259,10 @@ class NB_Model(object):
                     The colormap for the images of the 2D marginalised PDFs.
                     Default: From black to white through green
                 callback : callable
-                    A function called instead of saving the plot, which may be
-                    used to save a customised figure (e.g. with custom
-                    annotations).
+                    A user-defined function called instead of saving the plot,
+                    which may be used to save a customised figure (e.g. with
+                    annotations).  See the "docs/Example-advanced.py" file for
+                    an example function, showing the arguments it must accept.
 
         Returns
         -------
@@ -271,10 +273,21 @@ class NB_Model(object):
             Posterior : NB3_Bayes.NB_nd_pdf instance
                 Holds data for the posterior PDF, and has these attributes:
                 DF_estimates : pandas DataFrame table holding the parameter
-                    estimates, limits of 68\% and 95\% credible intervals, and
-                    results of checks for the PDF being up against the edge of
-                    the parameter space or having a pathological shape.  Access
-                    as 'NB_Result.Posterior.DF_estimates'
+                    estimates, limits of the 68\% and 95\% credible intervals
+                    (CIs), and results of checks for the PDF being up against
+                    the edge of the parameter space or having a pathological
+                    shape.  The CIs are calculated using the 1D CDF
+                    independently of the parameter estimate.  The "low" and
+                    "high" CI limits may be -inf or +inf respectively
+                    if there is significant probability density near the edges
+                    of the parameter space.  Because the parameter estimate is
+                    at the peak of the PDF, it may not lie inside the CIs, and
+                    "Est_in_CI68?" and "Est_in_CI95?" are checks for this.
+                    There are also separate checks for whether the parameter
+                    esimate is at the "lower" or "upper" bounds of the
+                    parameter space, and for the number of local maxima in the
+                    1D PDF.  This table may be accessed as
+                    'NB_Result.Posterior.DF_estimates'.
                 best_model : dict describing the model at the point in the PDF
                     defined by the parameter estimates, with the following keys
                     and values:

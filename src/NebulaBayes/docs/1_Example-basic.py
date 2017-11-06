@@ -1,109 +1,98 @@
 from __future__ import print_function, division
 import os
+import sys
 # import numpy as np
 # import pandas as pd
-import sys
 
 
-# Manipulate path names to load the correct version of NB, and also to save the
+"""
+This script shows examples of basic usage of NebulaBayes.  The code works in
+python 2 and python 3.
+
+There are examples of how to:
+ - Measure the metallicity, ionisation parameter and pressure from HII-region
+   fluxes that have already been dereddened
+ - Measure the metallicity, ionisation parameter, pressure and hardness of the
+   ionising radiation from AGN NLR fluxes that have already been dereddened
+
+This script may be run unchanged if it is still in the NebulaBayes/docs
+directory.  Otherwise (assuming NebulaBayes is installed) remove the three
+lines ending with "sys.path.insert..." below, and add a custom "OUT_DIR".
+The outputs are saved in the NebulaBayes/docs directory by default.
+"""
+
+
+# Manipulate paths to load the correct version of NB, and also to save the
 # output files in the NebulaBayes/docs subdirectory.
 DOCS_PATH = os.path.dirname(os.path.realpath(__file__))
-NB_PARENT_DIR = os.path.split(DOCS_PATH)[0]
-sys.path.insert(1, NB_PARENT_DIR)
+NB_PARENT_DIR = os.path.split(os.path.split(DOCS_PATH)[0])[0]
+sys.path.insert(1, NB_PARENT_DIR)  # Can comment this out if NB is installed
 
 from NebulaBayes import NB_Model
 
-
-
-"""
-An example of how to run NebulaBayes.  NebulaBayes works in python 2 and python 3.
-
-For documentation, see the docstrings of the __init__ and __call__ methods of
-the NB_Model class in the module NebulaBayes/src/NB0_Main.py
-
-General information for using NebulaBayes for the first time:
- -  NebulaBayes compares a set of observed line fluxes from a single spectrum
-    to a grid of 1D photoionization models.  The assumptions used in the
-    photoionization models need to be compatible with the observations.  E.g.
-    Emission line diagnostics might be used to ensure that e.g. a HII region
-    spectrum is being compared to a HII model grid.
- -  Configure the inputs using this example script and the documentation, with
-    a uniform prior at first.
- -  Manually inspect the initial NebulaBayes results to see if they are
-    reasonable.  Are parameter estimates physical, and if they're at the edge of
-    the parameter space is this plausible?  What's the shape of the posterior?
- -  The question "Is there a good fit to the data anywhere in the parameter
-    space?" cannot be answered by the NebulaBayes parameter estimates or plots
-    of the posterior PDF.  Inspect the "best model" table to see if observed
-    emission line fluxes are well fit, and which fluxes are inconsistent with
-    the "best" model.
- -  It may be helpful to iterate to gain a sense of how different choices affect
-    the results, for example by choosing a different set of emission lines, a 
-    different line for normalisation, or a different systematic grid error.
- -  Once the results are reasonable, consider using a non-uniform prior.  There
-    might be particular diagnostic line ratios that could help constrain the
-    posterior further.  Is it necessary to depend heavily on a prior to
-    constrain the parameter space?
-
-
-Adam D. Thomas 2017
-"""
-
-
-proj_dir = "/Users/.../"
-grid_file = "/Users/.../MAPPINGS_HII_Grid_DN_GridPP_line_fluxes.csv"
-in_obs_flux = proj_dir + "Obs_data/....csv"
-out_corner_plot_dir = proj_dir + "Plot_results/"
-out_table_dir = out_corner_plot_dir
+OUT_DIR = DOCS_PATH
 
 
 
-# Metadata to use when loading/interpolating the model grid:
-# HII grid
-grid_params  = ["log_P/k", "log_UH", "log_OH"] # Parameter names from grid file header
-interp_shape = [80, 80, 80] # Corresponding number of interpolated pts in each dimension
-# # AGN grid
-# grid_params = ["E_peak", "UH_at_r_inner", "Press_P/k", "log_OH"]
-# interp_shape = [40]*4
-# Only the following lines will have model grids interpolated for them:
-lines_1 = ['OII3726', 'OII3729', 'Hbeta', 'OIII5007', 'HeI5876', 'Halpha',
-              'NII6583', 'SII6716', 'SII6731'] # Must match line names in model grid file header
+##############################################################################
+print("\nRunning basic HII example...")
+# In this example the NebulaBayes built-in HII region grid is used to constrain
+# the three parameter of the grid - oxygen abundance, ionisation parameter
+# and pressure.
 
+# These HII-region optical emission-line fluxes have already been dereddened
+linelist = ["OII3726_29", "Hbeta", "OIII5007", "OI6300", "Halpha", "NII6583",
+            "SII6716", "SII6731"]
+obs_fluxes = [8.151, 4.634, 1.999, 0.09562, 13.21, 5.116, 1.377, 1.249]
+obs_errs = [0.09008, 0.04013, 0.01888, 0.00222, 0.07635, 0.03159, 0.00999,
+            0.00923]
+# Fluxes/errors will be normalised to the flux of the default norm_line, Hbeta
+# The emission line names match those in the grid (see the NebulaBayes/grids
+# directory)
 
-# Load observed fluxes, errors and wavelengths here...
-obs_line_names = [] # Must match line names in model grid file header
-obs_fluxes = [] # Normalised to F_Hbeta == 1
-obs_flux_errors = [] # Normalised to F_Hbeta == 1
-line_lambdas = None #[] # Angstrom.  Only required if you do dereddening in NB (to match
-                        # the Balmer decrement at every point in interpolated grid)
+# Initialise the NB_Model, which loads and interpolates the model flux grids:
+NB_Model_HII = NB_Model("HII", line_list=linelist)
 
+# Set outputs:
+kwargs = {"prior_plot": os.path.join(OUT_DIR, "1_HII_prior_plot.pdf"),
+          "likelihood_plot": os.path.join(OUT_DIR, "1_HII_likelihood_plot.pdf"),
+          "posterior_plot": os.path.join(OUT_DIR, "1_HII_posterior_plot.pdf"),
+          "estimate_table": os.path.join(OUT_DIR, "1_HII_param_estimates.csv"),
+          "best_model_table": os.path.join(OUT_DIR, "1_HII_best_model.csv"),
+          }
 
-
-
-
-# Initialise NB_Model:
-NB_Model_1 = NB_Model(grid_file, grid_params, lines_1, interpd_grid_shape=interp_shape)
-
-# Configure options for the NB run:
-prior_plot_name      = "{0}_0_prior_corner_plot.pdf".format(out_corner_plot_dir)
-# likelihood_plot_name = "{0}_1_likelihood_corner_plot.pdf".format(out_corner_plot_dir)
-posterior_plot_name  = "{0}_2_posterior_corner_plot.pdf".format(out_corner_plot_dir)
-estimate_table_name  = "{0}_parameter_estimates.csv".format(out_table_dir)
-best_model_table = estimate_table_name.replace("parameter_estimates", "best_model")
-kwargs = {"posterior_plot":posterior_plot_name, "prior_plot":prior_plot_name,
-          "estimate_table":estimate_table_name, "best_model_table":best_model_table,
-          "prior":"Uniform", "deredden":False, "obs_wavelengths":line_lambdas,
-          "norm_line":"Hbeta"}
-
-# Run the model
-Result = NB_Model_1(obs_fluxes, obs_flux_errors, obs_line_names, **kwargs)
-# The NB_Model instance can be called repeatedly to do Bayesian parameter
-# estimation on different sets of observed fluxes with the same grid (which
-# only needs to be interpolated once).
-# You can access all the NebulaBayes internal data, PDFs, results, etc. on the
-# Result object.
+# Run parameter estimation once
+Result_HII = NB_Model_HII(obs_fluxes, obs_errs, linelist, **kwargs)
+# NB_Model_HII may be called repeatedly to do Bayesian parameter estimation
+# on different sets of observed fluxes with the same grid.
 
 
 
-print("Done.")
+##############################################################################
+print("\nRunning basic NLR example...")
+# In this example we use the NebulaBayes built-in AGN narrow-line region (NLR)
+# grid to constrain the four parameter of the grid - oxygen abundance,
+# ionisation parameter, pressure, and the hardness of the ionising continuum.
+
+# These NLR optical emission-line fluxes have already been dereddened
+linelist = ["OII3726_29", "NeIII3869", "Hgamma", "HeII4686", "Hbeta",
+            "OIII5007", "HeI5876", "Halpha", "NII6583", "SII6716", "SII6731"]
+obs_fluxes = [4.2162, 1.159, 0.7161, 0.3970, 1.292, 12.88, 0.1597, 3.747,
+              5.027, 1.105, 1.198]
+obs_errs = [0.5330, 0.2073, 0.1172, 0.0630, 0.1864, 1.759, 0.0225, 0.3919,
+            0.5226,  0.1156, 0.1248]
+
+NB_Model_NLR = NB_Model("NLR", line_list=linelist)
+
+kwargs = {"prior_plot": os.path.join(OUT_DIR, "1_NLR_prior_plot.pdf"),
+          "posterior_plot": os.path.join(OUT_DIR, "1_NLR_posterior_plot.pdf"),
+          "estimate_table": os.path.join(OUT_DIR, "1_NLR_param_estimates.csv"),
+          "prior": [("SII6716", "SII6731")],
+          }
+
+Result_NLR = NB_Model_NLR(obs_fluxes, obs_errs, linelist, **kwargs)
+
+
+##############################################################################
+print("Basic example script complete.")
 

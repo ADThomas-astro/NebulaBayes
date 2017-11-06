@@ -8,17 +8,6 @@ import numpy as np
 # import pandas as pd
 
 
-# Manipulate path names to load the correct version of NB, and also to save the
-# output files in the NebulaBayes/docs subdirectory.
-DOCS_PATH = os.path.dirname(os.path.realpath(__file__))
-NB_PARENT_DIR = os.path.split(DOCS_PATH)[0]
-sys.path.insert(1, NB_PARENT_DIR)
-
-from NebulaBayes import NB_Model
-from NebulaBayes.NB2_Prior import calculate_line_ratio_prior
-
-
-
 """
 This script shows examples of more advanced usage of NebulaBayes.
 
@@ -34,9 +23,20 @@ There are examples of how to:
 
 This script may be run unchanged if it is still in the NebulaBayes/docs
 directory.  Otherwise (assuming NebulaBayes is installed) remove the three
-lines ending with "sys.path.insert..." above, and edit the "OUT_DIR" below.
+lines ending with "sys.path.insert..." below, and add a custom "OUT_DIR".
 The outputs are saved in the NebulaBayes/docs directory by default.
 """
+
+
+# Manipulate path names to load the correct version of NB, and also to save the
+# output files in the NebulaBayes/docs subdirectory.
+DOCS_PATH = os.path.dirname(os.path.realpath(__file__))
+NB_PARENT_DIR = os.path.split(os.path.split(DOCS_PATH)[0])[0]
+sys.path.insert(1, NB_PARENT_DIR)  # Can comment this out if NB is installed
+
+from NebulaBayes import NB_Model
+from NebulaBayes.NB2_Prior import calculate_line_ratio_prior
+
 OUT_DIR = DOCS_PATH
 
 
@@ -49,13 +49,14 @@ def filter_HII_grid():
     Filter the built-in HII grid to reduce the covered parameter space.
     """
     # First load the binary grid table and convert to a pandas DataFrame table
-    grid_table_file = os.path.join(NB_PARENT_DIR, "grids",
-                                    "NB_HII_grid.fits.gz")
+    grid_table_file = os.path.join(NB_PARENT_DIR, "NebulaBayes", "grids",
+                                   "NB_HII_grid.fits.gz")
     BinTableHDU_0 = fits.getdata(grid_table_file, 0)
     DF_grid = Table(BinTableHDU_0).to_pandas()
 
     # Fix log P/k to the value log10 P/k = 6.6, reducing the grid from
     # 3 dimensions to 2 (remaining parameters: "log U" and "12 + log O/H")
+    print("Original HII grid P/k values:", np.unique(DF_grid["log P/k"]))
     DF_grid = DF_grid[DF_grid["log P/k"] == 6.6]
 
     # Remove the lowest six oxygen abundances
@@ -69,6 +70,7 @@ def filter_HII_grid():
 DF_grid = filter_HII_grid()
 grid_params = ["12 + log O/H", "log U"]  # log P/k was removed
 interp_shape = [160, 80]  # Interpolated points along each dimension
+# Specify non-dereddened HII region emisson lines and fluxes  
 linelist = ["OII3726_29", "Hbeta", "OIII5007", "OI6300", "Halpha", "NII6583",
             "SII6716", "SII6731"]
 obs_fluxes = [1.225,  1,    0.4494, 0.02923, 4.251,  1.653,   0.4560,  0.4148]
@@ -189,9 +191,9 @@ def plotting_callback(out_filename, fig, axes, Plotter, config_dict):
 
 
 # Configure options for a NB run:
-kwargs = {"posterior_plot": os.path.join(OUT_DIR,"2_posterior_plot.pdf"),
-          "prior_plot": os.path.join(OUT_DIR, "2_prior_plot.pdf"),
-          "estimate_table": os.path.join(OUT_DIR, "2_param_estimates.csv"),
+kwargs = {"posterior_plot": os.path.join(OUT_DIR,"2_HII_posterior_plot.pdf"),
+          "prior_plot": os.path.join(OUT_DIR, "2_HII_prior_plot.pdf"),
+          "estimate_table": os.path.join(OUT_DIR, "2_HII_param_estimates.csv"),
           "prior": calculate_custom_prior,  # The callback function
           "deredden": True,  # Match model Balmer decrement everywhere in grid
           "obs_wavelengths": wavelengths,  # Needed for dereddening
@@ -200,29 +202,37 @@ kwargs = {"posterior_plot": os.path.join(OUT_DIR,"2_posterior_plot.pdf"),
                                   "12 + log O/H": r"$12 + \log \; $O/H"},
           "plot_configs": [{}, {}, {}, {}], # Prior, like, posterior, per-line
           }
-# Add "Best model" table to prior plot:
+# Add "Best model" table as text on the prior plot:
 kwargs["plot_configs"][0]["table_on_plot"] = True
 # Use our custom callback function when making the posterior plot:
 kwargs["plot_configs"][2]["callback"] = plotting_callback
 
-# Do parameter estimation once:
+# Do parameter estimation for just the one set of fluxes:
 Result = NB_Model_1(obs_fluxes, obs_errs, linelist, **kwargs)
 
 
-# In the results, looking at the prior plot we can see that the N2O2 and log U
-# priors worked almost independently.  Looking at the posterior, the posterior
-# is well constrained, despite the massive relative grid error.
+# In the results, looking at the prior plot it appears that the N2O2 and log U
+# priors worked almost independently.  Looking at the posterior, the parameter
+# space is well constrained, despite the massive relative grid error we used.
 
-# The NB_Model instance can be called repeatedly to do Bayesian parameter
-# estimation on different sets of observed fluxes with the same grid (which
-# only needs to be interpolated once).
-# You can access all the NebulaBayes internal data, PDFs, results, etc. on the
-# Result object.
+# All the NebulaBayes internal data (PDFs, results, etc.) may be accessed on
+# the Result object.
+Estimate_table = Result.Posterior.DF_estimates  # pandas DataFrame
+print("\nParameter estimate table:")
+print(Estimate_table)
+logOH_est = Estimate_table.loc["12 + log O/H", "Estimate"]
+logOH_low = Estimate_table.loc["12 + log O/H", "CI68_low"]
+logOH_high = Estimate_table.loc["12 + log O/H", "CI68_high"]
+logOH_errs = (logOH_est - logOH_low, logOH_high - logOH_est)
+print("\nThe measured oxygen abundance is 12 + log O/H = "
+      "{0:.2f}_{{-{1:.2f}}}^{{+{2:.2f}}}".format(logOH_est, *logOH_errs))
 
-
-
-# Now we extract some data:
-
+best_model_dict = Result.Posterior.best_model
+print("\nBest model table:")
+print(best_model_dict["table"])  # pandas DataFrame
+print("Best model chi^2 is {0:.1f}".format(best_model_dict["chi2"]))
+print("Best model extinction is A_v = {0:.2f} mag".format(
+                                         best_model_dict["extinction_Av_mag"]))
 
 
 
@@ -235,10 +245,10 @@ linelist1 = ["OII3726_29", "Hbeta", "OIII5007", "OI6300", "Halpha", "NII6583",
 # Include an upper bound on OI6300, signaled by the -inf placeholder:
 obs_fluxes1 = [1.225,  1,    0.4494, -np.inf, 4.251,  1.653,   0.4560,  0.4148]
 obs_errs1 =  [0.003, 0.0017, 0.0012, 0.04,   0.0027, 0.00173, 0.00102, 0.00099]
-kwargs1 = {}  # Use defaults - don't write outputs or deredden
-Result1 = NB_Model_1(obs_fluxes1, obs_errs1, linelist1, **kwargs1)
+# Use defaults - don't write outputs or deredden
+Result1 = NB_Model_1(obs_fluxes1, obs_errs1, linelist1)
 
 
-
+##############################################################################
 print("Advanced example script complete.")
 
