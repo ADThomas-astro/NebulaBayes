@@ -19,10 +19,10 @@ parameter estimation using observed fluxes.  Many outputs are available,
 including tables and figures, and all results and working are stored on the
 object returned when the NB_Model instance is called.
 
-See the "docs" directory in the installed NebulaBayes package for more
-information, suggestions for getting started, and examples. (Type the following
-at the terminal to show the location of the installed package):
-    $ python -c "import NebulaBayes; print(NebulaBayes.__file__)"
+| See the "docs" directory in the installed NebulaBayes package for more
+  information, suggestions for getting started, and examples. (Type the
+  following at the terminal to show the location of the installed package):
+| ``$ python -c "import NebulaBayes; print(NebulaBayes.__file__)"``
 
 The documentation assumes some knowledge of Bayesian statistics and scientific
 python (numpy, matplotlib and pandas).

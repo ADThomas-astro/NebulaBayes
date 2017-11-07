@@ -33,7 +33,7 @@ HERE = os.path.abspath(os.path.dirname(__file__))
 VERSION_FILE = os.path.join(HERE, "src", "NebulaBayes", "_version.py")
 __version__ = None  # Value replaced on next line; this keeps linter happy
 exec(open(VERSION_FILE).read())  # Defines __version__
-README_FILE = os.path.join(HERE, "README.txt")
+README_FILE = os.path.join(HERE, "README.rst")
 LONG_DESCRIPTION = open(README_FILE).read()
 
 
