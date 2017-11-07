@@ -14,5 +14,7 @@ python setup.py sdist bdist_wheel
 
 # Now there are dirs called "build" and dist"
 # The "dist" dir contains a wheel we can install:
-# pip install dist/NebulaBayes-0.88-py2.py3-none-any.whl
+# pip install dist/NebulaBayes-0.88-py2.py3-none-any.whl  # python 2
 # pip uninstall NebulaBayes
+# /Applications/anaconda/bin/pip install dist/NebulaBayes-0.88-py2.py3-none-any.whl  # python 3
+# /Applications/anaconda/bin/pip uninstall NebulaBayes
