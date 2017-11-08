@@ -1,4 +1,5 @@
 # Build and install the NebulaBayes package
+# I mostly used https://hynek.me/articles/sharing-your-labor-of-love-pypi-quick-and-dirty/
 
 # The MANIFEST.in file tells Distutils what files to include in the source distribution
 # It incldues the grid data files and documentation.

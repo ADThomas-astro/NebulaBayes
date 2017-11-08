@@ -1,11 +1,13 @@
 from __future__ import print_function, division
 import os
-import sys
 from astropy.io import fits
 from astropy.table import Table  # Used in converting to pandas DataFrame 
 import matplotlib.pyplot as plt
 import numpy as np
 # import pandas as pd
+import NebulaBayes
+from NebulaBayes import NB_Model
+from NebulaBayes.NB2_Prior import calculate_line_ratio_prior
 
 
 """
@@ -14,29 +16,21 @@ This script shows examples of more advanced usage of NebulaBayes.
 There are examples of how to:
  - Filter a model grid table to consider a smaller parameter space than the
    full grid
- - Include an upper bound
+ - Include upper bounds
  - Include a custom prior
  - Use a custom plotting callback to add annotations to plots
  - Use the built-in dereddening capability
  - Retrieve information on the parameter estimates and comparison of the
    "best model" from output tables using the NebulaBayes API.
 
-This script may be run unchanged if it is still in the NebulaBayes/docs
-directory.  Otherwise (assuming NebulaBayes is installed) remove the three
-lines ending with "sys.path.insert..." below, and add a custom "OUT_DIR".
-The outputs are saved in the NebulaBayes/docs directory by default.
+This script may be run unchanged to save output in the NebulaBayes/docs
+directory.  Otherwise add a custom "OUT_DIR" below.
 """
 
 
-# Manipulate path names to load the correct version of NB, and also to save the
-# output files in the NebulaBayes/docs subdirectory.
+# By default save the output files in the NebulaBayes/docs subdirectory,
+# assuming this file is still in that directory.
 DOCS_PATH = os.path.dirname(os.path.realpath(__file__))
-NB_PARENT_DIR = os.path.split(os.path.split(DOCS_PATH)[0])[0]
-sys.path.insert(1, NB_PARENT_DIR)  # Can comment this out if NB is installed
-
-from NebulaBayes import NB_Model
-from NebulaBayes.NB2_Prior import calculate_line_ratio_prior
-
 OUT_DIR = DOCS_PATH
 
 
@@ -49,8 +43,8 @@ def filter_HII_grid():
     Filter the built-in HII grid to reduce the covered parameter space.
     """
     # First load the binary grid table and convert to a pandas DataFrame table
-    grid_table_file = os.path.join(NB_PARENT_DIR, "NebulaBayes", "grids",
-                                   "NB_HII_grid.fits.gz")
+    NB_dir = os.path.dirname(os.path.realpath(NebulaBayes.__file__))
+    grid_table_file = os.path.join(NB_dir, "grids", "NB_HII_grid.fits.gz")
     BinTableHDU_0 = fits.getdata(grid_table_file, 0)
     DF_grid = Table(BinTableHDU_0).to_pandas()
 

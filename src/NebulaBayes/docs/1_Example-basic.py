@@ -1,8 +1,8 @@
 from __future__ import print_function, division
 import os
-import sys
 # import numpy as np
 # import pandas as pd
+from NebulaBayes import NB_Model
 
 
 """
@@ -15,21 +15,14 @@ There are examples of how to:
  - Measure the metallicity, ionisation parameter, pressure and hardness of the
    ionising radiation from AGN NLR fluxes that have already been dereddened
 
-This script may be run unchanged if it is still in the NebulaBayes/docs
-directory.  Otherwise (assuming NebulaBayes is installed) remove the three
-lines ending with "sys.path.insert..." below, and add a custom "OUT_DIR".
-The outputs are saved in the NebulaBayes/docs directory by default.
+This script may be run unchanged to save output in the NebulaBayes/docs
+directory.  Otherwise add a custom "OUT_DIR" below.
 """
 
 
-# Manipulate paths to load the correct version of NB, and also to save the
-# output files in the NebulaBayes/docs subdirectory.
+# By default save the output files in the NebulaBayes/docs subdirectory,
+# assuming this file is still in that directory.
 DOCS_PATH = os.path.dirname(os.path.realpath(__file__))
-NB_PARENT_DIR = os.path.split(os.path.split(DOCS_PATH)[0])[0]
-sys.path.insert(1, NB_PARENT_DIR)  # Can comment this out if NB is installed
-
-from NebulaBayes import NB_Model
-
 OUT_DIR = DOCS_PATH
 
 

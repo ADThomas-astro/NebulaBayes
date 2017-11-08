@@ -11,7 +11,7 @@ the hardness of the ionising continuum.  NebulaBayes accepts model grids in a
 simple table format, and is agnostic to the number of dimensions in the grid,
 the parameter names, and the emission line names.
 
-The NebulaBayes.NB_Model class is the entry point for performing Bayesian
+The ``NebulaBayes.NB_Model`` class is the entry point for performing Bayesian
 parameter estimation.  The class is initialised with a chosen model grid, at
 which point the model flux grids are loaded, interpolated, and stored.  The
 NB_Model instance may then be called one or more times to run Bayesian
