@@ -23,9 +23,9 @@ python setup.py sdist bdist_wheel
 # Upload to PyPI testing site (https://testpypi.python.org/)
 # (need to update version in command below; use python 3 twine because we need
 # a newer SSL):
-/Applications/anaconda/bin/twine upload -r test dist/NebulaBayes-0.9*
+/Applications/anaconda/bin/twine upload -r test dist/NebulaBayes-0.9.1*
 # We can install from the test PyPI site with
 # pip install -i https://testpypi.python.org/pypi NebulaBayes  # <- doesn't work due to old SSL
-# /Applications/anaconda/bin/pip -i https://testpypi.python.org/pypi NebulaBayes  # Works!
+# /Applications/anaconda/bin/pip install -i https://testpypi.python.org/pypi NebulaBayes  # Works!
 
 

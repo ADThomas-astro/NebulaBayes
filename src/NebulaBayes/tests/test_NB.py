@@ -2,17 +2,10 @@ from __future__ import print_function, division
 from collections import OrderedDict as OD
 import itertools
 import os
-import sys
 import unittest
 import numpy as np
 import pandas as pd
 
-# Use relative paths to load NebulaBayes.  This allows us to
-# load NB even when it's not installed, and also ensures we're
-# testing the correct version.
-THIS_FILE_DIR = os.path.dirname(os.path.realpath(__file__))
-NB_PARENT_DIR = os.path.split(os.path.split(THIS_FILE_DIR)[0])[0]
-sys.path.insert(1, NB_PARENT_DIR)
 from NebulaBayes import NB_Model, __version__
 from NebulaBayes.NB1_Process_grids import RegularGridResampler
 
@@ -27,7 +20,7 @@ Works with Python 2 and Python 3.
 To run only a particular test, type (e.g.):
 python3 test_NB.py Test_real_data_with_dereddening
 
-When NebulaBayes is installed, this test suite can be run in-place in the
+This test suite can be run in-place in NebulaBayes/tests under the NebulaBayes
 installation directory (but use the correct python version for the
 installation location).
 
@@ -35,8 +28,10 @@ Adam D. Thomas 2017
 """
 
 clean_up = True  # Delete test output files after running?
-test_dir = os.path.join(THIS_FILE_DIR, "test_outputs")  # For outputs
 
+# Save test outputs in NebulaBayes/tests/test_outputs
+THIS_FILE_DIR = os.path.dirname(os.path.realpath(__file__))
+TEST_DIR = os.path.join(THIS_FILE_DIR, "test_outputs")
 
 
 
@@ -136,7 +131,7 @@ class Base_2D_Grid_2_Lines(unittest.TestCase):
         cls.DF = build_grid(cls.param_range_dict, line_peaks_dict, cls.n_gridpts_list)
         cls.val_arrs = OD([(p,np.unique(cls.DF[p].values)) for p in cls.params])
         cls.DF.loc[:,"L1"] = 1.  # We'll normalise by this line
-        cls.grid_file = os.path.join(test_dir, cls.__name__ + "_grid.csv")
+        cls.grid_file = os.path.join(TEST_DIR, cls.__name__ + "_grid.csv")
         cls.DF.to_csv(cls.grid_file, index=False)
 
         cls.NB_Model_1 = NB_Model(cls.grid_file, cls.params, cls.lines,
@@ -170,9 +165,9 @@ class Test_Obs_from_Peak_Gridpoint_2D_Grid_2_Lines(Base_2D_Grid_2_Lines):
         obs_fluxes = extract_grid_fluxes_i(cls.DF, test_pt, ["L1", "L2"])
         obs_errors = [f / 7. for f in obs_fluxes]
 
-        cls.posterior_plot = os.path.join(test_dir, cls.__name__ + "_posterior.pdf")
+        cls.posterior_plot = os.path.join(TEST_DIR, cls.__name__ + "_posterior.pdf")
         kwargs = {"posterior_plot": cls.posterior_plot,
-                  "line_plot_dir": test_dir, "norm_line": "L1"}
+                  "line_plot_dir": TEST_DIR, "norm_line": "L1"}
 
         cls.Result = cls.NB_Model_1(obs_fluxes, obs_errors, cls.lines, **kwargs)
 
@@ -214,7 +209,7 @@ class Test_Obs_from_Peak_Gridpoint_2D_Grid_2_Lines(Base_2D_Grid_2_Lines):
         """ Remove the output files when tests in this class have finished """
         super(Test_Obs_from_Peak_Gridpoint_2D_Grid_2_Lines,cls).tearDownClass()
         if clean_up:
-            files = [os.path.join(test_dir, l +
+            files = [os.path.join(TEST_DIR, l +
                   "_PDF_contributes_to_likelihood.pdf") for l in ["L1", "L2"]]
             for file_i in files:
                 os.remove(file_i)
@@ -242,7 +237,7 @@ class Test_Obs_from_nonPeak_Gridpoint_2D_Grid_2_Lines(Base_2D_Grid_2_Lines):
         obs_fluxes = extract_grid_fluxes_i(cls.DF, test_pt, ["L1", "L2"])
         obs_errors = [f / 7. for f in obs_fluxes]
 
-        cls.posterior_plot = os.path.join(test_dir, cls.__name__ + "_posterior.pdf")
+        cls.posterior_plot = os.path.join(TEST_DIR, cls.__name__ + "_posterior.pdf")
         kwargs = {"posterior_plot": cls.posterior_plot, "norm_line": "L1",
                   "prior": np.ones(cls.NB_Model_1.Interpd_grids.shape)
                  }
@@ -348,9 +343,9 @@ class Test_1D_grid_and_public_attributes(unittest.TestCase):
         obs_fluxes = [x[test_gridpoint] for x in [flux_0,flux_1,flux_2,flux_3]]
         obs_errors = [f / 7. for f in obs_fluxes]
 
-        cls.posterior_plot = os.path.join(test_dir,
+        cls.posterior_plot = os.path.join(TEST_DIR,
                                           cls.__name__ + "_posterior.pdf")
-        cls.best_model_table = os.path.join(test_dir,
+        cls.best_model_table = os.path.join(TEST_DIR,
                                           cls.__name__ + "_best_model.csv")
         cls.NB_Model_1 = NB_Model(DF_grid1D, ["P0"], cls.lines,
                                   interpd_grid_shape=[300])
@@ -451,13 +446,13 @@ class Test_real_data_with_dereddening(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.prior_plot = os.path.join(test_dir,
+        cls.prior_plot = os.path.join(TEST_DIR,
                                           cls.__name__ + "_prior.pdf")
-        cls.likelihood_plot = os.path.join(test_dir,
+        cls.likelihood_plot = os.path.join(TEST_DIR,
                                           cls.__name__ + "_likelihood.pdf")
-        cls.posterior_plot = os.path.join(test_dir,
+        cls.posterior_plot = os.path.join(TEST_DIR,
                                           cls.__name__ + "_posterior.pdf")
-        cls.estimate_table = os.path.join(test_dir,
+        cls.estimate_table = os.path.join(TEST_DIR,
                                     cls.__name__ + "_parameter_estimates.csv")
         # Test different values along each dimension in interpd_grid_shape
         cls.NB_Model_1 = NB_Model("HII", grid_params=None, line_list=cls.lines,
@@ -562,7 +557,7 @@ class Test_upper_bounds_1D(unittest.TestCase):
         cls.NB_Model_1 = NB_Model(DF_grid1D, grid_params=["p0"], grid_error=0,
                                 line_list=cls.lines, interpd_grid_shape=[500])
         kwargs = {"deredden": False, "norm_line": "line1",
-                  "line_plot_dir": test_dir}
+                  "line_plot_dir": TEST_DIR}
         cls.Result = cls.NB_Model_1(cls.obs_fluxes, cls.obs_errs, cls.lines,
                                     **kwargs)
 
@@ -578,7 +573,7 @@ class Test_upper_bounds_1D(unittest.TestCase):
     def tearDownClass(cls):
         """ Remove the output files when tests in this class have finished """
         if clean_up:
-            files = [os.path.join(test_dir, l +
+            files = [os.path.join(TEST_DIR, l +
                      "_PDF_contributes_to_likelihood.pdf") for l in cls.lines]
             for file_i in files:
                 os.remove(file_i)
