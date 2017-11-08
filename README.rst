@@ -28,3 +28,5 @@ The documentation assumes some knowledge of Bayesian statistics and scientific
 python (numpy, matplotlib and pandas).
 
 NebulaBayes is heavily based on IZI (Blanc+ 2015).
+
+The package has been tested on Python 2.7 and Python 3.5.

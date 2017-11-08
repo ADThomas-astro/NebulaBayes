@@ -19,3 +19,13 @@ python setup.py sdist bdist_wheel
 # pip uninstall NebulaBayes
 # /Applications/anaconda/bin/pip install dist/NebulaBayes-0.88-py2.py3-none-any.whl  # python 3
 # /Applications/anaconda/bin/pip uninstall NebulaBayes
+
+# Upload to PyPI testing site (https://testpypi.python.org/)
+# (need to update version in command below; use python 3 twine because we need
+# a newer SSL):
+/Applications/anaconda/bin/twine upload -r test dist/NebulaBayes-0.9*
+# We can install from the test PyPI site with
+# pip install -i https://testpypi.python.org/pypi NebulaBayes  # <- doesn't work due to old SSL
+# /Applications/anaconda/bin/pip -i https://testpypi.python.org/pypi NebulaBayes  # Works!
+
+
