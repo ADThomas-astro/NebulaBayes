@@ -25,6 +25,50 @@ Adam D. Thomas 2015 - 2017
 
 
 
+class CachedIntegrator(object):
+    """
+    Class to perform trapezoidal integration in arbitrary dimensions, one
+    dimension at a time.  A cache is used to store previous results, which
+    significantly speeds up finding all the 1D and 2D marginalised PDFs for
+    grids with more than 3 dimensions.
+    A custom class is used because functools.lru_cache is not available in
+    the standard library in python 2 (and an extra dependency is avoided).
+    """
+    def __init__(self, full_nd_pdf, spacing):
+        """
+        Initialise CachedIntegrator instance with some data required for
+        performing the integration.
+        """
+        self.spacing = spacing  # List holding the spacing (dx) for each axis.
+        # The cache maps a tuple of the indices of the axes that have been
+        # integrated out to the corresponding marginalised PDF array
+        self.cache = {(): full_nd_pdf.copy()}
+
+
+    def __call__(self, inds_already_integrated, ind_to_integrate):
+        """
+        Integrate out a single dimension from the PDF array, which may have
+        already been marginalised over one or more dimensions.  Trapezoidal
+        integration is used.  Previous integration results are cached, so they
+        don't need to be recalculated.
+        """
+        assert ind_to_integrate not in inds_already_integrated
+        assert isinstance(ind_to_integrate, int)
+        assert isinstance(inds_already_integrated, list)  # List of ints
+        cache_key = tuple(sorted(inds_already_integrated + [ind_to_integrate]))
+        if cache_key in self.cache:
+            return self.cache[cache_key]  # Return results of previous call
+
+        start_arr = self.cache[tuple(sorted(inds_already_integrated))]
+        # Integrate over the desired dimension/parameter/axis, using the
+        # trapezoidal rule
+        marginalized_arr = np.trapz(start_arr, axis=ind_to_integrate,
+                                    dx=self.spacing[ind_to_integrate])
+        self.cache[cache_key] = marginalized_arr  # Cache the results
+        return marginalized_arr
+
+
+
 class NB_nd_pdf(object):
     """
     Class to hold an N-dimensional PDF and its 1D and 2D marginalised forms.
@@ -101,24 +145,29 @@ class NB_nd_pdf(object):
         # Note that the order of indices in each tuple is from smaller to larger
         
         # Initialise dictionary of all possible 2D marginalised pdf arrays:
-        marginalised_2D = {}  # The dict keys will be tuples of 2 parameter names.
+        marginalised_2D = {}  # The dict keys are tuples of two parameter names
         # Iterate over all possible pairs of parameters:
+        Integrator = CachedIntegrator(self.nd_pdf, spacing)
         for double_name, param_inds_double in zip(double_names, double_indices):
+            if self.nd_pdf.ndim == 2:
+                marginalised_2D[double_name] = self.nd_pdf
+                break  # We're already done!
+
             # Generate list of indices/dimensions/parameters to integrate over:
             inds_for_integration = np.arange(n).tolist()  # Initialise
-            inds_for_integration.remove( param_inds_double[0] )
-            inds_for_integration.remove( param_inds_double[1] )
-            inds_for_integration.reverse() # Ensure we integrate over higher dimensions first,
-            # so dimension index numbers are still valid after each integration.
+            inds_for_integration.remove(param_inds_double[0])
+            inds_for_integration.remove(param_inds_double[1])
+            inds_for_integration.reverse() # Ensure we integrate over higher
+            # dimensions first, so dimension index numbers are still valid
+            # after each integration.
 
-            working_arr = self.nd_pdf.copy()  # Working array - we'll integrate
-            # out the dimensions of this array one dimension at a time.  Keep
-            # integrating until the result only has two dimensions:
-            for param_index in inds_for_integration:
-                # Integrate over this dimension (parameter), using the trapezoidal rule
-                working_arr = np.trapz(working_arr, axis=param_index,
-                                                        dx=spacing[param_index])
-            marginalised_2D[double_name] = working_arr # Store result
+            # Integrate out the dimensions of the full array one dimension at a
+            # time.  Keep integrating until the result only has two dimensions:
+            integrated_inds = []
+            for p_index in inds_for_integration:
+                marginalised_array = Integrator(integrated_inds, p_index)
+                integrated_inds.append(p_index)
+            marginalised_2D[double_name] = marginalised_array  # Store result
 
         #----------------------------------------------------------------------
         # Calculate the 1D marginalised pdf for each individual parameter
@@ -147,10 +196,6 @@ class NB_nd_pdf(object):
             # Integrate over first dimension (parameter) using Simpson's rule:
             marginalised_1D[param] = simps(marginalised_2D[double_name],
                                                          axis=0, dx=spacing[0])
-            # if np.all(marginalised_1D[param] == 0):
-            #     print("WARNING: 1D PDF for {0} is all zero".format(param))
-            # marginalised_1D[param] = np.trapz(marginalised_2D[double_name],
-            #                                            axis=0, dx=spacing[0])
 
         #----------------------------------------------------------------------
         # Calculate the 0D marginalised pdf (by which I mean find the
@@ -208,7 +253,7 @@ class NB_nd_pdf(object):
         # names are sorted into separate sections)
         DF_estimates.set_index("Parameter", inplace=True)
         for col in [col for col,t in columns if t == np.float]:
-            DF_estimates.loc[:,col] = np.nan
+            DF_estimates[col] = np.nan
         DF_estimates.loc[:,"n_local_maxima"] = -1
         
         # Fill in DF_estimates: 
@@ -217,7 +262,7 @@ class NB_nd_pdf(object):
             p_dict = make_single_parameter_estimate(p, param_val_arr, pdf_1D)
             for field, value in p_dict.items():
                 if field != "Parameter":
-                    DF_estimates.loc[p,field] = value
+                    DF_estimates.set_value(p, field, value)
 
         self.DF_estimates = DF_estimates
 
@@ -651,14 +696,34 @@ class NB_Result(object):
             assert obs_flux_i.shape == pred_flux_i.shape
             
             # Calculate the total variance, which is the sum of variances due
-            # to both the measured and modelled fluxes
-            var = obs_flux_err_i**2 + (pred_flux_rel_err * pred_flux_i)**2
+            # to both the measured and modelled fluxes:
+            # var = obs_flux_err_i**2 + (pred_flux_rel_err * pred_flux_i)**2
+            # Rewrite this expression to do in-place manipulation of arrays,
+            # which is significantly faster than allocating intermediate arrays
+            var_part_1 = obs_flux_err_i.copy()  # Copy - don't modify array
+            var_part_1 *= var_part_1  # Squared (in-place array multiplication)
+            var_part_2 = pred_flux_i.copy()  # Copy - don't modify array
+            var_part_2 *= pred_flux_rel_err
+            var_part_2 *= var_part_2  # Squared
+            var = var_part_1  # "var" and "var_part_1" refer to the same array
+            var += var_part_2  # In-place addition
 
             if obs_flux_i[tuple(0 for _ in obs_flux_i.shape)] != -np.inf:
                 # Minus infinity would signal an upper bound
                 # Line contribution with both observed flux and error:
-                log_line_contribution = (-0.5 * np.log(var)
-                    - ((obs_flux_i - pred_flux_i)**2 / (2.0 * var)) )
+                # log_line_contribution = (-0.5 * np.log(var)
+                #     - ((obs_flux_i - pred_flux_i)**2 / (2.0 * var)) )
+                # Rewrite this to do in-place manipulation of arrays, as
+                # log_cont = - 0.5 * ( (obs - pred)**2 / var + log(var) )
+                cont_part_1 = obs_flux_i.copy()  # Copy - don't modify array
+                cont_part_1 -= pred_flux_i
+                cont_part_1 *= cont_part_1  # Squared
+                cont_part_1 /= var
+                cont_part_2 = np.log(var)  # Natural log
+                log_line_contribution = cont_part_1  # These two names refer to
+                                                     # the same array
+                log_line_contribution += cont_part_2
+                log_line_contribution *= -0.5
             else:  # We have an upper bound
                 # Line contribution with only the observed error, not flux:
                 denom = np.sqrt(2 * var)
