@@ -1,6 +1,10 @@
 v0.9.3  November 2017:  Some optimisations, without any behaviour changes.
         Calculating the likelihood is now significantly faster for large
-        interpolated grids and where upper bounds aren't used.  This was
+        interpolated grids and where flux upper bounds aren't used.  This was
         achieved by avoiding using intermediate arrays in the calculations.
         Marginalising PDFs is now faster for grids with 4 or more dimensiions
         due to the use of a cache.
+v0.9.4  January 2018:  Allowed the use of linear or cubic interpolation when
+        interpolating input model grid flux arrays, with the new added keyword
+        option "interp_order".  Previously only linear interpolation was
+        available.

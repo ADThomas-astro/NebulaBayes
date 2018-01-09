@@ -13,7 +13,7 @@ rm -rf build dist src/NebulaBayes.egg-info
 python setup.py sdist bdist_wheel
 
 
-version="0.9.3"  # Need to change this manually!
+version="0.9.4"  # Need to change this manually!
 # Now there are dirs called "build" and dist"
 # The "dist" dir contains a wheel that can be installed:
 # pip install dist/NebulaBayes-${version}-py2.py3-none-any.whl  # python 2

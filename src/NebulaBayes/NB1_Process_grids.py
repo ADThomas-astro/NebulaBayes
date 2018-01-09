@@ -7,8 +7,9 @@ from astropy.io import fits  # For reading FITS binary tables
 from astropy.table import Table  # For FITS table to pandas DataFrame conversion
 import numpy as np  # Core numerical library
 import pandas as pd # For tables ("DataFrame"s)
+from scipy.ndimage import map_coordinates  # For spline interpolation in 3D
 
-# Find directory of built-in grids
+# Directory of built-in grids
 GRIDS_LOCATION = os.path.join(os.path.dirname(__file__), "grids")
 
 
@@ -87,7 +88,8 @@ class NB_Grid(Grid_description):
 
 
 
-def initialise_grids(grid_table, grid_params, lines_list, interpd_grid_shape):
+def initialise_grids(grid_table, grid_params, lines_list, interpd_grid_shape,
+                     interp_order):
     """
     Initialise grids objects for an initialising NB_Model instance.  The
     outputs are instances of the NB_Grid class defined above.
@@ -104,6 +106,8 @@ def initialise_grids(grid_table, grid_params, lines_list, interpd_grid_shape):
         The emission lines to be interpolated from the raw flux grids
     interpd_grid_shape : tuple of integers
         The size of each dimension of the interpolated flux grids.
+    interp_order : integer (1 or 3)
+        The order of the polynomials to use for interpolation.
 
     Returns
     -------
@@ -119,7 +123,8 @@ def initialise_grids(grid_table, grid_params, lines_list, interpd_grid_shape):
     Raw_grids = construct_raw_grids(DF_grid, grid_params, lines_list)
 
     # Interpolate flux grids
-    Interpd_grids = interpolate_flux_arrays(Raw_grids, interpd_grid_shape)
+    Interpd_grids = interpolate_flux_arrays(Raw_grids, interpd_grid_shape,
+                                            interp_order=interp_order)
 
     return Raw_grids, Interpd_grids
 
@@ -214,10 +219,15 @@ def process_raw_table(DF_grid, grid_params, lines_list):
 def construct_raw_grids(DF_grid, grid_params, lines_list):
     """
     Construct arrays of flux grids from the input flux table.
-    DF_grid: pandas DataFrame table holding the predicted fluxes of the model grid.
-    Params:  Object holding parameter names, corresponding to columns in DF_grid.
-    lines_list: list of names of emission lines of interest, corresponding to
-                columns in DF_grid.
+
+    Parameters
+    ----------
+    DF_grid: pandas DataFrame
+        Table holding the predicted fluxes of the model grid.
+    grid_params:  list of str
+        The names of the grid parameters, matching columns in DF_grid.
+    lines_list: list of str
+        The names of emission lines of interest, matching columns in DF_grid.
     """
     # Determine the list of parameter values for the raw grid:
     # List of arrays; each array holds the grid values for a parameter:
@@ -276,28 +286,42 @@ def construct_raw_grids(DF_grid, grid_params, lines_list):
 
 
 
-def interpolate_flux_arrays(Raw_grids, interpd_shape):
+def interpolate_flux_arrays(Raw_grids, interpd_shape, interp_order):
     """
-    Interpolate emission line grids, using linear interpolation, and in 
-    arbitrary dimensions.
+    Interpolate emission line grids, using linear or cubic interpolation, and
+    in arbitrary dimensions.
+
+    Parameters
+    ----------
+    Raw_grids : object
+        Object holding the raw (uninterpolated) model flux grids
+    interpd_shape : tuple of integers
+        The size of each dimension of the interpolated flux grids.
+    interp_order : integer (1 or 3)
+        The order of the polynomials to use for interpolation.
+
+    Notes
+    -----
     We do not normalise the grid fluxes to the norm_line fluxes here (they're
     normalised just before calculating the likelihood), and we store the
     interpolated grids under the name "No_norm".
     Note that we require that the spacing in the interpolated grids is uniform,
     becuase we'll be assuming this when integrating to marginalise PDFs, and
-    also we'll be using matplotlib.pyplot.imshow to show an image of PDFs on the
-    interpolated array, and imshow (as you would expect) assumes "evenly-spaced"
-    pixels.
+    also we'll be using matplotlib.pyplot.imshow to show an image of PDFs on
+    the interpolated array, and imshow (as you would expect) assumes
+    "evenly-spaced" pixels.
     """
-    print("Interpolating model emission line flux grids to shape {0}...".format(
-                                                          tuple(interpd_shape)))
+    interp_types = {1: "linear", 3: "cubic"}
+    interp_type = interp_types[interp_order]
+    print("Resampling model emission line flux grids to shape {0} using "
+          "{1} interpolation...".format(tuple(interpd_shape), interp_type))
 
     # Initialise NB_Grid object for interpolated arrays
-    # First we find the interpolated values of the parameters
+    # First find the interpolated values of the grid parameters
     val_arrs_interp = []
     for i, (p, n) in enumerate(zip(Raw_grids.param_names, interpd_shape)):
         p_min, p_max = Raw_grids.paramName2paramMinMax[p]
-        val_arrs_interp.append( np.linspace(p_min, p_max, n) )
+        val_arrs_interp.append(np.linspace(p_min, p_max, n))
     
     Interpd_grids = NB_Grid(list(Raw_grids.param_names), val_arrs_interp)
     Interpd_grids.grids["No_norm"] = OD()
@@ -307,16 +331,22 @@ def interpolate_flux_arrays(Raw_grids, interpd_shape):
         arr_diff = np.diff(arr)
         assert np.allclose(arr_diff, arr_diff[0])
 
-    # Create class for carrying out the interpolation:
-    Interpolator = RegularGridResampler(Raw_grids.param_values_arrs, Interpd_grids.shape)
+    if interp_order == 1:  # Create class for carrying out the interpolation:
+        Interpolator = RegularGridResampler(Raw_grids.param_values_arrs,
+                                            Interpd_grids.shape)
+
     # Iterate emission lines, doing the interpolation:
     for emission_line, raw_flux_arr in Raw_grids.grids.items():
         print("    Interpolating for {0}...".format(emission_line))
-        interp_vals, interp_arr = Interpolator(raw_flux_arr)
+        if interp_order == 1:
+            interp_vals, interp_arr = Interpolator(raw_flux_arr)
+            for a1, a2 in zip(interp_vals, Interpd_grids.param_values_arrs):
+                assert np.array_equal(a1, a2)
+        else:  # interp_order == 3
+            interp_arr = resample_grid_with_cubic_splines(raw_flux_arr,
+                                    Raw_grids.param_values_arrs, interpd_shape)
         assert np.all(np.isfinite(interp_arr))
         Interpd_grids.grids["No_norm"][emission_line] = interp_arr
-        for a1, a2 in zip(interp_vals, Interpd_grids.param_values_arrs):
-            assert np.array_equal(a1, a2)
 
 
     n_lines = len(Interpd_grids.grids["No_norm"])
@@ -327,12 +357,150 @@ def interpolate_flux_arrays(Raw_grids, interpd_shape):
     print(" and {0:.2f}MB total for all {1} lines".format(arr_MB*n_lines,
                                                           n_lines))
 
-    # Set negative values to zero: (there shouldn't be any, since we're using
+    # Set negative values to zero: (there shouldn't be any if we're using
     # linear interpolation)
     for a in Interpd_grids.grids["No_norm"].values():
         np.clip(a, 0., None, out=a)
 
+    # Store the interpolation polynomial order for potential later reference
+    Interpd_grids.interp_order = interp_order
+
     return Interpd_grids
+
+
+
+def cartesian_prod(arrays, out=None):
+    """
+    Generate a cartesian product of input arrays recursively.
+    Copied from:
+    https://stackoverflow.com/questions/1208118/
+            using-numpy-to-build-an-array-of-all-combinations-of-two-arrays
+    https://stackoverflow.com/questions/28684492/
+                                 numpy-equivalent-of-itertools-product?rq=1
+    This method is much faster than constructing a numpy array using
+    itertools.product().
+
+    Parameters
+    ----------
+    arrays : list of array-like
+        1-D arrays to form the cartesian product of.
+    out : ndarray
+        Array to place the cartesian product in.
+
+    Returns
+    -------
+    out : ndarray
+        2-D array of shape (M, len(arrays)) containing cartesian products
+        formed of input arrays.
+
+    Example
+    -------
+    >>> cartesian_prod(([1, 2, 3], [4, 5], [6, 7]))
+    array([[1, 4, 6],
+           [1, 4, 7],
+           [1, 5, 6],
+           [1, 5, 7],
+           [2, 4, 6],
+           [2, 4, 7],
+           [2, 5, 6],
+           [2, 5, 7],
+           [3, 4, 6],
+           [3, 4, 7],
+           [3, 5, 6],
+           [3, 5, 7]])
+
+    """
+    arrays = [np.asarray(x) for x in arrays]
+    dtype = arrays[0].dtype
+
+    n = np.prod([x.size for x in arrays])
+    if out is None:
+        out = np.zeros((n, len(arrays)), dtype=dtype)
+
+    m = n // arrays[0].size
+    out[:,0] = np.repeat(arrays[0], m)
+    if arrays[1:]:
+        cartesian_prod(arrays[1:], out=out[0:m, 1:])
+        for j in range(1, arrays[0].size):
+            out[j*m:(j+1)*m, 1:] = out[0:m, 1:]
+
+    return out
+
+
+
+def resample_grid_with_cubic_splines(raw_arr, param_val_lists, out_shape):
+    """
+    Resample a rectangular n-dimensional grid (with uneven spacing along one or
+    more dimensions) to a different (regular) sampling, using (approximately)
+    cubic spline interpolation.
+
+    Parameters
+    ----------
+    raw_arr : numpy ndarray
+        The input array to resample
+    param_val_lists : list of lists of floats
+        The input parameter values along each dimension (in order)
+    out_shape : tuple of ints
+        The output shape, which specifies the number of evenly-spaced sample
+        points along each dimension
+
+    Notes
+    -----
+    The technique used here isn't strictly mathematically correct. We use the
+    scipy.ndimage.map_coordinates function, which assumes that the input array
+    is an image with even spacing between the pixels.  This is not the case,
+    but as a fudge we calculate the output coordinates in pixel space taking
+    into account the uneven input sampling.  Hence the results should be
+    resonable, although the actual spline functions used in the interpolation
+    will presumably not have quite the correct shape.  The differences will be
+    larger for input arrays with more uneven sampling.
+    """
+    # Output parameter values
+    out_param_vals = []
+    for p_vals_i, n_i in zip(param_val_lists, out_shape): # Iterate dimensions:
+        # Evenly sampled points in this dimension
+        out_param_vals.append(np.linspace(p_vals_i[0], p_vals_i[-1], n_i))
+
+    # For the interpolation routine and method we're using, we need the
+    # input points for the interpolation to be in pixel coordinates.  The
+    # input parameter spacing is not uniform, so we need to calculate the
+    # locations of the output parameter values in "input index" coordinates.
+    index_locations = [[] for _ in out_shape]
+    # Iterate over dimensions
+    for i, (in_vals_i, out_vals_i) in enumerate(zip(param_val_lists,
+                                                    out_param_vals)):
+        # Iterate over sample points we'll be interpolating to
+        for x_j in out_vals_i:
+            closest_below_ind = (np.searchsorted(np.array(in_vals_i), x_j,
+                                                 side="right") - 1)
+            # closest_below_ind is the index of the raw grid parameter value
+            # that is closest to x_j without being larger (it's possibly equal)
+            if closest_below_ind < len(in_vals_i) - 1:
+                below_val = in_vals_i[closest_below_ind]
+                width = in_vals_i[closest_below_ind+1] - below_val
+                x_j_ind = closest_below_ind + (x_j - below_val) / width
+            else:  # At maximum of parameter space
+                x_j_ind = closest_below_ind
+            index_locations[i].append(x_j_ind)
+        assert len(index_locations[i]) == out_shape[i]
+
+    # Make a list of points to interpolate, which includes every point in the
+    # interpolated grid.  There is a row for each dimension, and a column for
+    # each point in the interpolated grid.
+    coords = cartesian_prod(index_locations).T
+
+    # Perform the interpolation
+    interped = map_coordinates(raw_arr, coordinates=coords, order=3)
+    out_arr = interped.reshape(out_shape)
+
+    # # Sanity check - ensure the values are unchanged at all corners of the grid
+    # for corner_ind_tuple in itertools.product(*([[0, -1]] * len(out_shape))):
+    #     if not np.isclose(raw_arr[corner_ind_tuple], out_arr[corner_ind_tuple],
+    #                       atol=1e-8, rtol=0):  # Note - normalised to Hbeta
+    #         raise ValueError("Corner {0}: Raw ({1}) doesn't equal interpolated ({2})".format(
+    #             corner_ind_tuple, raw_arr[corner_ind_tuple], out_arr[corner_ind_tuple]))
+
+    return out_arr
 
 
 
@@ -352,7 +520,8 @@ class RegularGridResampler(object):
     may be uneven.  The output grid will have even spacing, and the "corner"
     gridpoints and values will be the same as in the input grid.
 
-    -- Parameters --
+    Parameters
+    ----------
     in_points : tuple of ndarray of float, with shapes (m1, ), ..., (mn, )
         The points defining the regular grid in n dimensions.
 
@@ -360,7 +529,8 @@ class RegularGridResampler(object):
         The number of evenly spaced interpolated points in each dimension for
         output interpolated grids
 
-    -- Notes --
+    Notes
+    -----
     Based on the same method as is used in the scipy RegularGridInterpolator,
     which itself is based on code by Johannes Buchner, see
     https://github.com/JohannesBuchner/regulargrid
@@ -425,7 +595,7 @@ class RegularGridResampler(object):
         self._find_weights()
 
         # Find fancy indices for each edge:
-        prod_arr = self._cartesian_prod(self.lower_edge_inds)
+        prod_arr = cartesian_prod(self.lower_edge_inds)
         fancy_inds_lower = tuple(prod_arr[:,i] for i in range(self.ndim))
         # The fancy indices are for the edge which corresponds to the "lower"
         # edge position in each dimension, and will extract the edge values
@@ -447,7 +617,7 @@ class RegularGridResampler(object):
         weights_upper = self.norm_distances
         # The norm_distances are from the lower edge.  The weighting is such
         # that if this distance is large, we favour the upper edge.
-        upper_all = self._cartesian_prod(weights_upper)
+        upper_all = cartesian_prod(weights_upper)
         lower_all = 1 - upper_all
         # These two arrays have shape (n_iterp_points, ndim)
         weights_all_l_u = [lower_all, upper_all]
@@ -472,66 +642,12 @@ class RegularGridResampler(object):
         self.weights = weights
 
 
-    def _cartesian_prod(self, arrays, out=None):
-        """
-        Generate a cartesian product of input arrays recursively.
-        Copied from:
-        https://stackoverflow.com/questions/1208118/
-                using-numpy-to-build-an-array-of-all-combinations-of-two-arrays
-        https://stackoverflow.com/questions/28684492/
-                                     numpy-equivalent-of-itertools-product?rq=1
-        This method is much faster than constructing a numpy array using
-        itertools.product().
-
-        -- Parameters --
-        arrays : list of array-like
-            1-D arrays to form the cartesian product of.
-        out : ndarray
-            Array to place the cartesian product in.
-
-        -- Returns --
-        out : ndarray
-            2-D array of shape (M, len(arrays)) containing cartesian products
-            formed of input arrays.
-
-        -- Example --
-        >>> self._cartesian_prod(([1, 2, 3], [4, 5], [6, 7]))
-        array([[1, 4, 6],
-               [1, 4, 7],
-               [1, 5, 6],
-               [1, 5, 7],
-               [2, 4, 6],
-               [2, 4, 7],
-               [2, 5, 6],
-               [2, 5, 7],
-               [3, 4, 6],
-               [3, 4, 7],
-               [3, 5, 6],
-               [3, 5, 7]])
-
-        """
-        arrays = [np.asarray(x) for x in arrays]
-        dtype = arrays[0].dtype
-
-        n = np.prod([x.size for x in arrays])
-        if out is None:
-            out = np.zeros((n, len(arrays)), dtype=dtype)
-
-        m = n // arrays[0].size
-        out[:,0] = np.repeat(arrays[0], m)
-        if arrays[1:]:
-            self._cartesian_prod(arrays[1:], out=out[0:m, 1:])
-            for j in range(1, arrays[0].size):
-                out[j*m:(j+1)*m, 1:] = out[0:m, 1:]
-
-        return out
-
-
     def __call__(self, in_grid_values):
         """
         Evaluate linear interpolation to resample a regular grid.
 
-        -- Parameters --
+        Parameters
+        ----------
         in_grid_values : ndarray
             Array holding the grid values of the grid to be resampled.
         """

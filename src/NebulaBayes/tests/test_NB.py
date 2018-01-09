@@ -347,7 +347,10 @@ class Test_1D_grid_and_public_attributes(unittest.TestCase):
                                           cls.__name__ + "_posterior.pdf")
         cls.best_model_table = os.path.join(TEST_DIR,
                                           cls.__name__ + "_best_model.csv")
-        cls.NB_Model_1 = NB_Model(DF_grid1D, ["P0"], cls.lines,
+        cls.NB_Model_1 = NB_Model(DF_grid1D, ["P0"], cls.lines, interp_order=1,
+                                  interpd_grid_shape=[300])
+        # Also test cubic interpolation for the 1D case:
+        cls.NB_Model_2 = NB_Model(DF_grid1D, ["P0"], cls.lines, interp_order=3,
                                   interpd_grid_shape=[300])
         # We test the case-insensitivity of the norm_line, by writing
         # "L0" instead of "l0" here:
@@ -503,6 +506,12 @@ class Test_real_data_with_dereddening(unittest.TestCase):
         chi2 = self.Result.Posterior.best_model["chi2"]
         self.assertTrue(np.isclose(chi2, 1401.3, atol=0.2))
 
+    def test_interp_order(self):
+        """
+        Ensure the correct interpolation order (linear) is preserved
+        """
+        self.assertTrue(self.NB_Model_1.Interpd_grids.interp_order == 1)
+
     def test_all_zero_prior(self):
         """
         We permit an all-zero prior - check that it works (a warning should
@@ -511,6 +520,88 @@ class Test_real_data_with_dereddening(unittest.TestCase):
         shape = self.NB_Model_1.Interpd_grids.shape
         self.Result1 = self.NB_Model_1(self.obs_fluxes, self.obs_errs,
                                        self.lines, prior=np.zeros(shape))
+
+
+    @classmethod
+    def tearDownClass(cls):
+        """ Remove the output files when tests in this class have finished """
+        if clean_up:
+            files = [cls.prior_plot, cls.likelihood_plot, cls.posterior_plot,
+                     cls.estimate_table]
+            for file_i in files:
+                os.remove(file_i)
+
+
+
+###############################################################################
+
+class Test_real_data_with_cubic_interpolation(unittest.TestCase):
+    """
+    Very similar to the previous test class, but we use cubic interpolation
+    instead of linear interpolation when interpolating model flux grids.
+    """
+    longMessage = True  # Append messages to existing message
+
+    lines = ["OII3726_29", "Hgamma", "OIII4363", "Hbeta", "OIII5007",
+                 "NI5200", "OI6300", "Halpha", "NII6583", "SII6716", "SII6731"]
+    obs_fluxes = [1.22496, 0.3991, 0.00298, 1.0, 0.44942,
+                  0.00766, 0.02923, 4.25103, 1.65312, 0.45598, 0.41482]
+    obs_errs = [0.00303, 0.00142, 0.00078, 0.0017, 0.0012,
+                0.00059, 0.00052, 0.00268, 0.00173, 0.00102, 0.00099]
+    obs_wavelengths = [3727.3, 4340.5, 4363.2, 4861.3, 5006.8,
+                       5200.3, 6300.3, 6562.8, 6583.2, 6716.4, 6730.8]
+
+    @classmethod
+    def setUpClass(cls):
+        cls.prior_plot = os.path.join(TEST_DIR,
+                                          cls.__name__ + "_prior.pdf")
+        cls.likelihood_plot = os.path.join(TEST_DIR,
+                                          cls.__name__ + "_likelihood.pdf")
+        cls.posterior_plot = os.path.join(TEST_DIR,
+                                          cls.__name__ + "_posterior.pdf")
+        cls.estimate_table = os.path.join(TEST_DIR,
+                                    cls.__name__ + "_parameter_estimates.csv")
+        # Test different values along each dimension in interpd_grid_shape
+        cls.NB_Model_1 = NB_Model("HII", line_list=cls.lines, interp_order=3,
+                                  interpd_grid_shape=[100, 130, 80])
+
+        kwargs = {"prior_plot": cls.prior_plot,
+                  "likelihood_plot": cls.likelihood_plot,
+                  "posterior_plot": cls.posterior_plot,
+                  "estimate_table": cls.estimate_table,
+                  "deredden": True, "obs_wavelengths": cls.obs_wavelengths,
+                  "prior":[("SII6716","SII6731")],
+                  "plot_configs": [{"table_on_plot": True,
+                                    "legend_fontsize": 5}]*4,
+                  }
+        cls.Result = cls.NB_Model_1(cls.obs_fluxes, cls.obs_errs, cls.lines,
+                                    **kwargs)
+
+    def test_parameter_estimates(self):
+        """
+        Regression check on parameter estimates.  Estimates for P and U are
+        slightly different with the cubic interpolation.
+        """
+        ests = self.Result.Posterior.DF_estimates["Estimate"]  # pandas Series
+        self.assertTrue(np.isclose(ests["12 + log O/H"], 8.73615, atol=0.0001),
+                        msg=str(ests["12 + log O/H"]))
+        self.assertTrue(np.isclose(ests["log P/k"], 6.86047, atol=0.0001),
+                        msg=str(ests["log P/k"]))
+        self.assertTrue(np.isclose(ests["log U"], -2.82828, atol=0.0001),
+                        msg=str(ests["log U"]))
+
+    def test_chi2(self):
+        """
+        Regression check that chi2 doesn't change
+        """
+        chi2 = self.Result.Posterior.best_model["chi2"]
+        self.assertTrue(np.isclose(chi2, 1857.1, atol=0.2))
+
+    def test_interp_order(self):
+        """
+        Ensure the correct interpolation order (cubic) is preserved
+        """
+        self.assertTrue(self.NB_Model_1.Interpd_grids.interp_order == 3)
 
 
     @classmethod

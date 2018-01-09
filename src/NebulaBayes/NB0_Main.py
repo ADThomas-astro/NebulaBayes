@@ -68,6 +68,9 @@ class NB_Model(object):
             along each dimension such that there are ~60000 points in total in
             an interpolated grid.  The interpd_grid_shape has a major impact on
             the speed of the grid interpolation and on memory usage.
+        interp_order : integer, optional
+            The order of the polynomials used for interpolating model fluxes.
+            Allowed values are 1 (linear) and 3 (cubic).  Default: 1
         grid_error : float between 0 and 1, optional
             The systematic relative error on grid fluxes, as a linear
             proportion.  Default is 0.35 (average of errors 0.15 dex above and
@@ -122,6 +125,10 @@ class NB_Model(object):
             raise ValueError("Bad length for interpd_grid_shape: needs length" +
                              " {0} (the number of parameters)".format(n_params))
 
+        interp_order = kwargs.pop("interp_order", 1)  # Default: 1 (linear)
+        if not interp_order in [1, 3]:
+            raise ValueError("interp_order must be either 1 or 3")
+
         grid_rel_error = kwargs.pop("grid_error", 0.35)  # Default: 0.35
         if not 0 <= grid_rel_error < 1:
             raise ValueError("grid_error must be between 0 and 1")
@@ -133,7 +140,8 @@ class NB_Model(object):
 
         # Call grid initialisation:
         Raw_grids, Interpd_grids = NB1_Process_grids.initialise_grids(grid_table,
-                                    grid_params, line_list, interpd_grid_shape)
+                                    grid_params, line_list, interpd_grid_shape,
+                                    interp_order=interp_order)
         Raw_grids.grid_rel_error = grid_rel_error
         Interpd_grids.grid_rel_error = grid_rel_error
         self.Raw_grids = Raw_grids
@@ -154,7 +162,8 @@ class NB_Model(object):
         ----------
         obs_fluxes : list of floats
             The observed emission-line fluxes.  Use a flux of minus infinity
-            (-np.inf) to indicate that a measurement is an upper limit.
+            (-np.inf) for a measurement that is an upper limit.  Fluxes and
+            errors must already be dereddened, unless "deredden" below is True.
         obs_flux_errors : list of floats
             The corresponding measurement errors
         obs_line_names : list of str
