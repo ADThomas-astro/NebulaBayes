@@ -1,5 +1,7 @@
 from __future__ import print_function, division
+import logging
 import numpy as np  # Core numerical library
+from ._compat import _str_type  # Compatibility
 
 
 """
@@ -8,6 +10,10 @@ estimation.
 
 Adam D. Thomas 2017
 """
+
+
+
+NB_logger = logging.getLogger("NebulaBayes")
 
 
 
@@ -101,7 +107,7 @@ def calculate_prior(user_input, DF_obs, grids_dict, grid_spec, grid_rel_err):
         if prior.shape != grid_spec.shape:
             raise ValueError("The prior array must have the same shape as the "
                              "interpolated grid")
-    elif isinstance(user_input, str):
+    elif isinstance(user_input, _str_type):
         if user_input.upper() == "UNIFORM":  # Case-insensitive
             prior = calculate_uniform_prior(grids_dict)
         else:
@@ -128,7 +134,7 @@ def calculate_prior(user_input, DF_obs, grids_dict, grid_spec, grid_rel_err):
     if prior.min() < 0:
         raise ValueError("The prior contains a negative value")
     if np.all(prior == 0):
-        print("WARNING: The prior is entirely zero")
+        NB_logger.warning("The prior is entirely zero")
 
     # Return linear prior, which will be normalised later
     return prior

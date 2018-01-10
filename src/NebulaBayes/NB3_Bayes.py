@@ -1,6 +1,7 @@
 from __future__ import print_function, division
 from collections import OrderedDict as OD
 import itertools    # For combinatorial combinations
+import logging
 import os.path
 
 import numpy as np  # Core numerical library
@@ -22,6 +23,10 @@ This module defines two custom NebulaBayes classes: NB_nd_pdf and NB_Result.
 
 Adam D. Thomas 2015 - 2017
 """
+
+
+
+NB_logger = logging.getLogger("NebulaBayes")
 
 
 
@@ -517,7 +522,7 @@ class NB_Result(object):
         self._normalise_grid_arrays(Interpd_grids, DF_obs.norm_line)
 
         # Calculate the prior over the grid:
-        print("Calculating prior...")
+        NB_logger.info("Calculating prior...")
         raw_prior = calculate_prior(input_prior, DF_obs,
                                     Interpd_grids.grids["No_norm"],
                                     grid_spec=Interpd_grids._Grid_spec,
@@ -526,7 +531,7 @@ class NB_Result(object):
                                                                 DF_obs=DF_obs)
 
         # Calculate the likelihood over the grid:
-        print("Calculating likelihood...")
+        NB_logger.info("Calculating likelihood...")
         raw_likelihood = self._calculate_likelihood(Interpd_grids,
                                                     DF_obs.norm_line)
         self.Likelihood = NB_nd_pdf(raw_likelihood, self, Interpd_grids,
@@ -534,12 +539,12 @@ class NB_Result(object):
 
         # Calculate the posterior using Bayes' Theorem:
         # (note that the prior and likelihood pdfs are now normalised)
-        print("Calculating posterior using Bayes' Theorem...")
+        NB_logger.info("Calculating posterior using Bayes' Theorem...")
         raw_posterior = self.Likelihood.nd_pdf * self.Prior.nd_pdf
         if np.all(raw_posterior == 0):
-            print("WARNING: The posterior is all zero.  The prior and "
-                  "likelihood have together completely excluded all models in "
-                  "the grid, within the numerical precision")
+            NB_logger.warning("The posterior is all zero.  The prior and "
+                          "likelihood have together completely excluded all "
+                          "models in the grid, within the numerical precision")
         self.Posterior = NB_nd_pdf(raw_posterior, self, Interpd_grids,
                                    name="Posterior", DF_obs=DF_obs)
 
@@ -608,10 +613,10 @@ class NB_Result(object):
         where_bad_BD = (grid_BD_arr >= obs_BD)
         if np.any(where_bad_BD):
             n_bad = np.sum(where_bad_BD)
-            print("WARNING: Observed Balmer decrement is below the " +
-                  "predicted decrement at {0} ".format(n_bad) +
-                  "interpolated gridpoints.  Dereddening will not be " +
-                  "applied at these points")
+            NB_logger.warning("Observed Balmer decrement is below the " +
+                        "predicted decrement at {0} ".format(n_bad) +
+                        "interpolated gridpoints.  Dereddening will not be " +
+                        "applied at these points")
         for flux_arr, obs_flux in zip(obs_flux_arrs, DF_obs["Flux"].values):
             flux_arr[where_bad_BD] = obs_flux
         for err_arr, obs_err in zip(obs_flux_err_arrs, DF_obs["Flux_err"].values):
@@ -752,7 +757,7 @@ class NB_Result(object):
                                     # to choose the correct plot config options
                 Line_PDF.Grid_spec.param_display_names = \
                                             Interpd_grids.param_display_names
-                print("    Plotting PDF for line {0}...".format(line))
+                NB_logger.info("    Plotting PDF for line {0}...".format(line))
                 self.Plotter(Line_PDF, outname, config=self.Plot_Config)
 
         # Roughly normalise; will be properly normalised later
@@ -762,8 +767,8 @@ class NB_Result(object):
 
         likelihood = np.exp(log_likelihood)  # The linear likelihood n-D array
         if np.all(likelihood == 0):  # If log_likelihood was all -inf
-            print("WARNING: The likelihood is all zero - no models are a "
-                  "reasonable fit to the data")
+            NB_logger.warning("The likelihood is all zero - no models are a "
+                            "reasonable fit to the data")
         return likelihood
 
 

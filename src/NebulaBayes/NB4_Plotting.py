@@ -7,6 +7,7 @@ from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.ticker as ticker  # Customise tick placement
 import numpy as np  # Core numerical library
 import pandas as pd # For tables ("DataFrame"s)
+from ._compat import _str_type  # Compatibility
 
 
 """
@@ -92,7 +93,7 @@ def _make_plot_annotation(Plot_Config_1, NB_nd_pdf):
                                                              pdf_name.lower()))
     plot_anno += str(best_dict["table"]) + "\n\n"
     plot_anno += r"$\chi^2_r = ${0:.1f}".format(best_dict["chi2"])
-    if not isinstance(best_dict["extinction_Av_mag"], str):
+    if not isinstance(best_dict["extinction_Av_mag"], _str_type):
         # extinction_Av_mag only calculated when deredden is True,
         # otherwise it's set to the string "NA (deredden is False)"
         plot_anno += "\n" + r"$A_v = ${0:.1f} mag".format(

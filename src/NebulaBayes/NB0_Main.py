@@ -1,5 +1,6 @@
 from __future__ import print_function, division
 from collections import OrderedDict as OD
+import logging
 
 import numpy as np  # Core numerical library
 import pandas as pd # For tables ("DataFrame"s)
@@ -7,6 +8,27 @@ from . import NB1_Process_grids
 from . import NB3_Bayes
 from .NB4_Plotting import Plot_Config, _make_plot_annotation, ND_PDF_Plotter
 from ._version import __version__
+from ._compat import _str_type  # Compatibility
+
+
+
+def _configure_logger():
+    """
+    Create a logger for NebulaBayes so the user can easily control verbosity
+    of the output.  We set the level of the "root" logger to debug.
+    """
+    NB_logger = logging.getLogger("NebulaBayes")
+    Handler_1 = logging.StreamHandler()
+    # Set the NB logger and the root logger to show all messages
+    Handler_1.setLevel(logging.DEBUG)
+    logging.getLogger("").setLevel(logging.DEBUG)  # For root logger
+    # Set a format which works well for console output:
+    Formatter_1 = logging.Formatter("%(levelname)-8s %(message)s")
+    Handler_1.setFormatter(Formatter_1)
+    NB_logger.addHandler(Handler_1)
+    return NB_logger
+
+NB_logger = _configure_logger()
 
 
 
@@ -92,11 +114,12 @@ class NB_Model(object):
             the input grid table, before interpolation.  Arrays are
             accessed as e.g. Raw_grids.grids["OIII5007"]
         """
-        print("Initialising NebulaBayes (v{0}) model...".format(__version__))
+        NB_logger.info("Initialising NebulaBayes (v{0}) model...".format(
+                                                                  __version__))
 
         if grid_params is None:
             # Note that grid_table is validated when loading the table
-            if isinstance(grid_table, str) and grid_table in ["HII", "NLR"]:
+            if isinstance(grid_table,_str_type) and grid_table in ["HII","NLR"]:
                 if grid_table == "HII":
                     grid_params = ["log U", "log P/k", "12 + log O/H"]
                 elif grid_table == "NLR":
@@ -248,6 +271,13 @@ class NB_Model(object):
                     which may be used to save a customised figure (e.g. with
                     annotations).  See the "docs/Example-advanced.py" file for
                     an example function, showing the arguments it must accept.
+        verbosity : str
+            Determine how much information is printed to the terminal by
+            setting the level of the NebulaBayes logger.  Allowed levels (in
+            order of more to less output) are "DEBUG", "INFO" and "WARNING".
+            The logger object may be accessed as NebulaBayes.NB_logger.
+            Default: "DEBUG"
+
 
         Returns
         -------
@@ -328,8 +358,6 @@ class NB_Model(object):
                 options for each of the types of plots
 
         """
-        print("\nRunning NebulaBayes parameter estimation...")
-
         if len(set(obs_line_names)) != len(obs_line_names):
             raise ValueError("obs_line_names are not all unique")
         line_names_upper = [l.upper() for l in obs_line_names]
@@ -391,12 +419,18 @@ class NB_Model(object):
             output_locations[key] = kwargs.pop(key, None)
             # Default None means "Don't produce the relevant output"
 
+        verbosity = kwargs.pop("verbosity", "DEBUG")  # Default "DEBUG"
+        if verbosity not in ["DEBUG", "INFO", "WARNING"]:
+            raise ValueError("verbosity must be 'DEBUG', 'INFO', or 'WARNING'")
+        NB_logger.setLevel(verbosity)
+
         # Any remaining keyword arguments that weren't used?
         if len(kwargs) > 0:
             raise ValueError("Unknown keyword argument(s): " +
                              ", ".join("'{0}'".format(k) for k in kwargs.keys()))
 
         #----------------------------------------------------------------------
+        NB_logger.info("Running NebulaBayes parameter estimation...")
         # Create a "NB_Result" object instance, which involves calculating
         # the prior, likelihood and posterior, along with parameter estimates:
         Result = NB3_Bayes.NB_Result(self.Interpd_grids, DF_obs, self._Plotter,
@@ -422,11 +456,13 @@ class NB_Model(object):
             # Add plot annotation to Plot_Config_1 ("table_for_plot" attribute)
             _make_plot_annotation(Plot_Config_1, NB_nd_pdf)
             NB_nd_pdf.Grid_spec.param_display_names = list(
-                                                   param_display_names.values())
-            print("Plotting corner plot for the", ndpdf_name.lower(), "...")
+                                                  param_display_names.values())
+            NB_logger.info("Plotting corner plot for the {0}...".format(
+                                                           ndpdf_name.lower()))
             self._Plotter(NB_nd_pdf, out_image_name, config=Plot_Config_1)
 
-        print("NebulaBayes parameter estimation finished.")
+        NB_logger.info("NebulaBayes parameter estimation finished.")
+        NB_logger.setLevel("DEBUG")  # Reset
         return Result
 
 

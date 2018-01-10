@@ -39,7 +39,7 @@ adam.thomas AT anu.edu.au
 """
 
 
-from .NB0_Main import NB_Model
+from .NB0_Main import NB_Model, NB_logger
 from ._version import __version__
 
 # N.B. The docstring at the top may be accessed interactively in ipython3 with:

@@ -1,6 +1,7 @@
 from __future__ import print_function, division
 from collections import OrderedDict as OD
 import itertools  # For Cartesian product
+import logging
 import os  # For path manipulations
 
 from astropy.io import fits  # For reading FITS binary tables
@@ -8,6 +9,7 @@ from astropy.table import Table  # For FITS table to pandas DataFrame conversion
 import numpy as np  # Core numerical library
 import pandas as pd # For tables ("DataFrame"s)
 from scipy.ndimage import map_coordinates  # For spline interpolation in 3D
+from ._compat import _str_type  # Compatibility
 
 # Directory of built-in grids
 GRIDS_LOCATION = os.path.join(os.path.dirname(__file__), "grids")
@@ -19,6 +21,9 @@ model flux arrays, and interpolate those arrays to higher resolution.
 
 Adam D. Thomas 2015 - 2017
 """
+
+
+NB_logger = logging.getLogger("NebulaBayes")
 
 
 
@@ -138,9 +143,9 @@ def load_grid_data(grid_table):
     -------
     DF_grid : pd.DataFrame instance
     """
-    print("Loading input grid data...")
+    NB_logger.info("Loading input grid data...")
 
-    if isinstance(grid_table, str):
+    if isinstance(grid_table, _str_type):
         if grid_table in ["HII", "NLR"]:
             # Use a built-in grid.  Resolve shorthand string to the full path.
             grid_name = "NB_{0}_grid.fits.gz".format(grid_table)
@@ -162,7 +167,8 @@ def load_grid_data(grid_table):
         # Copy the table, so we don't surprise the user when we modify it!
         DF_grid = grid_table.copy()
     else:
-        raise TypeError("grid_table should be a string or DataFrame")
+        raise TypeError("grid_table should be a string or DataFrame, not a " +
+                        str(type(grid_table)))
 
     return DF_grid
 
@@ -205,8 +211,8 @@ def process_raw_table(DF_grid, grid_params, lines_list):
             raise ValueError("A model flux value for emission line " + line +
                              " is negative.")
         if np.all(DF_grid[line].values == 0):
-            print("WARNING: All model fluxes for emission line " + line +
-                  " are zero.")
+            NB_logger.warning("All model fluxes for emission line "
+                            "{0} are zero.".format(line))
 
         # Ensure line flux columns are a numeric data type
         DF_grid[line] = pd.to_numeric(DF_grid[line], errors="raise")
@@ -258,7 +264,7 @@ def construct_raw_grids(DF_grid, grid_params, lines_list):
 
     #--------------------------------------------------------------------------
     # Construct the raw model grids as a multidimensional array for each line
-    print("Building flux arrays for the model grids...")
+    NB_logger.info("Building flux arrays for the model grids...")
     # We use an inefficient method for building the model grids because we're
     # not assuming anything about the order of the rows in the input table.
     # First reduce DF_grid to include only the required columns:
@@ -313,8 +319,8 @@ def interpolate_flux_arrays(Raw_grids, interpd_shape, interp_order):
     """
     interp_types = {1: "linear", 3: "cubic"}
     interp_type = interp_types[interp_order]
-    print("Resampling model emission line flux grids to shape {0} using "
-          "{1} interpolation...".format(tuple(interpd_shape), interp_type))
+    NB_logger.info("Resampling model emission line flux grids to shape {0} "
+        "using {1} interpolation...".format(tuple(interpd_shape), interp_type))
 
     # Initialise NB_Grid object for interpolated arrays
     # First find the interpolated values of the grid parameters
@@ -337,7 +343,7 @@ def interpolate_flux_arrays(Raw_grids, interpd_shape, interp_order):
 
     # Iterate emission lines, doing the interpolation:
     for emission_line, raw_flux_arr in Raw_grids.grids.items():
-        print("    Interpolating for {0}...".format(emission_line))
+        NB_logger.info("    Interpolating for {0}...".format(emission_line))
         if interp_order == 1:
             interp_vals, interp_arr = Interpolator(raw_flux_arr)
             for a1, a2 in zip(interp_vals, Interpd_grids.param_values_arrs):
@@ -352,10 +358,10 @@ def interpolate_flux_arrays(Raw_grids, interpd_shape, interp_order):
     n_lines = len(Interpd_grids.grids["No_norm"])
     line_0, arr_0 = list(Interpd_grids.grids["No_norm"].items())[0]
     arr_MB = arr_0.nbytes / 1e6
-    print("Interpolated flux grid size is {0:.2f}MB for 1 line".format(
-                                                               arr_MB), end="")
-    print(" and {0:.2f}MB total for all {1} lines".format(arr_MB*n_lines,
-                                                          n_lines))
+    NB_logger.info("Interpolated flux grid size is {0:.2f}MB for 1 line".format(
+                                                               arr_MB) +
+                 " and {0:.2f}MB total for all {1} lines".format(
+                                                      arr_MB*n_lines, n_lines))
 
     # Set negative values to zero: (there shouldn't be any if we're using
     # linear interpolation)
