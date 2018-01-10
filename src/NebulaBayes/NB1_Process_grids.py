@@ -19,7 +19,7 @@ GRIDS_LOCATION = os.path.join(os.path.dirname(__file__), "grids")
 This module contains code to load the model grid database table, constuct
 model flux arrays, and interpolate those arrays to higher resolution.
 
-Adam D. Thomas 2015 - 2017
+Adam D. Thomas 2015 - 2018
 """
 
 

@@ -21,7 +21,7 @@ pdfs to 1D and 2D marginalised pdfs, and generally do Bayesian parameter
 estimation.
 This module defines two custom NebulaBayes classes: NB_nd_pdf and NB_Result.
 
-Adam D. Thomas 2015 - 2017
+Adam D. Thomas 2015 - 2018
 """
 
 

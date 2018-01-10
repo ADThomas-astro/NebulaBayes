@@ -11,9 +11,9 @@ from ._compat import _str_type  # Compatibility
 
 
 """
-Code for plotting "corner plots" of marginalised ND PDFs.
+Code for plotting "corner plots" showing marginalised n-dimensional PDFs.
 
-Adam D. Thomas 2015 - 2017
+Adam D. Thomas 2015 - 2018
 """
 
 

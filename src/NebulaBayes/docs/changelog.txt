@@ -8,3 +8,6 @@ v0.9.4  January 2018:  Allowed the use of linear or cubic interpolation when
         interpolating input model grid flux arrays, with the new added keyword
         option "interp_order".  Previously only linear interpolation was
         available.
+v0.9.5  January 2018:  Convert print statements to use python logging, and add
+        the "verbosity" argument to NB_Model.__call__.  Some minor changes to
+        better support unicode in python 2.
