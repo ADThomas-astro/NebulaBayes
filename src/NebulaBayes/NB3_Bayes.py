@@ -542,9 +542,9 @@ class NB_Result(object):
         NB_logger.info("Calculating posterior using Bayes' Theorem...")
         raw_posterior = self.Likelihood.nd_pdf * self.Prior.nd_pdf
         if np.all(raw_posterior == 0):
-            NB_logger.warning("The posterior is all zero.  The prior and "
-                          "likelihood have together completely excluded all "
-                          "models in the grid, within the numerical precision")
+            NB_logger.warning("WARNING: The posterior is all zero.  The prior "
+                          "and likelihood have together completely excluded all"
+                          " models in the grid, within the numerical precision")
         self.Posterior = NB_nd_pdf(raw_posterior, self, Interpd_grids,
                                    name="Posterior", DF_obs=DF_obs)
 
@@ -613,7 +613,7 @@ class NB_Result(object):
         where_bad_BD = (grid_BD_arr >= obs_BD)
         if np.any(where_bad_BD):
             n_bad = np.sum(where_bad_BD)
-            NB_logger.warning("Observed Balmer decrement is below the " +
+            NB_logger.warning("WARNING: Observed Balmer decrement is below the " +
                         "predicted decrement at {0} ".format(n_bad) +
                         "interpolated gridpoints.  Dereddening will not be " +
                         "applied at these points")
@@ -767,8 +767,8 @@ class NB_Result(object):
 
         likelihood = np.exp(log_likelihood)  # The linear likelihood n-D array
         if np.all(likelihood == 0):  # If log_likelihood was all -inf
-            NB_logger.warning("The likelihood is all zero - no models are a "
-                            "reasonable fit to the data")
+            NB_logger.warning("WARNING: The likelihood is all zero - no models"
+                              " are a reasonable fit to the data")
         return likelihood
 
 

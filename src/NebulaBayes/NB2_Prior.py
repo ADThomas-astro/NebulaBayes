@@ -134,7 +134,7 @@ def calculate_prior(user_input, DF_obs, grids_dict, grid_spec, grid_rel_err):
     if prior.min() < 0:
         raise ValueError("The prior contains a negative value")
     if np.all(prior == 0):
-        NB_logger.warning("The prior is entirely zero")
+        NB_logger.warning("WARNING: The prior is entirely zero")
 
     # Return linear prior, which will be normalised later
     return prior

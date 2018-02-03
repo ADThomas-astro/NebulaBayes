@@ -1,12 +1,16 @@
 from __future__ import print_function, division
 import itertools  # For Cartesian product
+import sys  # For python version
 
+from matplotlib import __version__ as __mpl_version__
 import matplotlib.pyplot as plt  # Plotting
+from matplotlib.backends.backend_pdf import PdfPages  # For pdf metadata
 # For generating a custom colourmap:
 from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.ticker as ticker  # Customise tick placement
 import numpy as np  # Core numerical library
 import pandas as pd # For tables ("DataFrame"s)
+from ._version import __version__ as __NB_version__
 from ._compat import _str_type  # Compatibility
 
 
@@ -247,8 +251,6 @@ class ND_PDF_Plotter(object):
 
 
 
-
-
     def __call__(self, NB_nd_pdf, out_filename, config=Plot_Config_Default):
         """
         Generate a "corner plot" of all the 2D and 1D marginalised pdfs for an
@@ -439,6 +441,14 @@ class ND_PDF_Plotter(object):
                             horizontalalignment="left", verticalalignment="top", 
                             family="monospace", fontsize=self.fs1)
 
+        if out_filename.endswith(".pdf"):  # Add metadata if output is a .pdf
+            Pdf_fig_1 = PdfPages(out_filename)  # Pdf_fig_1 will be closed later
+            metadata_dict = Pdf_fig_1.infodict()
+            metadata_dict["Creator"] = (metadata_dict["Creator"] + " ; " +
+                            "NebulaBayes {0} ; matplotlib {1} ; numpy {2} ; "
+                            "python {3}".format(__NB_version__, __mpl_version__,
+                            np.__version__, sys.version))
+
         # Call the user's "callback" function, if it was supplied, otherwise
         # we save the figure
         callback = config1["callback"]
@@ -449,8 +459,11 @@ class ND_PDF_Plotter(object):
             plt.close(self._fig)
             del self._fig
             del self._axes
-        else:
-            # Save the figure
-            self._fig.savefig(out_filename)
+        else:  # Save the figure
+            if out_filename.endswith(".pdf"):
+                plt.savefig(Pdf_fig_1, format="pdf")
+                Pdf_fig_1.close()
+            else:
+                self._fig.savefig(out_filename)
 
 

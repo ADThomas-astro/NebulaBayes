@@ -23,7 +23,7 @@ def _configure_logger():
     Handler_1.setLevel(logging.DEBUG)
     logging.getLogger("").setLevel(logging.DEBUG)  # For root logger
     # Set a format which works well for console output:
-    Formatter_1 = logging.Formatter("%(levelname)-8s %(message)s")
+    Formatter_1 = logging.Formatter("%(message)s")
     Handler_1.setFormatter(Formatter_1)
     NB_logger.addHandler(Handler_1)
     return NB_logger
@@ -419,7 +419,8 @@ class NB_Model(object):
             output_locations[key] = kwargs.pop(key, None)
             # Default None means "Don't produce the relevant output"
 
-        verbosity = kwargs.pop("verbosity", "DEBUG")  # Default "DEBUG"
+        default_verbosity = "DEBUG"
+        verbosity = kwargs.pop("verbosity", default_verbosity)
         if verbosity not in ["DEBUG", "INFO", "WARNING"]:
             raise ValueError("verbosity must be 'DEBUG', 'INFO', or 'WARNING'")
         NB_logger.setLevel(verbosity)
@@ -462,7 +463,7 @@ class NB_Model(object):
             self._Plotter(NB_nd_pdf, out_image_name, config=Plot_Config_1)
 
         NB_logger.info("NebulaBayes parameter estimation finished.")
-        NB_logger.setLevel("DEBUG")  # Reset
+        NB_logger.setLevel(default_verbosity)  # Reset
         return Result
 
 

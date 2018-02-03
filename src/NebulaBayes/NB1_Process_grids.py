@@ -211,8 +211,8 @@ def process_raw_table(DF_grid, grid_params, lines_list):
             raise ValueError("A model flux value for emission line " + line +
                              " is negative.")
         if np.all(DF_grid[line].values == 0):
-            NB_logger.warning("All model fluxes for emission line "
-                            "{0} are zero.".format(line))
+            NB_logger.warning("WARNING: All model fluxes for emission line "
+                              "{0} are zero.".format(line))
 
         # Ensure line flux columns are a numeric data type
         DF_grid[line] = pd.to_numeric(DF_grid[line], errors="raise")
@@ -358,10 +358,9 @@ def interpolate_flux_arrays(Raw_grids, interpd_shape, interp_order):
     n_lines = len(Interpd_grids.grids["No_norm"])
     line_0, arr_0 = list(Interpd_grids.grids["No_norm"].items())[0]
     arr_MB = arr_0.nbytes / 1e6
-    NB_logger.info("Interpolated flux grid size is {0:.2f}MB for 1 line".format(
-                                                               arr_MB) +
-                 " and {0:.2f}MB total for all {1} lines".format(
-                                                      arr_MB*n_lines, n_lines))
+    NB_logger.debug("Interpolated flux grid size is {0:.2f}MB for 1"
+                    " line and {0:.2f}MB total for all {1} lines".format(
+                                            arr_MB, arr_MB*n_lines, n_lines))
 
     # Set negative values to zero: (there shouldn't be any if we're using
     # linear interpolation)

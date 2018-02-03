@@ -453,8 +453,9 @@ class Test_real_data_with_dereddening(unittest.TestCase):
                                           cls.__name__ + "_prior.pdf")
         cls.likelihood_plot = os.path.join(TEST_DIR,
                                           cls.__name__ + "_likelihood.pdf")
+        # Test saving as a png
         cls.posterior_plot = os.path.join(TEST_DIR,
-                                          cls.__name__ + "_posterior.pdf")
+                                          cls.__name__ + "_posterior.png")
         cls.estimate_table = os.path.join(TEST_DIR,
                                     cls.__name__ + "_parameter_estimates.csv")
         # Test different values along each dimension in interpd_grid_shape
