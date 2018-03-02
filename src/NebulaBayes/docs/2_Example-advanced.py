@@ -41,6 +41,7 @@ print("\nRunning filtered grid, prior callback, plot callback example...")
 def filter_HII_grid():
     """
     Filter the built-in HII grid to reduce the covered parameter space.
+    Returns the grid table as a pandas DataFrame.
     """
     # First load the binary grid table and convert to a pandas DataFrame table
     NB_dir = os.path.dirname(os.path.realpath(NebulaBayes.__file__))
@@ -63,7 +64,7 @@ def filter_HII_grid():
 
 DF_grid = filter_HII_grid()
 grid_params = ["12 + log O/H", "log U"]  # log P/k was removed
-interp_shape = [160, 80]  # Interpolated points along each dimension
+interp_shape = [160, 80]  # Number of interpolated points along each dimension
 # Specify non-dereddened HII region emisson lines and fluxes  
 linelist = ["OII3726_29", "Hbeta", "OIII5007", "OI6300", "Halpha", "NII6583",
             "SII6716", "SII6731"]
@@ -131,7 +132,7 @@ def calculate_custom_prior(DF_obs, grids_dict, grid_spec, grid_rel_err):
     slice_NLR = tuple(slice_NLR)
     contribution_U = np.ones(grid_spec.shape) * log_U_1D_prior[slice_NLR]
 
-    # Combine the two contributions to the prior
+    # Combine the two contributions to the prior, weighted equally
     prior = contribution_U * contribution_N2O2
 
     # The prior PDF will be properly normalised by NebulaBayes later
