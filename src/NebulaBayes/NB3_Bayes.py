@@ -299,18 +299,18 @@ class NB_nd_pdf(object):
             DF_best["Flux_err_dered"] = obs_flux_err_dered
             DF_best["Obs_S/N_dered"] = (DF_best["Obs_dered"].values /
                                         DF_best["Flux_err_dered"].values   )
-            DF_best["Delta_(SDs)"] = ((DF_best["Model"].values - DF_best["Obs_dered"].values)
+            DF_best["Resid_Stds"] = ((DF_best["Obs_dered"].values - DF_best["Model"].values)
                                         / DF_best["Flux_err_dered"].values )
             # Columns to include in output and their order (index is "Line"):
-            cols_to_include = ["Model", "Obs_dered", "Obs_S/N_dered", "Delta_(SDs)"]
+            include_cols = ["In_lhood?", "Obs_dered", "Model", "Resid_Stds", "Obs_S/N_dered"]
         else:
             DF_best["Obs_S/N"] = DF_best["Obs"].values / DF_best["Flux_err"].values
-            DF_best["Delta_(SDs)"] = ((DF_best["Model"].values - DF_best["Obs"].values)
+            DF_best["Resid_Stds"] = ((DF_best["Obs"].values - DF_best["Model"].values)
                                         / DF_best["Flux_err"].values )
             # Columns to include in output and their order (index is "Line"):
-            cols_to_include = ["Model", "Obs", "Obs_S/N", "Delta_(SDs)"]
+            include_cols = ["In_lhood?", "Obs", "Model", "Resid_Stds", "Obs_S/N"]
         
-        self.best_model["table"] = DF_best[cols_to_include]
+        self.best_model["table"] = DF_best[include_cols]
 
 
 
@@ -692,7 +692,9 @@ class NB_Result(object):
         # issues in parts of the grid where the models fit the data very badly.
         # Initialise log likelihood with 0 everywhere
         log_likelihood = np.zeros(Interpd_grids.shape, dtype="float")
-        for i, line in enumerate(self.DF_obs.index):
+        obs_lines = self.DF_obs.index.values
+        likelihood_lines = obs_lines[self.DF_obs["In_lhood?"].values == "Y"]
+        for i, line in enumerate(likelihood_lines):
             pred_flux_i = Interpd_grids.grids[norm_line + "_norm"][line]
             if np.all(pred_flux_i == 0):
                 raise ValueError("Pred flux for {0} all zero".format(line))

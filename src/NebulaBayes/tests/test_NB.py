@@ -751,6 +751,59 @@ class Test_data_that_matches_models_poorly(unittest.TestCase):
 
 ###############################################################################
 
+class Test_likelihood_lines_keyword(unittest.TestCase):
+    """
+    Test inputting fluxes and errors that aren't used in the likelihood, and
+    test that these lines may be used in a prior.
+    """
+    longMessage = True  # Append messages to existing message
+
+    lines       = ["Halpha", "Hbeta", "OIII4363", "OIII5007", "NII6583"]
+    obs_fluxes  = [     3.1,       1,        1.8,        5.1,       1.2]
+    obs_errs    = [    0.01,       1,       0.01,       0.01,      0.01]
+    exclude_lines = ["Halpha", "OIII5007"]
+
+    @classmethod
+    def setUpClass(cls):
+        cls.NB_Model_1 = NB_Model("HII", line_list=cls.lines,
+                                  interpd_grid_shape=[30,30,30])
+        kwargs = {"deredden": False, "norm_line": "Hbeta",
+            "prior": [("NII6583", cls.exclude_lines[0])],
+            "likelihood_lines": [l for l in cls.lines if l not in cls.exclude_lines],
+            "verbosity": "WARNING",
+        }
+        cls.Result = cls.NB_Model_1(cls.obs_fluxes, cls.obs_errs, cls.lines,
+                                    **kwargs)
+        cls.DF_best = cls.Result.Posterior.best_model["table"]
+
+    def test_non_likelihood_lines_in_best_model_table(self):
+        """
+        Regression test - lines not included in likelihood calculation should
+        still appear in the "best model" table.
+        """
+        self.assertTrue(all(l in self.DF_best.index for l in self.exclude_lines))
+
+    def test_best_model_table_fields(self):
+        """
+        Regression test - check fields of best model table (we test for the
+        case of no dereddening; field names are different with dereddening).
+        """
+        correct_fields = ["In_lhood?", "Obs", "Model", "Resid_Stds", "Obs_S/N"]
+        t_fields = self.DF_best.columns.tolist()
+        self.assertTrue(t_fields == correct_fields, t_fields)
+
+    def test_In_lhood_field_in_best_model_table(self):
+        """
+        Regression test - the "In_lhood?" field in the best model table should
+        correctly identify if a line was used in the likelihood.
+        """
+        correct = [("N" if l in self.exclude_lines else "Y") for l in self.lines]
+        self.assertTrue(self.DF_best["In_lhood?"].values.tolist() == correct)
+
+
+
+###############################################################################
+
 class Test_raising_errors(unittest.TestCase):
     """
     Test raising errors on bad inputs

@@ -127,6 +127,7 @@ class ND_PDF_Plotter(object):
                                        # grid parameter values (optional)
 
         # Some hard-coded plotting configuration
+        self.dpi = 200  # Dots per inch image resolution
         self.fs1 = 4.5  # Fontsize of annotation table (if shown)
         self.label_fontsize = 8
         self.tick_fontsize = 7
@@ -461,9 +462,9 @@ class ND_PDF_Plotter(object):
             del self._axes
         else:  # Save the figure
             if out_filename.endswith(".pdf"):
-                plt.savefig(Pdf_fig_1, format="pdf")
+                plt.savefig(Pdf_fig_1, format="pdf", dpi=self.dpi)
                 Pdf_fig_1.close()
             else:
-                self._fig.savefig(out_filename)
+                self._fig.savefig(out_filename, dpi=self.dpi)
 
 

@@ -3,12 +3,15 @@ v0.9.3  November 2017:  Some optimisations, without any behaviour changes.
         Calculating the likelihood is now significantly faster for large
         interpolated grids and where flux upper bounds aren't used.  This was
         achieved by avoiding using intermediate arrays in the calculations.
-        Marginalising PDFs is now faster for grids with 4 or more dimensiions
+        Marginalising PDFs is now faster for grids with 4 or more dimensions
         due to the use of a cache.
 v0.9.4  January 2018:  Allowed the use of linear or cubic interpolation when
-        interpolating input model grid flux arrays, with the new added keyword
-        option "interp_order".  Previously only linear interpolation was
-        available.
+        interpolating input model grid flux arrays, with the new keyword option
+        "interp_order".  Previously only linear interpolation was available.
 v0.9.5  Jan-Feb 2018:  Convert print statements to use python logging, and add
         the "verbosity" argument to NB_Model.__call__.  Some minor changes to
         better support unicode in python 2, and include metadata in .pdf files.
+v0.9.6  Mar 2018:  Add "likelihood_lines" keyword option.  In the "best model"
+        tables, the "Delta_(SDs)" field was renamed to "Resid_Stds" and now
+        provides "(obs - model)/sigma" instead of "(model - obs)/sigma".  The
+        resolution of output images was increased.

@@ -201,6 +201,12 @@ class NB_Model(object):
             actually ratios to this line, the choice may affect parameter
             estimation.  Where the interpolated model grid for norm_line has
             value zero, the normalised grids are set to zero.  Default: "Hbeta"
+        likelihood_lines : list of str
+            A subset of obs_line_names that specifies the lines to include in
+            the likelihood calculation.  By default, all the obs_line_names are
+            used.  Lines that appear in obs_line_names but aren't used in the
+            likelihood are included in the best_model_table (see below), and
+            may be used in line ratio priors (see below).
         deredden : bool
             De-redden observed fluxes to match the Balmer decrement at each
             interpolated grid point?  Only supported if norm_line == "Hbeta",
@@ -375,6 +381,7 @@ class NB_Model(object):
             else:
                 raise ValueError("norm_line '{0}'".format(norm_line) +
                                  " not found in obs_line_names")
+        likelihood_lines = kwargs.pop("likelihood_lines", None)  # Default None
         deredden = kwargs.pop("deredden", False)  # Default False
         assert isinstance(deredden, bool)
         if deredden and not all((l in obs_line_names) for l in ["Halpha","Hbeta"]):
@@ -387,7 +394,8 @@ class NB_Model(object):
         # Process the input observed data; DF_obs is a pandas DataFrame table
         # where the emission line names index the rows:
         DF_obs = _process_observed_data(obs_fluxes, obs_flux_errors,
-                       obs_line_names, obs_wavelengths, norm_line=norm_line)
+                        obs_line_names, obs_wavelengths=obs_wavelengths,
+                        norm_line=norm_line, likelihood_lines=likelihood_lines)
         for line in DF_obs.index:  # Check observed emission lines are in grid
             if line not in self.Interpd_grids.grids["No_norm"]:
                 raise ValueError("The line {0}".format(line) + 
@@ -469,7 +477,7 @@ class NB_Model(object):
 
 
 def _process_observed_data(obs_fluxes, obs_flux_errors, obs_line_names,
-                                                    obs_wavelengths, norm_line):
+                                obs_wavelengths, norm_line, likelihood_lines):
     """
     Error-check the input observed emission line data, form it into a pandas
     DataFrame table, and normalise by the specified line.
@@ -494,9 +502,9 @@ def _process_observed_data(obs_fluxes, obs_flux_errors, obs_line_names,
         if obs_wavelengths.size != n_measured:
             raise ValueError("obs_wavelengths must have same length as obs_fluxes")
         # Check input wavelengths:
-        if np.any(~np.isfinite(obs_wavelengths)): # Any non-finite?
+        if np.any(~np.isfinite(obs_wavelengths)):  # Any non-finite?
             raise ValueError("An emission line wavelength isn't finite")
-        if np.any(obs_wavelengths <= 0): # Any non-positive?
+        if np.any(obs_wavelengths <= 0):  # Any non-positive?
             raise ValueError("An emission line wavelength isn't positive")
 
     # Check input measured fluxes:
@@ -512,9 +520,23 @@ def _process_observed_data(obs_fluxes, obs_flux_errors, obs_line_names,
     if np.any(obs_flux_errors <= 0): # All positive?
         raise ValueError("The flux error for an emission line isn't positive")
 
+    # Check likelihood_lines list:
+    if likelihood_lines is None:
+        likelihood_lines = obs_line_names
+    if not all(isinstance(s, _str_type) for s in likelihood_lines):
+        raise TypeError("All items in likelihood_lines must be strings")
+    if len(likelihood_lines) < 2:
+        raise ValueError("likelihood_lines list must have length at least 2")
+    lines_diff = set(likelihood_lines) - set(obs_line_names)
+    if len(lines_diff) > 0:
+        raise ValueError("Lines in likelihood_lines not found in "
+                         "obs_line_names: " + ", ".join(lines_diff))
+
     # Form the data from the observations into a pandas DataFrame table.
     obs_dict = OD([("Line", obs_line_names)])
-    if obs_wavelengths is not None: # Leave out of DataFrame if not provided
+    map_TF = {True: "Y", False: "N"}
+    obs_dict["In_lhood?"] = [map_TF[l in likelihood_lines] for l in obs_line_names]
+    if obs_wavelengths is not None:  # Leave out of DataFrame if not provided
         obs_dict["Wavelength"] = obs_wavelengths
     obs_dict["Flux"] = obs_fluxes
     obs_dict["Flux_err"] = obs_flux_errors

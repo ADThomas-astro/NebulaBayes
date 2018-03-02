@@ -359,7 +359,7 @@ def interpolate_flux_arrays(Raw_grids, interpd_shape, interp_order):
     line_0, arr_0 = list(Interpd_grids.grids["No_norm"].items())[0]
     arr_MB = arr_0.nbytes / 1e6
     NB_logger.debug("Interpolated flux grid size is {0:.2f}MB for 1"
-                    " line and {0:.2f}MB total for all {1} lines".format(
+                    " line and {1:.2f}MB total for all {2} lines".format(
                                             arr_MB, arr_MB*n_lines, n_lines))
 
     # Set negative values to zero: (there shouldn't be any if we're using
