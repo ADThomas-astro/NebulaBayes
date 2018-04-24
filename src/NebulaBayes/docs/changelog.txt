@@ -15,3 +15,4 @@ v0.9.6  Mar 2018:  Add "likelihood_lines" keyword option.  In the "best model"
         tables, the "Delta_(SDs)" field was renamed to "Resid_Stds" and now
         provides "(obs - model)/sigma" instead of "(model - obs)/sigma".  The
         resolution of output images was increased.
+v0.9.7  Added citation info for the NebulaBayes paper to the documentation

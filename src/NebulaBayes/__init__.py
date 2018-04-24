@@ -30,6 +30,10 @@ python (numpy, matplotlib and pandas).
 
 NebulaBayes is heavily based on IZI (Blanc+ 2015).
 
+If you use NebulaBayes, please cite
+http://adsabs.harvard.edu/abs/2018ApJ...856...89T
+\bibitem[Thomas et al.(2018)]{2018ApJ...856...89T} Thomas, A.~D., Dopita, M.~A.,
+Kewley, L.~J., et al.\ 2018, \apj, 856, 89
 
 Adam D. Thomas
 Research School of Astronomy and Astrophysics

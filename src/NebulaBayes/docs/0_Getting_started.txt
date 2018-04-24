@@ -32,6 +32,11 @@ python (numpy, matplotlib and pandas).
 
 NebulaBayes is heavily based on IZI (Blanc+ 2015).
 
+If you use NebulaBayes, please cite
+http://adsabs.harvard.edu/abs/2018ApJ...856...89T
+\bibitem[Thomas et al.(2018)]{2018ApJ...856...89T} Thomas, A.~D., Dopita, M.~A.,
+Kewley, L.~J., et al.\ 2018, \apj, 856, 89
+
 
 Starting out
 ------------
@@ -81,6 +86,8 @@ Nebulabayes and the available options:
         >>> NB_Model??  # Shows source for entire class
     The docstrings describe the input arguments and outputs in detail,
     including descriptions of the objects returned programmatically.
+ 4. The descriptions of theory and implementation in the NebulaBayes paper,
+    Thomas+2018, ApJ, 856, 89
 
 
 
