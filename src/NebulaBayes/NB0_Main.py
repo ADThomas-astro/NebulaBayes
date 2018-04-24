@@ -91,8 +91,8 @@ class NB_Model(object):
             an interpolated grid.  The interpd_grid_shape has a major impact on
             the speed of the grid interpolation and on memory usage.
         interp_order : integer, optional
-            The order of the polynomials used for interpolating model fluxes.
-            Allowed values are 1 (linear) and 3 (cubic).  Default: 1
+            The order of the polynomials used for interpolating model fluxes,
+            either 1 (linear) or 3 (cubic; an experimental option).  Default: 1
         grid_error : float between 0 and 1, optional
             The systematic relative error on grid fluxes, as a linear
             proportion.  Default is 0.35 (average of errors 0.15 dex above and

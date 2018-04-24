@@ -7,8 +7,7 @@ from setuptools import setup
 NAME = "NebulaBayes"
 KEYWORDS = ["astronomy", "Bayesian statistics"]
 CLASSIFIERS = [
-    "Development Status :: 4 - Beta",
-    # "Development Status :: 5 - Production/Stable",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Science/Research",
     "Natural Language :: English",
     "License :: OSI Approved :: MIT License",
