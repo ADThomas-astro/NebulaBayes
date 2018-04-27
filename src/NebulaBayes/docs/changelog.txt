@@ -17,4 +17,9 @@ v0.9.6  Mar 2018:  Add "likelihood_lines" keyword option.  In the "best model"
         resolution of output images was increased.
 v0.9.7  Added citation info for the NebulaBayes paper to the documentation and
         clarified that the cubic interpolation option is experimental. The PyPI
-        "Developement status" was changed from "Beta" to "Production/Stable".
+        "Development status" was changed from "Beta" to "Production/Stable".
+v0.9.8  Corrected a subtle and serious bug in the "likelihood_lines" feature
+        that could result in incorrect likelihood calculations (predictions
+        compared to the wrong observations).  This required changing
+        "obs_flux_arrs" and "obs_flux_err_arrs" to be dictionaries rather than
+        lists (these are public attributes on NB_Result objects).

@@ -19,7 +19,8 @@ from .NB2_Prior import calculate_prior
 Code to calculate the likelihood and posterior over an N-D grid, marginalise
 pdfs to 1D and 2D marginalised pdfs, and generally do Bayesian parameter
 estimation.
-This module defines two custom NebulaBayes classes: NB_nd_pdf and NB_Result.
+This module defines three custom NebulaBayes classes: NB_nd_pdf, NB_Result and
+a CachedIntegrator.
 
 Adam D. Thomas 2015 - 2018
 """
@@ -285,30 +286,34 @@ class NB_nd_pdf(object):
         """
         DF_best = DF_obs.copy() # Index: "Line"; columns: "Flux", "Flux_err"
         # DF_obs may also possibly have a "Wavelength" column
-        DF_best.rename(columns={"Flux":"Obs"}, inplace=True)
+        DF_best.rename(columns={"Flux": "Obs"}, inplace=True)
 
         inds_max = np.unravel_index(self.nd_pdf.argmax(), self.nd_pdf.shape)
         normed_grids = Interpd_grids.grids[DF_obs.norm_line + "_norm"]
         grid_fluxes_max = [normed_grids[l][inds_max] for l in DF_best.index]
         DF_best["Model"] = grid_fluxes_max
         
-        if NB_Result.deredden: # If we dereddened the observed fluxes at each gridpoint
-            obs_flux_dered = [arr[inds_max] for arr in NB_Result.obs_flux_arrs]
-            obs_flux_err_dered = [arr[inds_max] for arr in NB_Result.obs_flux_err_arrs]
-            DF_best["Obs_dered"] = obs_flux_dered
-            DF_best["Flux_err_dered"] = obs_flux_err_dered
+        if NB_Result.deredden:  # Observed fluxes dereddened at each gridpoint?
+            for l in DF_best.index:
+                DF_best.set_value(l, "Obs_dered",
+                                          NB_Result.obs_flux_arrs[l][inds_max])
+                DF_best.set_value(l, "Flux_err_dered",
+                                      NB_Result.obs_flux_err_arrs[l][inds_max])
             DF_best["Obs_S/N_dered"] = (DF_best["Obs_dered"].values /
-                                        DF_best["Flux_err_dered"].values   )
-            DF_best["Resid_Stds"] = ((DF_best["Obs_dered"].values - DF_best["Model"].values)
-                                        / DF_best["Flux_err_dered"].values )
+                                        DF_best["Flux_err_dered"].values)
+            resids = DF_best["Obs_dered"].values - DF_best["Model"].values
+            DF_best["Resid_Stds"] = resids / DF_best["Flux_err_dered"].values
             # Columns to include in output and their order (index is "Line"):
-            include_cols = ["In_lhood?", "Obs_dered", "Model", "Resid_Stds", "Obs_S/N_dered"]
-        else:
-            DF_best["Obs_S/N"] = DF_best["Obs"].values / DF_best["Flux_err"].values
-            DF_best["Resid_Stds"] = ((DF_best["Obs"].values - DF_best["Model"].values)
-                                        / DF_best["Flux_err"].values )
+            include_cols = ["In_lhood?", "Obs_dered", "Model", "Resid_Stds",
+                            "Obs_S/N_dered"]
+        else:  # Observed data weren't dereddened in NebulaBayes
+            DF_best["Obs_S/N"] = (DF_best["Obs"].values /
+                                  DF_best["Flux_err"].values)
+            resids = DF_best["Obs"].values - DF_best["Model"].values
+            DF_best["Resid_Stds"] = resids / DF_best["Flux_err"].values
             # Columns to include in output and their order (index is "Line"):
-            include_cols = ["In_lhood?", "Obs", "Model", "Resid_Stds", "Obs_S/N"]
+            include_cols = ["In_lhood?", "Obs", "Model", "Resid_Stds",
+                            "Obs_S/N"]
         
         self.best_model["table"] = DF_best[include_cols]
 
@@ -566,15 +571,16 @@ class NB_Result(object):
         arrays corresponding to the observed linelist in self.DF_obs.
         """
         DF_obs = self.DF_obs
+        lines = self.DF_obs.index.values.tolist()  # Full observed linelist
         if not self.deredden:
             # Use the input observed fluxes, which presumably were already
             # dereddened if necessary.  The observed fluxes/errors have already
             # been normalised to the norm_line.
-            shape = Interpd_grids.shape
-            self.obs_flux_arrs = [np.full(shape, f) for f in
-                                                    DF_obs["Flux"].values]
-            self.obs_flux_err_arrs = [np.full(shape, e) for e in
-                                                    DF_obs["Flux_err"].values]
+            s = Interpd_grids.shape
+            self.obs_flux_arrs = {l: np.full(s, DF_obs.loc[l, "Flux"])
+                                                                for l in lines}
+            self.obs_flux_err_arrs = {l: np.full(s, DF_obs.loc[l, "Flux_err"])
+                                                                for l in lines}
             # These fluxes/errors remain normalised to the chosen norm_line
             return
 
@@ -597,13 +603,15 @@ class NB_Result(object):
                              " Balmer decrements over the grid contains at"
                              " least one non-positive value!")
 
-        obs_flux_arrs, obs_flux_err_arrs = do_dereddening(
+        obs_flux_arr_list, obs_flux_err_arr_list = do_dereddening(
                     DF_obs["Wavelength"].values, DF_obs["Flux"].values,
                     DF_obs["Flux_err"].values, BD=grid_BD_arr, normalise=True)
         # The output fluxes and errors are normalised to Hbeta == 1.
-        # Now obs_flux_arrs is a list of arrays corresponding to the list
+        # Now obs_flux_arr_list is a list of arrays corresponding to the list
         # of observed fluxes, where each array has the same shape as the 
-        # model grid.  The list obs_flux_err_arrs is the same, but for errors.
+        # model grid.  And obs_flux_err_arr_list is the same, but for errors.
+        obs_flux_arrs = {l: f for l,f in zip(lines, obs_flux_arr_list)}
+        obs_flux_err_arrs = {l: e for l,e in zip(lines, obs_flux_err_arr_list)}
 
         # Where the observed Balmer decrement was less than the theoretical
         # Balmer decrement, we undo the dereddening.  Otherwise we're
@@ -611,21 +619,22 @@ class NB_Result(object):
         # which is nonsensical!
         obs_BD = DF_obs.loc["Halpha", "Flux"] / DF_obs.loc["Hbeta", "Flux"]
         where_bad_BD = (grid_BD_arr >= obs_BD)
-        if np.any(where_bad_BD):
-            n_bad = np.sum(where_bad_BD)
-            NB_logger.warning("WARNING: Observed Balmer decrement is below the " +
-                        "predicted decrement at {0} ".format(n_bad) +
-                        "interpolated gridpoints.  Dereddening will not be " +
-                        "applied at these points")
-        for flux_arr, obs_flux in zip(obs_flux_arrs, DF_obs["Flux"].values):
+        n_bad = np.sum(where_bad_BD)
+        if n_bad > 0:
+            NB_logger.warning("WARNING: Observed Balmer decrement is below "
+                           "the predicted decrement at {0} ".format(n_bad) +
+                           "interpolated gridpoints.  Dereddening will not be "
+                           "applied at these points")
+        for line, flux_arr in obs_flux_arrs.items():
+            obs_flux = DF_obs.loc[line, "Flux"]
             flux_arr[where_bad_BD] = obs_flux
-        for err_arr, obs_err in zip(obs_flux_err_arrs, DF_obs["Flux_err"].values):
+        for line, err_arr in obs_flux_err_arrs.items():
+            obs_err = DF_obs.loc[line, "Flux_err"]
             err_arr[where_bad_BD] = obs_err
-        if not np.allclose(obs_flux_arrs[DF_obs.index.get_loc("Hbeta")], 1.0):
+        if not np.allclose(obs_flux_arrs["Hbeta"], 1.0):
             raise ValueError("Something went wrong - fluxes not normalised")
-
-        for arr, err_arr in zip(obs_flux_arrs, obs_flux_err_arrs):
-            if not np.all(np.isfinite(arr)) and np.all(np.isfinite(err_arr)):
+        for a, e in zip(obs_flux_arrs.values(), obs_flux_err_arrs.values()):
+            if not np.all(np.isfinite(a)) and np.all(np.isfinite(e)):
                 raise ValueError("Something went wrong - the dereddened "
                                  "fluxes and errors are not all finite")
 
@@ -683,23 +692,20 @@ class NB_Result(object):
         # proportion:
         pred_flux_rel_err = Interpd_grids.grid_rel_error
 
-        # Arrays of observed fluxes over the whole grid (may have been
-        # dereddened at every point in the grid)
-        obs_flux_arrs = self.obs_flux_arrs
-        obs_flux_err_arrs = self.obs_flux_err_arrs
-
         # We calculate the log of the likelihood, which helps avoid numerical
         # issues in parts of the grid where the models fit the data very badly.
         # Initialise log likelihood with 0 everywhere
         log_likelihood = np.zeros(Interpd_grids.shape, dtype="float")
         obs_lines = self.DF_obs.index.values
         likelihood_lines = obs_lines[self.DF_obs["In_lhood?"].values == "Y"]
-        for i, line in enumerate(likelihood_lines):
+        for line in likelihood_lines:
             pred_flux_i = Interpd_grids.grids[norm_line + "_norm"][line]
             if np.all(pred_flux_i == 0):
                 raise ValueError("Pred flux for {0} all zero".format(line))
-            obs_flux_i = obs_flux_arrs[i]
-            obs_flux_err_i = obs_flux_err_arrs[i]
+            # Arrays of observed fluxes and errors over the whole grid (may
+            # have been dereddened at every point in the grid):
+            obs_flux_i = self.obs_flux_arrs[line]
+            obs_flux_err_i = self.obs_flux_err_arrs[line]
             assert obs_flux_i.shape == pred_flux_i.shape
             
             # Calculate the total variance, which is the sum of variances due

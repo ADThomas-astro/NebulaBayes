@@ -767,14 +767,15 @@ class Test_likelihood_lines_keyword(unittest.TestCase):
     def setUpClass(cls):
         cls.NB_Model_1 = NB_Model("HII", line_list=cls.lines,
                                   interpd_grid_shape=[30,30,30])
-        kwargs = {"deredden": False, "norm_line": "Hbeta",
-            "prior": [("NII6583", cls.exclude_lines[0])],
-            "likelihood_lines": [l for l in cls.lines if l not in cls.exclude_lines],
-            "verbosity": "WARNING",
+        cls.kwargs = {"deredden": False, "norm_line": "Hbeta",
+           "prior": [("NII6583", cls.exclude_lines[0])], "verbosity": "WARNING",
         }
+        cls.likelihood_lines = [l for l in cls.lines if l not in cls.exclude_lines]
         cls.Result = cls.NB_Model_1(cls.obs_fluxes, cls.obs_errs, cls.lines,
-                                    **kwargs)
-        cls.DF_best = cls.Result.Posterior.best_model["table"]
+                            likelihood_lines=cls.likelihood_lines, **cls.kwargs)
+        P = cls.Result.Posterior
+        cls.DF_best = P.best_model["table"]
+        cls.estimate_Z = P.DF_estimates.loc["12 + log O/H", "Estimate"]
 
     def test_non_likelihood_lines_in_best_model_table(self):
         """
@@ -799,6 +800,27 @@ class Test_likelihood_lines_keyword(unittest.TestCase):
         """
         correct = [("N" if l in self.exclude_lines else "Y") for l in self.lines]
         self.assertTrue(self.DF_best["In_lhood?"].values.tolist() == correct)
+
+    def test_permuting_input_line_order(self):
+        """
+        Regression test - the order of the input lines should not affect the
+        results.  There was a real bug introduced with the "likelihood_lines"
+        feature - this test fails on NB version 0.9.6 and 0.9.7!
+        """
+        n = len(self.lines)
+        for i, ind_tuple in enumerate(itertools.permutations(range(n))):
+            # There are 5! = 120 permutations, so only check one in five:
+            if i % 5 != 2:
+                continue
+            obs_fluxes = [self.obs_fluxes[j] for j in ind_tuple]
+            obs_errs = [self.obs_errs[j] for j in ind_tuple]
+            lines = [self.lines[j] for j in ind_tuple]
+            Result_i = self.NB_Model_1(obs_fluxes, obs_errs, lines,
+                         likelihood_lines=self.likelihood_lines, **self.kwargs)
+            P_i = Result_i.Posterior
+            estimate_Z_i = P_i.DF_estimates.loc["12 + log O/H", "Estimate"]
+            self.assertEqual(estimate_Z_i, self.estimate_Z)
+
 
 
 

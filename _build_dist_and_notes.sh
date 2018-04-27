@@ -11,9 +11,9 @@
 # Also clean all the build working
 rm -rf build dist src/NebulaBayes.egg-info
 python setup.py sdist bdist_wheel
+# Extract the version string from _version.py
+version="$(grep __version__ src/NebulaBayes/_version.py | cut -d \" -f2)"
 
-
-version="0.9.7"  # Need to change this manually!
 # Now there are dirs called "build" and dist"
 # The "dist" dir contains a wheel that can be installed:
 # pip install dist/NebulaBayes-${version}-py2.py3-none-any.whl  # python 2

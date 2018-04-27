@@ -347,11 +347,11 @@ class NB_Model(object):
                 wavelengths (if provided), with a row for each line.  Fluxes
                 and errors are normalised to the norm_line flux.
             obs_flux_arrs : list of numpy arrays
-                The observed fluxes used at each point in the parameter space.
-                The fluxes will be the same everywhere unless deredden=True,
-                in which case the fluxes were dereddened to match the Balmer
-                decrement at each point in the parameter space.  The arrays are
-                ordered to correspond to the emission lines listed in DF_obs.
+                A dictionary mapping each line name to an array of the observed
+                fluxes used at each point in the parameter space.  The fluxes
+                will be the same everywhere unless deredden=True, in which case
+                the fluxes were dereddened to match the predicted Balmer
+                decrement at each point in the parameter space.
             obs_flux_err_arrs : list of numpy arrays
                 Same as obs_flux_arrs, but for the observed flux errors.
             Grid_spec : NB1_Process_grids.Grid_description instance
