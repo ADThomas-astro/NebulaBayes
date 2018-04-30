@@ -3,11 +3,16 @@ from collections import OrderedDict as OD
 import itertools
 import os
 import unittest
+
+from astropy.io import fits  # FITS file I/O
+from astropy.table import Table  # Used in converting to pandas DataFrame
 import numpy as np
 import pandas as pd
 
+import NebulaBayes
 from NebulaBayes import NB_Model, __version__
 from NebulaBayes.NB1_Process_grids import RegularGridResampler
+from NebulaBayes.NB3_Bayes import NB_nd_pdf
 
 
 
@@ -403,6 +408,13 @@ class Test_1D_grid_and_public_attributes(unittest.TestCase):
                         "marginalised_1D", "marginalised_2D", "name", "nd_pdf"])
         self.assertTrue(public_attrs == expected_attrs, msg=str(public_attrs))
 
+    def test_best_model_dict_keys(self):
+        """ Check that the list of best model keys is what is documented """
+        expected_keys = sorted(["table", "chi2", "extinction_Av_mag",
+                                 "grid_location"])
+        key_list = sorted(list(self.Result.Posterior.best_model.keys()))
+        self.assertEqual(key_list, expected_keys)
+
     @classmethod
     def tearDownClass(cls):
         """ Remove the output when tests in this class have finished """
@@ -505,7 +517,7 @@ class Test_real_data_with_dereddening(unittest.TestCase):
         Regression check that chi2 doesn't change
         """
         chi2 = self.Result.Posterior.best_model["chi2"]
-        self.assertTrue(np.isclose(chi2, 1401.3, atol=0.2))
+        self.assertTrue(np.isclose(chi2, 2568.7, atol=0.2), msg=str(chi2))
 
     def test_interp_order(self):
         """
@@ -521,7 +533,6 @@ class Test_real_data_with_dereddening(unittest.TestCase):
         shape = self.NB_Model_1.Interpd_grids.shape
         self.Result1 = self.NB_Model_1(self.obs_fluxes, self.obs_errs,
                                        self.lines, prior=np.zeros(shape))
-
 
     @classmethod
     def tearDownClass(cls):
@@ -596,7 +607,7 @@ class Test_real_data_with_cubic_interpolation(unittest.TestCase):
         Regression check that chi2 doesn't change
         """
         chi2 = self.Result.Posterior.best_model["chi2"]
-        self.assertTrue(np.isclose(chi2, 1857.1, atol=0.2))
+        self.assertTrue(np.isclose(chi2, 2522.7, atol=0.2), msg=str(chi2))
 
     def test_interp_order(self):
         """
@@ -746,6 +757,151 @@ class Test_data_that_matches_models_poorly(unittest.TestCase):
         """
         posterior = self.Result.Posterior.nd_pdf
         self.assertTrue(np.all(posterior == 0))
+
+
+
+###############################################################################
+
+class Test_NB_nd_pdf(unittest.TestCase):
+    """
+    Test the methods in the NB_nd_pdf class
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        # Run NB in 2D to obtain an NB_Result object
+        lines   = ["Hbeta", "OIII5007", "Halpha"]
+        fluxes  = [1.0,            1.3,      2.8]
+        errors  = [0.2,            0.2,      0.2]
+        NB_dir = os.path.dirname(os.path.realpath(NebulaBayes.__file__))
+        grid_table_file = os.path.join(NB_dir, "grids", "NB_HII_grid.fits.gz")
+        BinTableHDU_0 = fits.getdata(grid_table_file, 0)
+        DF_grid = Table(BinTableHDU_0).to_pandas()
+        DF_grid = DF_grid[DF_grid["log P/k"] == 6.6]  # Reduce to 2D grid
+        nx, ny = 30, 30  # Square interpolated grid
+        cls.NB_Model_1 = NB_Model(DF_grid, line_list=lines,
+                                  grid_params=["12 + log O/H", "log U"],
+                                  interpd_grid_shape=[ny, nx])
+        cls.Result_1 = cls.NB_Model_1(fluxes,errors, lines, deredden=False)
+
+        # Now make a 2D pdf which is a single line of pixels along a quarter-
+        # circle around the origin.  This ensures the point defined by the peaks
+        # of the 1D marginalised PDFs is very different from the 2D pdf peak.
+        x, y = np.arange(nx), np.arange(ny)
+        xx, yy = np.meshgrid(x, y)
+        raw_pdf = np.zeros((ny, nx), dtype=float)
+        rr2 = xx**2 + yy**2
+        where_arc = (rr2 > (20 - 0.5)**2) & (rr2 < (20 + 0.5)**2)
+        raw_pdf[where_arc] = 1.0  # Value 1 along the circular arc; 0 elsewhere
+        # Make a 2D PDF peak at the intersection of the circular arc and y = x
+        raw_pdf[np.abs(xx - yy) < 1.5] *= 2
+        # print(np.unravel_index(raw_pdf.argmax(), raw_pdf.shape))  # (14, 14)
+        cls.raw_pdf = raw_pdf
+        val_arrs = cls.NB_Model_1.Interpd_grids.param_values_arrs
+        dx, dy = np.diff(val_arrs[1])[0], np.diff(val_arrs[0])[0]
+        cls.marginalised_x = np.trapz(raw_pdf, dx=dy, axis=0)
+        cls.peak_ind_x = np.argmax(cls.marginalised_x)
+        cls.marginalised_y = np.trapz(raw_pdf, dx=dx, axis=1)
+        cls.peak_ind_y = np.argmax(cls.marginalised_y)
+        # print(cls.peak_ind_y, cls.peak_ind_x)  # (20, 20) as desired
+        # plt.imshow(raw_pdf, origin="lower")
+        # plt.scatter([14, 20], [14, 20], marker="*")
+
+        # Make a new NB_nd_pdf object with the custom raw 2D PDF
+        cls.NB_nd_pdf_1 = NB_nd_pdf(raw_pdf, cls.Result_1,
+                                cls.NB_Model_1.Interpd_grids, name="Posterior")
+
+    # We want to test NB_nd_pdf attributes; some of "DF_estimates", "Grid_spec",
+    # "best_model", marginalised_1D", "marginalised_2D", "name", "nd_pdf"
+
+    # "best_model" keys: "table", "chi2", "extinction_Av_mag", "grid_location"
+    def test_best_model_grid_location(self):
+        grid_location = self.NB_nd_pdf_1.best_model["grid_location"]
+        self.assertEqual(grid_location, (self.peak_ind_y, self.peak_ind_x))
+
+    def test_DF_estimates_Index_of_peak(self):
+        DF_estimates = self.NB_nd_pdf_1.DF_estimates
+        x_Index_of_peak = DF_estimates.loc["log U", "Index_of_peak"]
+        self.assertEqual(x_Index_of_peak, self.peak_ind_x)
+        y_Index_of_peak = DF_estimates.loc["12 + log O/H", "Index_of_peak"]
+        self.assertEqual(y_Index_of_peak, self.peak_ind_y)
+
+    def test_best_model_table(self):
+        """ Check that a single table value matches the desired gridpoint.
+            This test would fail on NebulaBayes 0.9.7 and earlier """
+        best_coords = (self.peak_ind_y, self.peak_ind_x)
+        normed_grids = self.NB_Model_1.Interpd_grids.grids["Hbeta_norm"]
+        model_OIII = normed_grids["OIII5007"][best_coords]
+        DF_best = self.NB_nd_pdf_1.best_model["table"]
+        table_model_OIII = DF_best.loc["OIII5007", "Model"]
+        self.assertEqual(table_model_OIII, model_OIII)
+
+    def test_marginalised_1D_pdf(self):
+        """ Check that the marginalised 1D pdfs are as expected """
+        m_1D = self.NB_nd_pdf_1.marginalised_1D
+        self.assertEqual(len(m_1D), 2)
+        # Scale the pdfs to compare despite the m_1D PDFs being normalised
+        m_1D["log U"] /= m_1D["log U"].max()
+        m_1D["12 + log O/H"] /= m_1D["12 + log O/H"].max()
+        expected_x_pdf = self.marginalised_x / self.marginalised_x.max()
+        expected_y_pdf = self.marginalised_y / self.marginalised_y.max()
+        self.assertTrue(np.allclose(m_1D["log U"], expected_x_pdf,
+                                                           atol=1e-12, rtol=0))
+        self.assertTrue(np.allclose(m_1D["12 + log O/H"], expected_y_pdf,
+                                                           atol=1e-12, rtol=0))
+        # May have swapped x and y, but it's all symmetric anyway...
+
+    def test_nd_pdf(self):
+        """
+        Check that the normalised nd_pdf matches the input raw nd_pdf.  We
+        avoid doing a proper normalisation by comparing with a simple scaling.
+        """
+        pdf = self.NB_nd_pdf_1.nd_pdf
+        scaled_raw_nd_pdf = self.raw_pdf / self.raw_pdf.max()
+        self.assertTrue(np.array_equal(pdf / pdf.max(), scaled_raw_nd_pdf))
+
+
+
+###############################################################################
+
+class Test_dereddening_changes_results(unittest.TestCase):
+    """
+    Test that using dereddening changes all three PDFs (when obs data are used
+    in the prior).  There previously was a bug where the obs data in the line
+    ratio priors weren't dereddened.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        # Run NB in 2D to obtain an NB_Result object
+        lines   = ["Hbeta", "OIII5007", "Halpha"]
+        waves   = [4861.,        5007.,    6563.]
+        fluxes  = [1.0,            1.3,      2.9]
+        errors  = [0.2,            0.2,      0.2]
+        NB_Model_1 = NB_Model("HII", line_list=lines,
+                              interpd_grid_shape=(15, 15, 15))
+        prior = [("OIII5007", "Hbeta")]  # Need obs data in prior
+        cls.Result_dered = NB_Model_1(fluxes, errors, lines, prior=prior,
+                                         obs_wavelengths=waves, deredden=True)
+        cls.Result_nodered = NB_Model_1(fluxes, errors, lines, prior=prior,
+                                                                deredden=False)
+
+    def test_priors_differ(self):
+        """ Check that dereddened data was used in line ratio prior, when
+        requested.  This test fails on NebulaBayes 0.9.7 """
+        pdf_dered   = self.Result_dered.Prior.nd_pdf
+        pdf_nodered = self.Result_nodered.Prior.nd_pdf
+        self.assertTrue(np.any(np.abs(pdf_dered - pdf_nodered) > 0.01))
+
+    def test_likelihoods_differ(self):
+        pdf_dered   = self.Result_dered.Likelihood.nd_pdf
+        pdf_nodered = self.Result_nodered.Likelihood.nd_pdf
+        self.assertTrue(np.any(np.abs(pdf_dered - pdf_nodered) > 0.01))
+
+    def test_posteriors_differ(self):
+        pdf_dered   = self.Result_dered.Posterior.nd_pdf
+        pdf_nodered = self.Result_nodered.Posterior.nd_pdf
+        self.assertTrue(np.any(np.abs(pdf_dered - pdf_nodered) > 0.01))
 
 
 
