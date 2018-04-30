@@ -80,7 +80,8 @@ NB_Model_1 = NB_Model(DF_grid, grid_params, linelist,
 
 
 
-def calculate_custom_prior(DF_obs, grids_dict, grid_spec, grid_rel_err):
+def calculate_custom_prior(DF_obs, obs_flux_arr_dict, obs_err_arr_dict,
+                           grids_dict, grid_spec, grid_rel_err):
     """
     Example callback function passed to NebulaBayes to calculate a custom prior.
 
@@ -88,26 +89,39 @@ def calculate_custom_prior(DF_obs, grids_dict, grid_spec, grid_rel_err):
     contribution from a line-ratio prior with a contribution from information
     on a particular grid parameter (the ionisation parameter).
 
-    This function shows the required inputs and outputs.
+    This function shows the required inputs and output.
 
-    DF_obs:     A pandas DataFrame table holding the observed fluxes/errors.
-                There is a row for each emission line.
-    grids_dict: Dictionary that maps line names to nD interpolated flux arrays.
-                These interpolated model flux arrays haven't been normalised
-                to the "norm_line" yet.
-    grid_spec:  An NB1_Process_grids.Grid_description instance holding basic
-                information for the interpolated grids, for example in the
-                "param_names", "param_values_arrs" and "shape" attributes.
-    grid_rel_err: The systematic relative error on grid fluxes, as a linear
-                  proportion (between 0 and 1).
+    Arguments for the observed data:
+        DF_obs:     A pandas DataFrame table holding the observed fluxes, with
+                    a row for each line.
+        obs_flux_arr_dict: A dictionary mapping line names to n-D arrays of
+                    observed fluxes over the entire grid.  The fluxes will be
+                    the same everywhere unless deredden=True, in which case the
+                    fluxes were dereddened to match the predicted Balmer
+                    decrement at each point in the interpolated parameter space.
+                    The fluxes have been normalised to the input norm_line.
+        obs_err_arr_dict:  Same as obs_flux_arr_dict, but for the flux errors.
+    Arguments for the model data:
+        grids_dict: Dictionary that maps line names to n-D interpolated flux
+                    arrays.  These interpolated arrays are based on the input
+                    grid and have been normalised to the input norm_line.
+        grid_spec:  A NB1_Process_grids.Grid_description instance holding basic
+                    information for the interpolated grids, such as the
+                    parameter names, parameter values and the grid shape.
+        grid_rel_err: The systematic relative error on grid fluxes, as a linear
+                    proportion between 0 and 1.  This is an input into
+                    NebulaBayes.
 
     Return a numpy array of the value of the prior over the full interpolated
-    parameter space.
+    parameter space.  The prior is in linear probability space (not log).
     """
     # Firstly calculate a contribution to the prior using the NebulaBayes
     # "line-ratio prior" feature, using the metallicity-sensitive N2O2 ratio
-    contribution_N2O2 = calculate_line_ratio_prior(DF_obs, grids_dict,
-                           grid_rel_err, line_1="NII6583", line_2="OII3726_29")
+    kwargs = dict(obs_flux_arr_dict=obs_flux_arr_dict,
+                  obs_err_arr_dict=obs_err_arr_dict,
+                  grids_dict=grids_dict, grid_rel_err=grid_rel_err)
+    contribution_N2O2 = calculate_line_ratio_prior(line_1="NII6583",
+                                                 line_2="OII3726_29", **kwargs)
     # "contribution_N2O2" is an array over the full n-D interpolated grid.
     
     # Next calculate a contribution to the prior that varies only with the

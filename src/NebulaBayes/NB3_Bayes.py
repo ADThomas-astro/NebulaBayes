@@ -31,50 +31,6 @@ NB_logger = logging.getLogger("NebulaBayes")
 
 
 
-class CachedIntegrator(object):
-    """
-    Class to perform trapezoidal integration in arbitrary dimensions, one
-    dimension at a time.  A cache is used to store previous results, which
-    significantly speeds up finding all the 1D and 2D marginalised PDFs for
-    grids with more than 3 dimensions.
-    A custom class is used because functools.lru_cache is not available in
-    the standard library in python 2 (and an extra dependency is avoided).
-    """
-    def __init__(self, full_nd_pdf, spacing):
-        """
-        Initialise CachedIntegrator instance with some data required for
-        performing the integration.
-        """
-        self.spacing = spacing  # List holding the spacing (dx) for each axis.
-        # The cache maps a tuple of the indices of the axes that have been
-        # integrated out to the corresponding marginalised PDF array
-        self.cache = {(): full_nd_pdf.copy()}
-
-
-    def __call__(self, inds_already_integrated, ind_to_integrate):
-        """
-        Integrate out a single dimension from the PDF array, which may have
-        already been marginalised over one or more dimensions.  Trapezoidal
-        integration is used.  Previous integration results are cached, so they
-        don't need to be recalculated.
-        """
-        assert ind_to_integrate not in inds_already_integrated
-        assert isinstance(ind_to_integrate, int)
-        assert isinstance(inds_already_integrated, list)  # List of ints
-        cache_key = tuple(sorted(inds_already_integrated + [ind_to_integrate]))
-        if cache_key in self.cache:
-            return self.cache[cache_key]  # Return results of previous call
-
-        start_arr = self.cache[tuple(sorted(inds_already_integrated))]
-        # Integrate over the desired dimension/parameter/axis, using the
-        # trapezoidal rule
-        marginalized_arr = np.trapz(start_arr, axis=ind_to_integrate,
-                                    dx=self.spacing[ind_to_integrate])
-        self.cache[cache_key] = marginalized_arr  # Cache the results
-        return marginalized_arr
-
-
-
 class NB_nd_pdf(object):
     """
     Class to hold an N-dimensional PDF and its 1D and 2D marginalised forms.
@@ -85,7 +41,7 @@ class NB_nd_pdf(object):
     a probability distribution, i.e. dP = PDF(x) * dx, where the nd_pdf is an
     array of samples of the PDF.
     """
-    def __init__(self, nd_pdf, NB_Result, Interpd_grids, name, DF_obs=None):
+    def __init__(self, nd_pdf, NB_Result, Interpd_grids, name):
         """
         Initialise an instance of the NB_nd_pdf class.
         nd_pdf: A numpy ndarray holding the (linear) pdf.
@@ -93,9 +49,7 @@ class NB_nd_pdf(object):
         Interpd_grids: A NB_Grid object (defined in NB1_Process_grids.py)
                        holding the interpolated model grid fluxes and the
                        description of the model grid.
-        DF_obs: A pandas DataFrame table holding the observed emission line
-                fluxes and errors.  The "best model table" is only generated if
-                this is supplied.
+        name: The name of the pdf, e.g. "Posterior"
         The nd_pdf will be normalised.
         """
         if np.any(~np.isfinite(nd_pdf)):
@@ -109,14 +63,16 @@ class NB_nd_pdf(object):
         # Add self.marginalised_2d and self.marginalised_1d attributes and
         # normalise the self.nd_pdf attribute:
         self._marginalise_pdf()
+        self.best_model = {}
         # Make a parameter estimate table based on this nd_pdf
-        self._make_parameter_estimate_table() # add self.DF_estimates attribute
+        self._make_parameter_estimate_table()
+        # We added self.DF_estimates table and self.best_model["grid_location"]
+        DF_obs = getattr(NB_Result, "DF_obs", None)
         if DF_obs is not None:
-            self.best_model = {}
             # For the "best" model, we calculate the following 3 items:
             # 1.) Make a table comparing the model and observed fluxes
-            self._make_best_model_table(DF_obs, Interpd_grids, NB_Result)
-                  # We added "table" to "best_model" dict
+            self._make_best_model_table(Interpd_grids, NB_Result)
+                  # We added self.best_model["table"]
             # 2.) Calculate chi2 of the fit (add "chi2" to "best_model" dict):
             self._calculate_chi2(NB_Result.deredden, DF_obs)
             # 3.) Calculate implied extinction ("extinction_Av_mag" in dict):
@@ -249,7 +205,7 @@ class NB_nd_pdf(object):
                    ("Est_at_lower?", np.str), ("Est_at_upper?", np.str),
                    ("P(lower)", np.float),    ("P(upper)", np.float),
                    ("P(lower)>50%?", np.str), ("P(upper)>50%?", np.str),
-                   ("n_local_maxima", np.int)]
+                   ("n_local_maxima", np.int), ("Index_of_peak", np.int)]
         n = self.Grid_spec.ndim
         OD1 = OD([(c, np.zeros(n, dtype=t)) for c,t in columns])
         DF_estimates = pd.DataFrame(OD1) # Initialise DataFrame
@@ -263,18 +219,22 @@ class NB_nd_pdf(object):
         DF_estimates.loc[:,"n_local_maxima"] = -1
         
         # Fill in DF_estimates: 
-        for p, pdf_1D in self.marginalised_1D.items():
+        estimate_inds = np.zeros(n, dtype=int)  # Coords of "best model"
+        for i,p in enumerate(self.Grid_spec.param_names):
             param_val_arr = self.Grid_spec.paramName2paramValueArr[p]
+            pdf_1D = self.marginalised_1D[p]
             p_dict = make_single_parameter_estimate(p, param_val_arr, pdf_1D)
+            estimate_inds[i] = p_dict["Index_of_peak"]
             for field, value in p_dict.items():
                 if field != "Parameter":
                     DF_estimates.set_value(p, field, value)
 
         self.DF_estimates = DF_estimates
+        self.best_model["grid_location"] = tuple(estimate_inds)
 
 
 
-    def _make_best_model_table(self, DF_obs, Interpd_grids, NB_Result):
+    def _make_best_model_table(self, Interpd_grids, NB_Result):
         """
         Make a pandas dataframe comparing observed emission line fluxes with
         model fluxes for the model corresponding to the parameter estimates
@@ -284,21 +244,21 @@ class NB_nd_pdf(object):
         marginalised pdf nor to any projection of the peak of the ND pdf to a
         lower parameter space.
         """
-        DF_best = DF_obs.copy() # Index: "Line"; columns: "Flux", "Flux_err"
-        # DF_obs may also possibly have a "Wavelength" column
+        DF_best = NB_Result.DF_obs.copy()
+        # DF_obs index: "Line"; DF_obs columns: "Flux", "Flux_err"; may also
+        # have a "Wavelength" column
         DF_best.rename(columns={"Flux": "Obs"}, inplace=True)
 
-        inds_max = np.unravel_index(self.nd_pdf.argmax(), self.nd_pdf.shape)
-        normed_grids = Interpd_grids.grids[DF_obs.norm_line + "_norm"]
-        grid_fluxes_max = [normed_grids[l][inds_max] for l in DF_best.index]
-        DF_best["Model"] = grid_fluxes_max
+        inds_best = self.best_model["grid_location"]
+        normed_grids = Interpd_grids.grids[NB_Result.DF_obs.norm_line + "_norm"]
+        DF_best["Model"] = [normed_grids[l][inds_best] for l in DF_best.index]
         
         if NB_Result.deredden:  # Observed fluxes dereddened at each gridpoint?
             for l in DF_best.index:
                 DF_best.set_value(l, "Obs_dered",
-                                          NB_Result.obs_flux_arrs[l][inds_max])
+                                        NB_Result.obs_flux_arrs[l][inds_best])
                 DF_best.set_value(l, "Flux_err_dered",
-                                      NB_Result.obs_flux_err_arrs[l][inds_max])
+                                    NB_Result.obs_flux_err_arrs[l][inds_best])
             DF_best["Obs_S/N_dered"] = (DF_best["Obs_dered"].values /
                                         DF_best["Flux_err_dered"].values)
             resids = DF_best["Obs_dered"].values - DF_best["Model"].values
@@ -323,7 +283,9 @@ class NB_nd_pdf(object):
         """
         Calculate a chi^2 value which describes how well the model
         corresponding to the parameter best estimates matches the observations.
-        Any upper bounds are not included in the calculation.
+        The calculation does not include any upper bound measurements, but it
+        does include all other observed data, even lines not included in
+        likelihood_lines.
         deredden: Boolean.  Did we deredden the observed line fluxes to match
                   the Balmer decrement at every interpolated model gridpoint?
         DF_obs: pandas DataFrame holding observed fluxes and errors
@@ -374,10 +336,10 @@ class NB_nd_pdf(object):
             return
         # Find the Balmer decrements for both the "best" model and the raw
         # observations
-        inds_max = np.unravel_index(self.nd_pdf.argmax(), self.nd_pdf.shape)
+        inds_best = self.best_model["grid_location"]
         normed_grids = Interpd_grids.grids[DF_obs.norm_line + "_norm"]
-        Ha_Hb_max = [normed_grids[l][inds_max] for l in ["Halpha", "Hbeta"]]
-        BD_model = Ha_Hb_max[0] / Ha_Hb_max[1]  # Balmer decrement (predicted)
+        Ha_Hb_best = [normed_grids[l][inds_best] for l in ["Halpha", "Hbeta"]]
+        BD_model = Ha_Hb_best[0] / Ha_Hb_best[1]  # Balmer decrement (predicted)
         BD_obs = DF_obs.loc["Halpha", "Flux"] / DF_obs.loc["Hbeta", "Flux"]
 
         if BD_model <= BD_obs:  # The expected case
@@ -418,6 +380,7 @@ def make_single_parameter_estimate(param_name, val_arr, pdf_1D):
     if np.all(pdf_1D == 0):
         # This is possible if all models are a terrible fit to the data
         out_dict["Estimate"] = val_arr[0]  # Take lowest parameter value
+        out_dict["Index_of_peak"] = 0
         for CI in CIs:
             CI_code = "CI" + str(CI)  # e.g. "CI68"
             out_dict[CI_code+"_low"] = -np.inf
@@ -434,8 +397,9 @@ def make_single_parameter_estimate(param_name, val_arr, pdf_1D):
 
     # Calculate estimate of parameter value (location of max in 1D pdf)
     # (This is the Bayesian parameter estimate if pdf_1D is from the posterior)
-    est_ind = np.argmax(pdf_1D)
-    out_dict["Estimate"] = val_arr[est_ind]
+    index_of_max = np.argmax(pdf_1D)
+    out_dict["Index_of_peak"] = index_of_max
+    out_dict["Estimate"] = val_arr[index_of_max]
     
     # Generate cumulative density function (CDF) using trapezoidal integration:
     cdf_1D = cumtrapz(pdf_1D, x=val_arr, initial=0)
@@ -488,11 +452,11 @@ def make_single_parameter_estimate(param_name, val_arr, pdf_1D):
     # Lower bound: Check 3rd value of CDF (the 1st is 0 by design)
     out_dict["P(lower)"] = cdf_1D[2]
     out_dict["P(lower)>50%?"] = bool_map[ (out_dict["P(lower)"] > 0.5) ]
-    out_dict["Est_at_lower?"] = bool_map[ (est_ind <= 2) ]
+    out_dict["Est_at_lower?"] = bool_map[ (index_of_max <= 2) ]
     # Upper bound: Check 3rd-last value of CDF (the last is 1 by design)
     out_dict["P(upper)"] = 1.0 - cdf_1D[-3]
     out_dict["P(upper)>50%?"] = bool_map[ (out_dict["P(upper)"] > 0.5) ]
-    out_dict["Est_at_upper?"] = bool_map[ (est_ind >= cdf_1D.size - 4) ]
+    out_dict["Est_at_upper?"] = bool_map[ (index_of_max >= cdf_1D.size - 4) ]
     
     return out_dict
 
@@ -511,10 +475,10 @@ class NB_Result(object):
         Initialise an instance of the class and perform Bayesian parameter
         estimation.
         """
-        self.DF_obs = DF_obs # Store for user
-        self.Plotter = ND_PDF_Plotter # To plot ND PDFs
+        self.DF_obs = DF_obs  # Store for user
+        self.Plotter = ND_PDF_Plotter  # To plot ND PDFs
         self.Plot_Config = Plot_Config
-        self.deredden = deredden # Boolean - dereddeden obs fluxes over whole grid?
+        self.deredden = deredden  # T/F: dereddeden obs fluxes over whole grid?
         self._line_plot_dir = line_plot_dir
         Grid_spec = Grid_description(Interpd_grids.param_names,
                            list(Interpd_grids.paramName2paramValueArr.values()))
@@ -523,24 +487,26 @@ class NB_Result(object):
         # Make arrays of observed fluxes over the grid (possibly dereddening)
         self._make_obs_flux_arrays(Interpd_grids, DF_obs.norm_line)
 
-        # Ensure there are interpolated arrays normalised to the norm_line
+        # Ensure interpolated arrays have been normalised to the norm_line
         self._normalise_grid_arrays(Interpd_grids, DF_obs.norm_line)
+        norm_name = DF_obs.norm_line + "_norm"
 
         # Calculate the prior over the grid:
         NB_logger.info("Calculating prior...")
-        raw_prior = calculate_prior(input_prior, DF_obs,
-                                    Interpd_grids.grids["No_norm"],
+        raw_prior = calculate_prior(input_prior, DF_obs=DF_obs,
+                                    obs_flux_arr_dict=self.obs_flux_arrs,
+                                    obs_err_arr_dict=self.obs_flux_err_arrs,
+                                    grids_dict=Interpd_grids.grids[norm_name],
                                     grid_spec=Interpd_grids._Grid_spec,
                                     grid_rel_err=Interpd_grids.grid_rel_error)
-        self.Prior = NB_nd_pdf(raw_prior, self, Interpd_grids, name="Prior",
-                                                                DF_obs=DF_obs)
+        self.Prior = NB_nd_pdf(raw_prior, self, Interpd_grids, name="Prior")
 
         # Calculate the likelihood over the grid:
         NB_logger.info("Calculating likelihood...")
         raw_likelihood = self._calculate_likelihood(Interpd_grids,
                                                     DF_obs.norm_line)
         self.Likelihood = NB_nd_pdf(raw_likelihood, self, Interpd_grids,
-                                    name="Likelihood", DF_obs=DF_obs)
+                                    name="Likelihood")
 
         # Calculate the posterior using Bayes' Theorem:
         # (note that the prior and likelihood pdfs are now normalised)
@@ -551,7 +517,7 @@ class NB_Result(object):
                           "and likelihood have together completely excluded all"
                           " models in the grid, within the numerical precision")
         self.Posterior = NB_nd_pdf(raw_posterior, self, Interpd_grids,
-                                   name="Posterior", DF_obs=DF_obs)
+                                   name="Posterior")
 
 
 
@@ -682,11 +648,12 @@ class NB_Result(object):
         Calculate the (linear) likelihood over the entire N-D grid at once.
         Returns the likelihood as an nD array.  The likelihood is not yet
         normalised - that will be done later.
-        The emission line grids have been interpolated prior to being inputted
-        into this method, and are normalised to the norm_line here if this
-        hasn't been done already.
+        The emission line grids have been interpolated previously to being
+        inputted into this method, and are normalised to the norm_line here if
+        this hasn't been done already.
         The likelihood is a product of PDFs, one for each contributing emission
         line.  We save out a plot of the PDF for each line if the uses wishes.
+        This method computes Equation 6 in the NebulaBayes paper.
         """
         # Systematic relative error in normalised grid fluxes as a linear
         # proportion:
@@ -723,6 +690,7 @@ class NB_Result(object):
 
             if obs_flux_i[tuple(0 for _ in obs_flux_i.shape)] != -np.inf:
                 # Minus infinity would signal an upper bound
+                # We calculate Equation 3 in the NebulaBayes paper
                 # Line contribution with both observed flux and error:
                 # log_line_contribution = (-0.5 * np.log(var)
                 #     - ((obs_flux_i - pred_flux_i)**2 / (2.0 * var)) )
@@ -738,7 +706,8 @@ class NB_Result(object):
                 log_line_contribution += cont_part_2
                 log_line_contribution *= -0.5
             else:  # We have an upper bound
-                # Line contribution with only the observed error, not flux:
+                # Line contribution with only the observed error, not flux.
+                # We calculate Equation 5 in the NebulaBayes paper
                 denom = np.sqrt(2 * var)
                 line_contribution = (erf(pred_flux_i / denom) -
                                   erf((pred_flux_i - obs_flux_err_i) / denom))
@@ -778,5 +747,49 @@ class NB_Result(object):
             NB_logger.warning("WARNING: The likelihood is all zero - no models"
                               " are a reasonable fit to the data")
         return likelihood
+
+
+
+class CachedIntegrator(object):
+    """
+    Class to perform trapezoidal integration in arbitrary dimensions, one
+    dimension at a time.  A cache is used to store previous results, which
+    significantly speeds up finding all the 1D and 2D marginalised PDFs for
+    grids with more than 3 dimensions.
+    A custom class is used because functools.lru_cache is not available in
+    the standard library in python 2 (and an extra dependency is avoided).
+    """
+    def __init__(self, full_nd_pdf, spacing):
+        """
+        Initialise CachedIntegrator instance with some data required for
+        performing the integration.
+        """
+        self.spacing = spacing  # List holding the spacing (dx) for each axis.
+        # The cache maps a tuple of the indices of the axes that have been
+        # integrated out to the corresponding marginalised PDF array
+        self.cache = {(): full_nd_pdf.copy()}
+
+
+    def __call__(self, inds_already_integrated, ind_to_integrate):
+        """
+        Integrate out a single dimension from the PDF array, which may have
+        already been marginalised over one or more dimensions.  Trapezoidal
+        integration is used.  Previous integration results are cached, so they
+        don't need to be recalculated.
+        """
+        assert ind_to_integrate not in inds_already_integrated
+        assert isinstance(ind_to_integrate, int)
+        assert isinstance(inds_already_integrated, list)  # List of ints
+        cache_key = tuple(sorted(inds_already_integrated + [ind_to_integrate]))
+        if cache_key in self.cache:
+            return self.cache[cache_key]  # Return results of previous call
+
+        start_arr = self.cache[tuple(sorted(inds_already_integrated))]
+        # Integrate over the desired dimension/parameter/axis, using the
+        # trapezoidal rule
+        marginalized_arr = np.trapz(start_arr, axis=ind_to_integrate,
+                                    dx=self.spacing[ind_to_integrate])
+        self.cache[cache_key] = marginalized_arr  # Cache the results
+        return marginalized_arr
 
 

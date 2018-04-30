@@ -12,26 +12,6 @@ from ._compat import _str_type  # Compatibility
 
 
 
-def _configure_logger():
-    """
-    Create a logger for NebulaBayes so the user can easily control verbosity
-    of the output.  We set the level of the "root" logger to debug.
-    """
-    NB_logger = logging.getLogger("NebulaBayes")
-    Handler_1 = logging.StreamHandler()
-    # Set the NB logger and the root logger to show all messages
-    Handler_1.setLevel(logging.DEBUG)
-    logging.getLogger("").setLevel(logging.DEBUG)  # For root logger
-    # Set a format which works well for console output:
-    Formatter_1 = logging.Formatter("%(message)s")
-    Handler_1.setFormatter(Formatter_1)
-    NB_logger.addHandler(Handler_1)
-    return NB_logger
-
-NB_logger = _configure_logger()
-
-
-
 class NB_Model(object):
     """
     Primary class for working with NebulaBayes.  To use, initialise a class
@@ -127,7 +107,7 @@ class NB_Model(object):
                                    "log E_peak"]
             else:
                 raise ValueError("grid_params must be specified unless "
-                                 " grid_table is 'HII' or 'NLR'")
+                                 "grid_table is 'HII' or 'NLR'")
 
         n_params = len(grid_params)
         if len(set(grid_params)) != n_params: # Parameter names non-unique?
@@ -319,6 +299,8 @@ class NB_Model(object):
                     "chi2" :  The reduced chi^2 of the fit
                     "extinction_Av_mag" : The visual extinction in magnitudes
                               (if "deredden" was True)
+                    "grid_location" : Indices for the interpolated grid that
+                              define the point of the parameter estimates
                 nd_pdf : The numpy ndarray which samples the posterior PDF over
                     the full interpolated parameter space
                 Grid_spec : NB1_Process_grids.Grid_description instance which
@@ -401,7 +383,7 @@ class NB_Model(object):
                 raise ValueError("The line {0}".format(line) + 
                                  " was not previously loaded from grid table")
 
-        input_prior = kwargs.pop("prior", "Uniform") # Default "Uniform"
+        input_prior = kwargs.pop("prior", "Uniform")  # Default "Uniform"
 
         #----------------------------------------------------------------------
         # Handle options for NebulaBayes outputs:
@@ -555,5 +537,25 @@ def _process_observed_data(obs_fluxes, obs_flux_errors, obs_line_names,
     # "norm_line" attribute if we do some common operations on DF_obs.
 
     return DF_obs
+
+
+
+def _configure_logger():
+    """
+    Create a logger for NebulaBayes so the user can easily control verbosity
+    of the output.  We set the level of the "root" logger to debug.
+    """
+    NB_logger = logging.getLogger("NebulaBayes")
+    Handler_1 = logging.StreamHandler()
+    # Set the NB logger and the root logger to show all messages
+    Handler_1.setLevel(logging.DEBUG)
+    logging.getLogger("").setLevel(logging.DEBUG)  # For root logger
+    # Set a format which works well for console output:
+    Formatter_1 = logging.Formatter("%(message)s")
+    Handler_1.setFormatter(Formatter_1)
+    NB_logger.addHandler(Handler_1)
+    return NB_logger
+
+NB_logger = _configure_logger()
 
 

@@ -15,11 +15,22 @@ v0.9.6  Mar 2018:  Add "likelihood_lines" keyword option.  In the "best model"
         tables, the "Delta_(SDs)" field was renamed to "Resid_Stds" and now
         provides "(obs - model)/sigma" instead of "(model - obs)/sigma".  The
         resolution of output images was increased.
-v0.9.7  Added citation info for the NebulaBayes paper to the documentation and
-        clarified that the cubic interpolation option is experimental. The PyPI
-        "Development status" was changed from "Beta" to "Production/Stable".
-v0.9.8  Corrected a subtle and serious bug in the "likelihood_lines" feature
-        that could result in incorrect likelihood calculations (predictions
-        compared to the wrong observations).  This required changing
-        "obs_flux_arrs" and "obs_flux_err_arrs" to be dictionaries rather than
-        lists (these are public attributes on NB_Result objects).
+v0.9.7  April 2018:  Added citation info for the NebulaBayes paper to document-
+        ation; clarified that the cubic interpolation option is experimental.
+v0.9.8  April 2018:  Fixed some bugs and added associated regression tests to
+        the test suite for each bug:
+        -  Corrected a bug when using the new "likelihood_lines" feature that
+        could cause incorrect likelihood calculations (predictions compared to
+        the wrong observations).  The NB_Result attributes "obs_flux_arrs" and
+        "obs_flux_err_arrs" are now dicts rather than lists.
+          -  The calculation of line ratio priors now uses dereddened observed
+        fluxes and errors when deredden=True.  Previously results were incorrect
+        when deredden=True and the lines in a ratio had a nontrivial wavelength
+        separation.  There are new signatures for "calculate_line_ratio_prior"
+        and custom prior callbacks (docs/2_Example-advanced.py was updated).
+          -  Calculations for the "best model" table, chi^2, and extinction now
+        use the gridpoint defined by the peaks of the marginalised 1D PDFs to
+        define the "best model".  Previously the n-D PDF peak was inadvertently
+        used.  The calculations for parameter estimates are unchanged.  The
+        "best_model" dict on NB_nd_pdf objects now has a "grid_location" key
+        and the "Index_of_peak" field was added to parameter estimate tables.
