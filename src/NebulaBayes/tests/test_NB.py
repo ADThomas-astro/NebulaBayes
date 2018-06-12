@@ -551,6 +551,7 @@ class Test_real_data_with_cubic_interpolation(unittest.TestCase):
     """
     Very similar to the previous test class, but we use cubic interpolation
     instead of linear interpolation when interpolating model flux grids.
+    We also test resetting the logging level after using the "verbosity" kwarg.
     """
     longMessage = True  # Append messages to existing message
 
@@ -577,6 +578,11 @@ class Test_real_data_with_cubic_interpolation(unittest.TestCase):
         cls.NB_Model_1 = NB_Model("HII", line_list=cls.lines, interp_order=3,
                                   interpd_grid_shape=[100, 130, 80])
 
+        cls.old_log_level = NebulaBayes.NB_logger.level
+        cls.test_log_level = 0  # A low number different to default
+        assert cls.old_log_level != cls.test_log_level  # For test to work
+        NebulaBayes.NB_logger.setLevel(cls.test_log_level)
+
         kwargs = {"prior_plot": cls.prior_plot,
                   "likelihood_plot": cls.likelihood_plot,
                   "posterior_plot": cls.posterior_plot,
@@ -585,6 +591,7 @@ class Test_real_data_with_cubic_interpolation(unittest.TestCase):
                   "prior":[("SII6716","SII6731")],
                   "plot_configs": [{"table_on_plot": True,
                                     "legend_fontsize": 5}]*4,
+                  "verbosity": "DEBUG",  # Test that level change is temporary
                   }
         cls.Result = cls.NB_Model_1(cls.obs_fluxes, cls.obs_errs, cls.lines,
                                     **kwargs)
@@ -615,10 +622,19 @@ class Test_real_data_with_cubic_interpolation(unittest.TestCase):
         """
         self.assertTrue(self.NB_Model_1.Interpd_grids.interp_order == 3)
 
+    def test_resetting_log_level(self):
+        """
+        Ensure that after using the verbosity keyword, the NB_logger
+        level is unchanged (i.e. was reset to its previous value)
+        """
+        self.assertEqual(NebulaBayes.NB_logger.level, self.test_log_level)
+
 
     @classmethod
     def tearDownClass(cls):
-        """ Remove the output files when tests in this class have finished """
+        """ Remove output files when tests in this class have finished,
+            and undo change to logging level. """
+        NebulaBayes.NB_logger.setLevel(cls.old_log_level)
         if clean_up:
             files = [cls.prior_plot, cls.likelihood_plot, cls.posterior_plot,
                      cls.estimate_table]

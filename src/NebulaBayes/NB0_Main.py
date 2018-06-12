@@ -258,11 +258,15 @@ class NB_Model(object):
                     annotations).  See the "docs/Example-advanced.py" file for
                     an example function, showing the arguments it must accept.
         verbosity : str
-            Determine how much information is printed to the terminal by
-            setting the level of the NebulaBayes logger.  Allowed levels (in
-            order of more to less output) are "DEBUG", "INFO" and "WARNING".
-            The logger object may be accessed as NebulaBayes.NB_logger.
-            Default: "DEBUG"
+            Choose how much information to print to the terminal for this run.
+            Allowed verbosity levels (in order of more to less output) are
+            "DEBUG", "INFO", "WARNING", and "ERROR".  This feature uses the
+            standard python "logging" module; access the relevant logger object
+            as "NebulaBayes.NB_logger" or "logging.getLogger('NebulaBayes')".
+            Note that when NebulaBayes is imported, the root logger level is
+            set to "DEBUG".  If "verbosity" is not supplied, the current level
+            of NB_logger will be used (which is set to "DEBUG" when NB_logger
+            is created at import time).
 
 
         Returns
@@ -409,11 +413,12 @@ class NB_Model(object):
             output_locations[key] = kwargs.pop(key, None)
             # Default None means "Don't produce the relevant output"
 
-        default_verbosity = "DEBUG"
-        verbosity = kwargs.pop("verbosity", default_verbosity)
-        if verbosity not in ["DEBUG", "INFO", "WARNING"]:
-            raise ValueError("verbosity must be 'DEBUG', 'INFO', or 'WARNING'")
-        NB_logger.setLevel(verbosity)
+        verbosity = kwargs.pop("verbosity", None)
+        if verbosity not in [None, "DEBUG", "INFO", "WARNING", "ERROR"]:
+            raise ValueError("Bad verbosity level: '{0}'".format(verbosity))
+        if verbosity is not None:  # Temporarily set level to "verbosity"
+            old_verbosity = logging.getLevelName(NB_logger.level)
+            NB_logger.setLevel(verbosity)  # Will reset to old_verbosity later
 
         # Any remaining keyword arguments that weren't used?
         if len(kwargs) > 0:
@@ -453,7 +458,8 @@ class NB_Model(object):
             self._Plotter(NB_nd_pdf, out_image_name, config=Plot_Config_1)
 
         NB_logger.info("NebulaBayes parameter estimation finished.")
-        NB_logger.setLevel(default_verbosity)  # Reset
+        if verbosity is not None:   # Reset logging level to old_verbosity
+            NB_logger.setLevel(old_verbosity)
         return Result
 
 
@@ -488,6 +494,12 @@ def _process_observed_data(obs_fluxes, obs_flux_errors, obs_line_names,
             raise ValueError("An emission line wavelength isn't finite")
         if np.any(obs_wavelengths <= 0):  # Any non-positive?
             raise ValueError("An emission line wavelength isn't positive")
+        for line, l_lambda in zip(["Hbeta", "Halpha"], [4861., 6563.]):
+            if line in obs_line_names:
+                in_l_lambda = obs_wavelengths[obs_line_names.index(line)]
+                if not np.isclose(in_l_lambda, l_lambda, atol=1.0, rtol=0):
+                    raise ValueError("Bad {0} wavelength: {1:.2f}A".format(
+                                                            line, in_l_lambda))
 
     # Check input measured fluxes:
     if np.any(np.isnan(obs_fluxes)) or np.any(obs_fluxes == np.inf):
@@ -504,7 +516,7 @@ def _process_observed_data(obs_fluxes, obs_flux_errors, obs_line_names,
 
     # Check likelihood_lines list:
     if likelihood_lines is None:
-        likelihood_lines = obs_line_names
+        likelihood_lines = obs_line_names[:]  # Copy
     if not all(isinstance(s, _str_type) for s in likelihood_lines):
         raise TypeError("All items in likelihood_lines must be strings")
     if len(likelihood_lines) < 2:
@@ -540,22 +552,25 @@ def _process_observed_data(obs_fluxes, obs_flux_errors, obs_line_names,
 
 
 
-def _configure_logger():
+def _configure_logging():
     """
     Create a logger for NebulaBayes so the user can easily control verbosity
-    of the output.  We set the level of the "root" logger to debug.
+    of the output.  We also set the level of the "root" logger to debug.
     """
-    NB_logger = logging.getLogger("NebulaBayes")
+    NB_logger = logging.getLogger("NebulaBayes")  # New logger
+    # Set logger to show all messages by default (current level is 0 (NOTSET)):
+    NB_logger.setLevel(logging.DEBUG)  # (Equivalent to NOTSET anyway...)
+    # We also need to set the root logger level to a low value:
+    logging.getLogger("").setLevel(logging.DEBUG)
+    # This isn't really a great solution, but there's no way to temporarily
+    # "opt out" of using the full logging hierarchy...
+    # Set the output formatting with a nice format for console output:
     Handler_1 = logging.StreamHandler()
-    # Set the NB logger and the root logger to show all messages
-    Handler_1.setLevel(logging.DEBUG)
-    logging.getLogger("").setLevel(logging.DEBUG)  # For root logger
-    # Set a format which works well for console output:
     Formatter_1 = logging.Formatter("%(message)s")
     Handler_1.setFormatter(Formatter_1)
     NB_logger.addHandler(Handler_1)
     return NB_logger
 
-NB_logger = _configure_logger()
+NB_logger = _configure_logging()
 
 
