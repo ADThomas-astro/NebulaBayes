@@ -23,14 +23,11 @@ version="$(grep __version__ src/NebulaBayes/_version.py | cut -d \" -f2)"
 
 # Upload to PyPI testing site (https://testpypi.python.org/)
 # (note that I've added a ~/.pypirc file)
-# (use python 3 twine because a newer SSL is needed):
-/Applications/anaconda/bin/twine upload -r test dist/NebulaBayes-${version}*
+twine upload -r test dist/NebulaBayes-${version}*
 # We can install from the test PyPI site with
-# pip install -i https://testpypi.python.org/pypi NebulaBayes  # <- doesn't work due to old SSL
-# /Applications/anaconda/bin/pip install -i https://testpypi.python.org/pypi NebulaBayes  # Works!
+# pip install -i https://testpypi.python.org/pypi NebulaBayes
 
 # Upload to real PyPI site (https://pypi.python.org/)
-/Applications/anaconda/bin/twine upload -r pypi dist/NebulaBayes-${version}*
+twine upload -r pypi dist/NebulaBayes-${version}*
 # Can install with
-# pip install NebulaBayes  # python 2
-# /Applications/anaconda/bin/pip install NebulaBayes  # python 3
+# pip install NebulaBayes
