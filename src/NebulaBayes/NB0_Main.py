@@ -75,8 +75,7 @@ class NB_Model(object):
             either 1 (linear) or 3 (cubic; an experimental option).  Default: 1
         grid_error : float between 0 and 1, optional
             The systematic relative error on grid fluxes, as a linear
-            proportion.  Default is 0.35 (average of errors 0.15 dex above and
-            0.15 dex below).
+            proportion.  Default is 0.1.
 
         Returns
         -------
@@ -134,7 +133,7 @@ class NB_Model(object):
         if not interp_order in [1, 3]:
             raise ValueError("interp_order must be either 1 or 3")
 
-        grid_rel_error = kwargs.pop("grid_error", 0.35)  # Default: 0.35
+        grid_rel_error = kwargs.pop("grid_error", 0.1)  # Default: 0.1
         if not 0 <= grid_rel_error < 1:
             raise ValueError("grid_error must be between 0 and 1")
 
