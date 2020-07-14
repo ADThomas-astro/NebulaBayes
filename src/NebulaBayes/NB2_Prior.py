@@ -20,7 +20,7 @@ NB_logger = logging.getLogger("NebulaBayes")
 def calculate_uniform_prior(grids_dict):
     """
     Return a (linear probability space) uniform prior.
-    grids_dict: Dictionary that maps line names to interpolated n-D predicted 
+    grids_dict: Dictionary that maps line names to interpolated n-D predicted
                 flux arrays
     Returns an array of the value of the prior over the grid.
     """
@@ -57,7 +57,7 @@ def calculate_line_ratio_prior(obs_flux_arr_dict, obs_err_arr_dict,
         if line_i not in obs_flux_arr_dict:
             raise ValueError("The line {0} was used in a prior but is not in"
                              " the list of observed lines".format(line_i))
-    
+
     # Calculate arrays of the observed line flux ratio with errors over the
     # full parameter space
     flux_1, err_1 = obs_flux_arr_dict[line_1], obs_err_arr_dict[line_1]

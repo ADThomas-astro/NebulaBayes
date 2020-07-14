@@ -23,7 +23,7 @@ Adam D. Thomas 2015 - 2018
 
 
 # These are the only allowed "plot_types", which an ND_PDF_Plotter (defined
-# below) will be used for. 
+# below) will be used for.
 plot_types = ["Prior", "Likelihood", "Posterior", "Individual_line"]
 
 
@@ -163,14 +163,14 @@ class ND_PDF_Plotter(object):
                     "hspace": 0.02, "wspace": 0.02}
         fig, axes = plt.subplots(n, n, figsize=fig_width_ht,
                                                           gridspec_kw=gridspec)
-        
+
         # Add some more information to the gridspec dict
         gridspec["axes_width"] = (gridspec["right"] - gridspec["left"] -
                            (n - 1) * gridspec["wspace"]) / n  # Figure fraction
         gridspec["axes_height"] = (gridspec["top"] - gridspec["bottom"] -
                            (n - 1) * gridspec["hspace"]) / n  # Figure fraction
         gridspec["n"] = n
-        
+
         # Set up the axes grid
         axes = np.atleast_2d(axes)  # For the n == 1 case
         # Flip axes array so images fill lower-left half of subplot grid:
@@ -178,7 +178,7 @@ class ND_PDF_Plotter(object):
         # Now axes[0, 0] is the axes in the lower-right.
         for ax in axes.ravel():    # Turn all axes off for now.
             ax.set_visible(False)  # Needed axes will be turned on later.
-        
+
         # Save the figure, axes grid and gridspec dictionary as attributes
         self._axes = axes
         self._fig = fig
@@ -242,7 +242,7 @@ class ND_PDF_Plotter(object):
         lh1, ll1 = ax_1D.get_legend_handles_labels()
         lh2, ll2 = ax_2D.get_legend_handles_labels()
         lgd = ax_1D.legend(lh1+lh2, ll1+ll2, loc="lower left", borderpad=1,
-                          scatterpoints=1, bbox_to_anchor=legend_anchor, 
+                          scatterpoints=1, bbox_to_anchor=legend_anchor,
                           bbox_transform=self._fig.transFigure,  # Needed
                                     # because we use figure fraction coords
                           fontsize=fontsize, fancybox=False)
@@ -438,8 +438,8 @@ class ND_PDF_Plotter(object):
             if plot_type != "Individual_line":  # If table available
                 pd.set_option("display.precision", 4)
                 ax_k.annotate(config.table_for_plot, anno_location,
-                            xycoords="figure fraction", annotation_clip=False, 
-                            horizontalalignment="left", verticalalignment="top", 
+                            xycoords="figure fraction", annotation_clip=False,
+                            horizontalalignment="left", verticalalignment="top",
                             family="monospace", fontsize=self.fs1)
 
         if out_filename.endswith(".pdf"):  # Add metadata if output is a .pdf

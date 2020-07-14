@@ -112,6 +112,8 @@ class NB_Model(object):
         n_params = len(grid_params)
         if len(set(grid_params)) != n_params: # Parameter names non-unique?
             raise ValueError("grid_params are not all unique")
+        if n_params > 6:
+            raise ValueError("Too many grid parameters ({0})".format(n_params))
 
         # If line_list isn't specified it'll be created when loading the grid
         if line_list is not None:
@@ -160,7 +162,7 @@ class NB_Model(object):
         """
         Run NebulaBayes Bayesian parameter estimation using the interpolated
         grids stored in this NB_Model object.
-        
+
         Parameters
         ----------
         obs_fluxes : list of floats
@@ -172,7 +174,7 @@ class NB_Model(object):
         obs_line_names : list of str
             The corresponding emission line names, matching names in the header
             of the input grid flux table
-        
+
         Optional parameters - for parameter estimation
         ----------------------------------------------
         norm_line : str
@@ -384,7 +386,7 @@ class NB_Model(object):
                         norm_line=norm_line, likelihood_lines=likelihood_lines)
         for line in DF_obs.index:  # Check observed emission lines are in grid
             if line not in self.Interpd_grids.grids["No_norm"]:
-                raise ValueError("The line {0}".format(line) + 
+                raise ValueError("The line {0}".format(line) +
                                  " was not previously loaded from grid table")
 
         input_prior = kwargs.pop("prior", "Uniform")  # Default "Uniform"
@@ -479,8 +481,8 @@ def _process_observed_data(obs_fluxes, obs_flux_errors, obs_line_names,
     obs_flux_errors = np.asarray(obs_flux_errors, dtype=float)
     # Check measured data inputs:
     n_measured = len(obs_line_names)
-    if (obs_fluxes.size != n_measured) or (obs_flux_errors.size != n_measured):    
-        raise ValueError("Inputs obs_fluxes, obs_flux_errors and " 
+    if (obs_fluxes.size != n_measured) or (obs_flux_errors.size != n_measured):
+        raise ValueError("Inputs obs_fluxes, obs_flux_errors and "
                          "obs_line_names don't all have the same length.")
     if n_measured < 2:
         raise ValueError("At least two observed lines are required (one is for "
@@ -507,7 +509,7 @@ def _process_observed_data(obs_fluxes, obs_flux_errors, obs_line_names,
         raise ValueError("A measured emission line flux is NaN or +inf")
     if np.any((obs_fluxes <= 0) & (obs_fluxes != -np.inf)):
         raise ValueError("A measured emission line flux isn't positive")
-    
+
     # Check input measured flux errors:
     if np.any(~np.isfinite(obs_flux_errors)): # Any non-finite?
         raise ValueError("The flux error for an emission line isn't finite")

@@ -62,7 +62,7 @@ class Grid_description(object):
         # So self.paramNameAndValue2ArrayInd[(p,v)] will give the index along
         # the "p" axis where the parameter with name "p" has value v.
 
-        self.paramName2paramMinMax = OD( (p,(a.min(), a.max())) for p,a in 
+        self.paramName2paramMinMax = OD( (p,(a.min(), a.max())) for p,a in
                                           self.paramName2paramValueArr.items() )
 
 
@@ -98,7 +98,7 @@ def initialise_grids(grid_table, grid_params, lines_list, interpd_grid_shape,
     """
     Initialise grids objects for an initialising NB_Model instance.  The
     outputs are instances of the NB_Grid class defined above.
-    
+
     Parameters
     ----------
     grid_table : str or pandas DataFrame
@@ -123,7 +123,7 @@ def initialise_grids(grid_table, grid_params, lines_list, interpd_grid_shape,
     DF_grid = load_grid_data(grid_table)
     # Process and check the table, making the lines_list if it wasn't specified
     DF_grid, lines_list = process_raw_table(DF_grid, grid_params, lines_list)
-    
+
     # Construct raw flux grids
     Raw_grids = construct_raw_grids(DF_grid, grid_params, lines_list)
 
@@ -138,7 +138,7 @@ def initialise_grids(grid_table, grid_params, lines_list, interpd_grid_shape,
 def load_grid_data(grid_table):
     """
     Load the model grid data.
-    
+
     Returns
     -------
     DF_grid : pd.DataFrame instance
@@ -328,10 +328,10 @@ def interpolate_flux_arrays(Raw_grids, interpd_shape, interp_order):
     for i, (p, n) in enumerate(zip(Raw_grids.param_names, interpd_shape)):
         p_min, p_max = Raw_grids.paramName2paramMinMax[p]
         val_arrs_interp.append(np.linspace(p_min, p_max, n))
-    
+
     Interpd_grids = NB_Grid(list(Raw_grids.param_names), val_arrs_interp)
     Interpd_grids.grids["No_norm"] = OD()
-    
+
     # Check that the interpolated grid has uniform spacing in each dimension:
     for arr in Interpd_grids.param_values_arrs:
         arr_diff = np.diff(arr)
@@ -516,7 +516,7 @@ class RegularGridResampler(object):
     Linear interpolation is used.
 
     The RegularGridResampler is initialised with an input grid shape and an
-    output grid shape, to be ready to interpolate from the input shape to the 
+    output grid shape, to be ready to interpolate from the input shape to the
     output shape.  Each call then provides different grid data to be
     interpolated; this code is optimised for doing the same interpolation
     on many different grids of the same shape.
@@ -563,7 +563,7 @@ class RegularGridResampler(object):
         self.in_shape = tuple(len(p) for p in in_points)
         self.ndim = len(in_points)
         self.out_shape = tuple(out_shape)
-        
+
         for p_arr in self.in_points:
             if p_arr.ndim != 1:
                 raise ValueError("Points arrays must be 1D")
@@ -579,7 +579,7 @@ class RegularGridResampler(object):
                 raise ValueError("Each output dimension needs at least 2 points")
         self.out_points = [np.linspace(p[0], p[-1], n_p) for p,n_p in zip(
                                                      self.in_points, out_shape)]
-        
+
         # Find indices of the lower edge for each interpolated point in each
         # dimension:
         self.lower_edge_inds = []

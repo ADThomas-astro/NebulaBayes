@@ -105,7 +105,7 @@ class NB_nd_pdf(object):
         self.Grid_spec.double_indices = double_indices
         # Looks something like: [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)]
         # Note that the order of indices in each tuple is from smaller to larger
-        
+
         # Initialise dictionary of all possible 2D marginalised pdf arrays:
         marginalised_2D = {}  # The dict keys are tuples of two parameter names
         # Iterate over all possible pairs of parameters:
@@ -150,10 +150,10 @@ class NB_nd_pdf(object):
         # For all parameters after the first in param_names:
         for double_name, param_inds_double in zip(double_names[:n-1],
                                                   double_indices[:n-1]):
-            # For each pair of parameters we take the second parameter, and 
+            # For each pair of parameters we take the second parameter, and
             # integrate over the first parameter of the pair (which by
             # construction is always the first parameter in param_names).
-            assert param_inds_double[0] == 0 
+            assert param_inds_double[0] == 0
             param = param_names[param_inds_double[1]]
             # Integrate over first dimension (parameter) using Simpson's rule:
             marginalised_1D[param] = simps(marginalised_2D[double_name],
@@ -217,8 +217,8 @@ class NB_nd_pdf(object):
         for col in [col for col,t in columns if t == np.float]:
             DF_estimates[col] = np.nan
         DF_estimates.loc[:,"n_local_maxima"] = -1
-        
-        # Fill in DF_estimates: 
+
+        # Fill in DF_estimates:
         estimate_inds = np.zeros(n, dtype=int)  # Coords of "best model"
         for i,p in enumerate(self.Grid_spec.param_names):
             param_val_arr = self.Grid_spec.paramName2paramValueArr[p]
@@ -227,7 +227,7 @@ class NB_nd_pdf(object):
             estimate_inds[i] = p_dict["Index_of_peak"]
             for field, value in p_dict.items():
                 if field != "Parameter":
-                    DF_estimates.set_value(p, field, value)
+                    DF_estimates.at[p, field] = value
 
         self.DF_estimates = DF_estimates
         self.best_model["grid_location"] = tuple(estimate_inds)
@@ -252,13 +252,13 @@ class NB_nd_pdf(object):
         inds_best = self.best_model["grid_location"]
         normed_grids = Interpd_grids.grids[NB_Result.DF_obs.norm_line + "_norm"]
         DF_best["Model"] = [normed_grids[l][inds_best] for l in DF_best.index]
-        
+
         if NB_Result.deredden:  # Observed fluxes dereddened at each gridpoint?
             for l in DF_best.index:
-                DF_best.set_value(l, "Obs_dered",
-                                        NB_Result.obs_flux_arrs[l][inds_best])
-                DF_best.set_value(l, "Flux_err_dered",
-                                    NB_Result.obs_flux_err_arrs[l][inds_best])
+                DF_best.at[l, "Obs_dered"] = \
+                                        NB_Result.obs_flux_arrs[l][inds_best]
+                DF_best.at[l, "Flux_err_dered"] = \
+                                    NB_Result.obs_flux_err_arrs[l][inds_best]
             DF_best["Obs_S/N_dered"] = (DF_best["Obs_dered"].values /
                                         DF_best["Flux_err_dered"].values)
             resids = DF_best["Obs_dered"].values - DF_best["Model"].values
@@ -274,7 +274,7 @@ class NB_nd_pdf(object):
             # Columns to include in output and their order (index is "Line"):
             include_cols = ["In_lhood?", "Obs", "Model", "Resid_Stds",
                             "Obs_S/N"]
-        
+
         self.best_model["table"] = DF_best[include_cols]
 
 
@@ -400,7 +400,7 @@ def make_single_parameter_estimate(param_name, val_arr, pdf_1D):
     index_of_max = np.argmax(pdf_1D)
     out_dict["Index_of_peak"] = index_of_max
     out_dict["Estimate"] = val_arr[index_of_max]
-    
+
     # Generate cumulative density function (CDF) using trapezoidal integration:
     cdf_1D = cumtrapz(pdf_1D, x=val_arr, initial=0)
     # initial=0 => cdf_1D has same length as pdf_1D; first CDF entry will be 0;
@@ -413,7 +413,7 @@ def make_single_parameter_estimate(param_name, val_arr, pdf_1D):
         # Find the percentiles of lower and upper bounds of CI:
         lower_prop = (1.0 - CI/100.0) / 2.0 # Lower percentile as proportion
         upper_prop = 1.0 - lower_prop       # Upper percentile as proportion
-        
+
         # Find value corresponding to the lower bound
         lower_ind_arr = index_array[cdf_1D < lower_prop]
         if lower_ind_arr.size == 1:
@@ -457,7 +457,7 @@ def make_single_parameter_estimate(param_name, val_arr, pdf_1D):
     out_dict["P(upper)"] = 1.0 - cdf_1D[-3]
     out_dict["P(upper)>50%?"] = bool_map[ (out_dict["P(upper)"] > 0.5) ]
     out_dict["Est_at_upper?"] = bool_map[ (index_of_max >= cdf_1D.size - 4) ]
-    
+
     return out_dict
 
 
@@ -574,7 +574,7 @@ class NB_Result(object):
                     DF_obs["Flux_err"].values, BD=grid_BD_arr, normalise=True)
         # The output fluxes and errors are normalised to Hbeta == 1.
         # Now obs_flux_arr_list is a list of arrays corresponding to the list
-        # of observed fluxes, where each array has the same shape as the 
+        # of observed fluxes, where each array has the same shape as the
         # model grid.  And obs_flux_err_arr_list is the same, but for errors.
         obs_flux_arrs = {l: f for l,f in zip(lines, obs_flux_arr_list)}
         obs_flux_err_arrs = {l: e for l,e in zip(lines, obs_flux_err_arr_list)}
@@ -674,7 +674,7 @@ class NB_Result(object):
             obs_flux_i = self.obs_flux_arrs[line]
             obs_flux_err_i = self.obs_flux_err_arrs[line]
             assert obs_flux_i.shape == pred_flux_i.shape
-            
+
             # Calculate the total variance, which is the sum of variances due
             # to both the measured and modelled fluxes:
             # var = obs_flux_err_i**2 + (pred_flux_rel_err * pred_flux_i)**2

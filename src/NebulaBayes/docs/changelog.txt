@@ -34,3 +34,7 @@ v0.9.8  April 2018:  Fixed some bugs and added associated regression tests to
         used.  The calculations for parameter estimates are unchanged.  The
         "best_model" dict on NB_nd_pdf objects now has a "grid_location" key
         and the "Index_of_peak" field was added to parameter estimate tables.
+v0.9.9  June 2018 - July 2020:  The interaction of the "verbosity" keyword with
+        the logging level was improved.  Also, "ERROR" is now an allowed level.
+        Remove use of deprecated pandas method "set_value".
+
