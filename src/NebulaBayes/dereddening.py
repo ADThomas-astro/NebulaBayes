@@ -24,7 +24,8 @@ February - March 2017
 Keywords - extinction, extragalactic reddening, Fischera & Dopita 2005, 2011,
            attenuation curve, relative color excess, Calzetti 2001, dust
 """
-__version__ = 0.7
+__version__ = 0.8
+# version 0.8   Made propagating errors in Balmer decrements optional
 
 
 
@@ -37,7 +38,7 @@ def _calc_relative_colour_excess(lambda_AA):
     lambda_AA: Wavelength in Angstroems. A list or array of floats.
     Returns the relative colour excess as an array of floats.
     """
-    lambda_AA = np.asarray(lambda_AA)
+    lambda_AA = np.asarray(lambda_AA, dtype=np.float64)
     assert np.all(lambda_AA > 2480) and np.all(lambda_AA < 12390)
     lambda_um = lambda_AA * 1e-4 # Convert wavelength to um
 
@@ -60,7 +61,8 @@ def _find_BD(line_lambdas, line_fluxes, flux_errs=None):
     If flux_errs is supplied, the error in the Balmer decrement is also returned,
     with the error in Halpha and Hbeta propagated into the Balmer decrement.
     """
-    line_lambdas = np.asarray(line_lambdas)
+    line_lambdas = np.asarray(line_lambdas, dtype=np.float64)
+    line_fluxes  = np.asarray(line_fluxes,  dtype=np.float64)
     assert line_lambdas.size == len(line_fluxes)
     assert line_lambdas.ndim == 1
     if flux_errs is not None:
@@ -102,12 +104,13 @@ def _find_BD(line_lambdas, line_fluxes, flux_errs=None):
 
 
 
-def _apply_BD(line_lambdas, line_fluxes, flux_errs, BD, normalise):
+def _apply_BD(line_lambdas, line_fluxes, flux_errs, BD, normalise,
+              propagate_errors):
     """
     De-redden or redden emission line fluxes by considering a target Balmer
-    decrement (BD), using Equation A12 in the Appendix of Vogt13.  This function
-    is its own inverse, i.e. reddens or dereddens.
-    line_lambdas, line_fluxes, flux_errs: As in the functions "deredden" and "redden".
+    decrement (BD), using Equation A12 in the Appendix of Vogt13.  This
+    function is its own inverse, i.e. reddens or dereddens.
+    line_lambdas, line_fluxes, flux_errs: As in functions "deredden" and "redden".
     BD: Desired Balmer decrement (F_Halpha / F_Hbeta) to use in (de)reddening
         (will be the Balmer decrement in the output).  If BD is a scalar, the
         output will be a 1D numpy array.  If BD is an array, the (de)reddening
@@ -115,21 +118,30 @@ def _apply_BD(line_lambdas, line_fluxes, flux_errs, BD, normalise):
         list of flux arrays.  The output arrays will all have the same shape as
         BD and the list will have the same length as line_lambdas.
     normalise: Boolean.  Normalise output to Hbeta==1?
+    propagate_errors:  Boolean.  Propagate error in observed Balmer decrement
+                       into the errors on the (de)reddened fluxes?
 
     Returns out_fluxes, an array or list of arrays of (de)reddened line fluxes
-    corresponding to the input line_lambdas.  If flux_errs are supplied then the
-    output will be (out_fluxes, out_flux_errs), where out_flux_errs has the same
-    format as out_fluxes.
+    corresponding to the input line_lambdas.  If flux_errs are supplied then
+    the output will be (out_fluxes, out_flux_errs), where out_flux_errs has
+    the same format as out_fluxes.
     """
     if BD is None:
         raise ValueError("BD must be specified")
-    line_lambdas, in_fluxes = np.asarray(line_lambdas), np.asarray(line_fluxes)
+    line_lambdas = np.asarray(line_lambdas, dtype=np.float64)
+    in_fluxes = np.asarray(line_fluxes, dtype=np.float64)
     assert line_lambdas.ndim == 1
     assert line_lambdas.shape == in_fluxes.shape
     if flux_errs is not None:
-        in_flux_errs = np.asarray(flux_errs)
-    BD2 = np.asarray(BD)
+        in_flux_errs = np.asarray(flux_errs, dtype=np.float64)
+        assert line_lambdas.shape == in_flux_errs.shape
+    assert isinstance(normalise, bool)
+    assert isinstance(propagate_errors, bool)
+    if flux_errs is None and propagate_errors:
+        raise Exception("Can't propagate errors - no flux errors given")
+    BD2 = np.asarray(BD, dtype=np.float64)
     is_multiple = (BD2.size > 1) # Output multiple fluxes for each line?
+
     # Find observed Balmer decrement:
     if flux_errs is None:
         BD1 = _find_BD(line_lambdas, in_fluxes)
@@ -139,22 +151,37 @@ def _apply_BD(line_lambdas, line_fluxes, flux_errs, BD, normalise):
     # Apply Equation A12 in Vogt13
     r_c_e = _calc_relative_colour_excess(line_lambdas) # Vector of RCE
     p = 0.76*(r_c_e + 4.5) # Vector of exponents (p=Powers) for (de)reddening equation
-    # Fluxes:
+
+    # (De)redden fluxes
+    # f2 = f1 * (BD1/BD2)^p
     if is_multiple: # BD2 is an array; construct a list of (de)reddened flux arrays
         out_fluxes = [f * (BD1 / BD2)**p_i for f,p_i in zip(in_fluxes, p)]
     else: # BD2 is a scalar; make a 1D vector of (de)reddened fluxes
         out_fluxes = in_fluxes * (BD1 / BD2)**p
-    # Errors: propagate errors on the fluxes and on the starting Balmer decrement
-    #     f2 = f1 * (BD1/BD2)^p  where f1 and B1 have uncertainties.
-    # => df2 = f1 BD2**-p |p BD1**(p-1)| dBD1  +  (BD1/BD2)**p df1
-    if flux_errs is not None and is_multiple:
-        out_errs = [(   f * BD2**-p_i * np.abs(p_i * BD1**(p_i-1)) * BD1_err
-                      + (BD1 / BD2)**p_i * f_err ) for f, f_err, p_i in zip(
-                                                    in_fluxes, in_flux_errs, p)]
-    elif flux_errs is not None:
-        out_errs = ( in_fluxes * BD2**-p * np.abs(p * BD1**(p-1)) * BD1_err
-                      + (BD1 / BD2)**p * in_flux_errs                       )
 
+    # (De)redden errors
+    if flux_errs is not None:
+        if not propagate_errors:
+            if is_multiple:
+                # BD2 is an array; construct a list of (de)reddened error arrays
+                out_errs = [e * (BD1 / BD2)**p_i for e,p_i in zip(in_flux_errs, p)]
+            else: # BD2 is a scalar; make a 1D vector of (de)reddened errors
+                out_errs = in_flux_errs * (BD1 / BD2)**p
+        else:
+            # Propagate errors on the fluxes and on the starting BD
+            #     f2 = f1 * (BD1/BD2)^p  where f1 and B1 have uncertainties.
+            # => df2 = f1 BD2**-p |p BD1**(p-1)| dBD1  +  (BD1/BD2)**p df1
+            if is_multiple:
+                out_errs = [
+                    (f * BD2**-p_i * np.abs(p_i * BD1**(p_i-1)) * BD1_err
+                                                    + (BD1 / BD2)**p_i * f_err
+                    ) for f, f_err, p_i in zip(in_fluxes, in_flux_errs, p)]
+            else:
+                out_errs = (in_fluxes * BD2**-p * np.abs(p * BD1**(p-1)) * BD1_err
+                                                + (BD1 / BD2)**p * in_flux_errs
+                           )
+
+    # Normalise output fluxes and errors
     if normalise:
         where_Hbeta = (np.round(line_lambdas, 0) == 4861) # Hbeta is at 4861.333 AA
         # We've already checked, and there's exactly one line qualifying as Hbeta
@@ -226,7 +253,7 @@ def _BD_from_Av_for_reddening(line_lambdas, line_fluxes, A_v):
 
 def Av_from_BD(BD_low, BD_high):
     """
-    Calculate the extinction in magnitudes associated with in increase in the 
+    Calculate the extinction in magnitudes associated with in increase in the
     Balmer decrement, BD = F_Halpha / F_Hbeta.
     BD_low: The intrinsic (lower) Balmer decrement
     BD_high: The reddened (higher) Balmer decrement
@@ -238,14 +265,14 @@ def Av_from_BD(BD_low, BD_high):
     if BD_low_arr.size > 1 and BD_high_arr.size > 1:
         assert BD_low_arr.shape == BD_high_arr.shape
     assert np.all(BD_low_arr <= BD_high_arr)
-    
+
     A_v = 8.55 * np.log10( BD_high / BD_low ) # Equation A14 in Vogt13
     return A_v
 
 
 
 def deredden(line_lambdas, line_fluxes, line_errs=None, BD=None, A_v=None,
-                                                               normalise=False):
+             normalise=False, propagate_errors=False):
     """
     Deredden emission line fluxes by either specifying a target Balmer decrement
     (F_Halpha/F_Hbeta), or an extinction A_v to be "removed".
@@ -263,14 +290,16 @@ def deredden(line_lambdas, line_fluxes, line_errs=None, BD=None, A_v=None,
     for all supplied values of BD (or A_v) and the output fluxes will be a list
     of arrays.  The output arrays will all have the same shape as BD (or A_v)
     and the list containing them will have the same length as line_lambdas.
-    normalise: Normalise output to Hbeta==1?  Default:False
+    normalise: Normalise output to Hbeta==1?  Default: False
+    propagate_errors:  Propagate error in observed Balmer decrement into the
+                       errors on the dereddened fluxes? Default: False
 
     Returns dered_fluxes if line_errs is not specified, or alternatively returns
     (dered_fluxes, dered_errs) if line_errs is given.  The array (or list of
     arrays) dered_fluxes contains de-reddened fluxes corresponding to the input
     line_lambdas.  The output dered_errs contains corresponding errors propagated
     from the input errors.  The dereddened fluxes (and errors) are normalised to
-    Hbeta == 1 if normalise == True. 
+    Hbeta == 1 if normalise == True.
     """
     # Look at what was specified, and determine the Balmer decrement to use.
     if A_v is None:
@@ -281,12 +310,13 @@ def deredden(line_lambdas, line_fluxes, line_errs=None, BD=None, A_v=None,
             raise ValueError("Must specify only one of A_v or BD, not both")
         BD = _BD_from_Av_for_dereddening(line_lambdas, line_fluxes, A_v)
 
-    return _apply_BD(line_lambdas, line_fluxes, line_errs, BD=BD, normalise=normalise)
+    return _apply_BD(line_lambdas, line_fluxes, line_errs, BD=BD,
+                     normalise=normalise, propagate_errors=propagate_errors)
 
 
 
 def redden(line_lambdas, line_fluxes, line_errs=None, BD=None, A_v=None,
-                                                               normalise=False):
+           normalise=False, propagate_errors=False):
     """
     Redden emission line fluxes by either specifying a target Balmer decrement
     (F_Halpha/F_Hbeta), or an extinction A_v to be "applied".
@@ -304,7 +334,9 @@ def redden(line_lambdas, line_fluxes, line_errs=None, BD=None, A_v=None,
     and the output fluxes will be a list of arrays.  The output arrays will all
     have the same shape as BD (or A_v) and the list containing them will have
     the same length as line_lambdas.
-    normalise: Normalise output to Hbeta==1?  Default:False
+    normalise: Normalise output to Hbeta==1?  Default: False
+    propagate_errors:  Propagate error in observed Balmer decrement into the
+                       errors on the reddened fluxes? Default: False
 
     Returns red_fluxes if line_errs is not specified, or alternatively returns
     (red_fluxes, red_errs) if line_errs is given.  The array (or list of
@@ -322,7 +354,8 @@ def redden(line_lambdas, line_fluxes, line_errs=None, BD=None, A_v=None,
             raise ValueError("Must specify only one of A_v or BD, not both")
         BD = _BD_from_Av_for_reddening(line_lambdas, line_fluxes, A_v)
 
-    return _apply_BD(line_lambdas, line_fluxes, line_errs, BD=BD, normalise=normalise)
+    return _apply_BD(line_lambdas, line_fluxes, line_errs, BD=BD,
+                     normalise=normalise, propagate_errors=propagate_errors)
 
 
 
@@ -332,28 +365,30 @@ class _Tests(unittest.TestCase):
     def test_simple_red_dered_single_BD(self):
         # Test that the Balmer decrement behaves as expected
         l_HbHa = [4861, 6563] # Hbeta and Halpha wavelengths in Angstroems
+        kw = {"normalise": True, "propagate_errors": False}
         self.assertTrue(np.isclose(
-            _apply_BD(l_HbHa,[1.0,3.5], None, BD=2.9, normalise=True)[1], 2.9, atol=atol))
+            _apply_BD(l_HbHa,[1.0,3.5], None, BD=2.9, **kw)[1], 2.9, atol=atol))
         self.assertTrue(np.isclose(
-            _apply_BD(l_HbHa,[1.0,2.9], None, BD=3.5, normalise=True)[1], 3.5, atol=atol))
+            _apply_BD(l_HbHa,[1.0,2.9], None, BD=3.5, **kw)[1], 3.5, atol=atol))
         self.assertTrue(np.isclose(
-            deredden( l_HbHa,[1.0,3.5], None, BD=2.9, normalise=True)[1], 2.9, atol=atol))
+            deredden( l_HbHa,[1.0,3.5], None, BD=2.9, **kw)[1], 2.9, atol=atol))
         self.assertTrue(np.isclose(
-            redden(   l_HbHa,[1.0,2.9], None, BD=3.5, normalise=True)[1], 3.5, atol=atol))
+            redden(   l_HbHa,[1.0,2.9], None, BD=3.5, **kw)[1], 3.5, atol=atol))
 
 
     def test_simple_red_dered_multiple_BD(self):
         # Test that the Balmer decrement behaves as expected
         l_HbHa = [4861, 6563] # Hbeta and Halpha wavelengths in Angstroems
         arr_29, arr_31 = np.array([2.9, 2.9, 2.9]), np.array([3.1, 3.1, 3.1])
+        kw = {"normalise": True, "propagate_errors": False}
         self.assertTrue(np.allclose(
-            _apply_BD(l_HbHa,[1.0,3.5], None, BD=arr_29, normalise=True)[1], arr_29, atol=atol))
+            _apply_BD(l_HbHa,[1.0,3.5], None, BD=arr_29, **kw)[1], arr_29, atol=atol))
         self.assertTrue(np.allclose(
-            _apply_BD(l_HbHa,[1.0,2.9], None, BD=arr_31, normalise=True)[1], arr_31, atol=atol))
+            _apply_BD(l_HbHa,[1.0,2.9], None, BD=arr_31, **kw)[1], arr_31, atol=atol))
         self.assertTrue(np.allclose(
-            deredden( l_HbHa,[1.0,3.5], None, BD=arr_29, normalise=True)[1], arr_29, atol=atol))
+            deredden( l_HbHa,[1.0,3.5], None, BD=arr_29, **kw)[1], arr_29, atol=atol))
         self.assertTrue(np.allclose(
-            redden(   l_HbHa,[1.0,2.9], None, BD=arr_31, normalise=True)[1], arr_31, atol=atol))
+            redden(   l_HbHa,[1.0,2.9], None, BD=arr_31, **kw)[1], arr_31, atol=atol))
 
 
     def test_1D_outputs(self):
@@ -366,11 +401,16 @@ class _Tests(unittest.TestCase):
         obs_fluxes  = [BD1,  4.1,  1.35,     0.99999]
 
         # Test that "_apply_BD" is its own inverse function
-        dered_fluxes_1 = _apply_BD(obs_lambdas, obs_fluxes, None, BD=BD_intrinsic, normalise=True)
-        rered_fluxes_1 = _apply_BD(obs_lambdas, dered_fluxes_1, None, BD=BD1, normalise=True)
+        dered_fluxes_1 = _apply_BD(obs_lambdas, obs_fluxes, None, BD=BD_intrinsic,
+                                   normalise=True, propagate_errors=False)
+        rered_fluxes_1 = _apply_BD(obs_lambdas, dered_fluxes_1, None, BD=BD1,
+                                   normalise=True, propagate_errors=False)
         self.assertTrue(np.allclose(rered_fluxes_1, obs_fluxes, atol=atol))
-        dered_fluxes_1a = _apply_BD(obs_lambdas, obs_fluxes, None, BD=BD_intrinsic, normalise=False)
-        rered_fluxes_1a = _apply_BD(obs_lambdas, dered_fluxes_1a, None, BD=BD1, normalise=True)
+        dered_fluxes_1a = _apply_BD(obs_lambdas, obs_fluxes, None,
+                                    BD=BD_intrinsic, normalise=False,
+                                    propagate_errors=False)
+        rered_fluxes_1a = _apply_BD(obs_lambdas, dered_fluxes_1a, None, BD=BD1,
+                                    normalise=True, propagate_errors=False)
         self.assertTrue(np.allclose(rered_fluxes_1a, obs_fluxes, atol=atol))
 
         # Test that "_BD_from_Av_for_dereddening", "_BD_from_Av_for_dereddening"
@@ -403,11 +443,12 @@ class _Tests(unittest.TestCase):
         obs_fluxes  = [BD1,  4.1,  1.35,     0.99999]
 
         # Test that "_apply_BD" and "_apply_BD" are inverse functions
-        dered_fluxes_1 = _apply_BD(obs_lambdas, obs_fluxes, None, BD=BD_intrinsic, normalise=True)
+        dered_fluxes_1 = _apply_BD(obs_lambdas, obs_fluxes, None, BD=BD_intrinsic,
+                                   normalise=True, propagate_errors=False)
         # As a list of 1D tuples of dereddened [Halpha, [NII], [OII], Hbeta] fluxes:
         dered_fluxes_1a = list(zip(*[a.ravel() for a in dered_fluxes_1]))
         rered_fluxes_1a = [_apply_BD(obs_lambdas, f, None, BD=BD1,
-                                              normalise=True) for f in dered_fluxes_1a]
+              normalise=True, propagate_errors=False) for f in dered_fluxes_1a]
         for rered_fluxes_1_i in rered_fluxes_1a:
             self.assertTrue(np.allclose(rered_fluxes_1_i, obs_fluxes, atol=atol))
 
@@ -416,7 +457,7 @@ class _Tests(unittest.TestCase):
         Av1 = Av_from_BD(BD_low=BD_intrinsic, BD_high=BD1) # Array of A_v
         BD_a = _BD_from_Av_for_dereddening(obs_lambdas, obs_fluxes, A_v=Av1)
         self.assertTrue(np.allclose(BD_a, BD_intrinsic, atol=atol))
-        for i, dered_fluxes_1_i in enumerate(dered_fluxes_1a):   
+        for i, dered_fluxes_1_i in enumerate(dered_fluxes_1a):
             BD_b = _BD_from_Av_for_reddening(obs_lambdas, dered_fluxes_1_i, A_v=Av1.flat[i])
             self.assertTrue(np.allclose(BD_b, BD1, atol=atol))
 
@@ -431,8 +472,64 @@ class _Tests(unittest.TestCase):
             self.assertTrue(np.allclose(rered_fluxes_2_i, obs_fluxes, atol=atol))
 
 
-    def test_uncertainty_handling_1D(self):
-        # Test uncertainty handling in this module, for cases with 1D outputs
+    def test_simple_uncertainty_handling_1D(self):
+        # Test uncertainty handling in this module, for cases with 1D outputs,
+        # and without propagating uncertainties in (de)reddening
+        # Also tests that the default propagate_errors in functions "redden"
+        # and "deredden" is False.
+
+        BD1, BD_intrinsic = 3.41, 2.9
+        #                 Halpha,    [NII],  [OII],     Hbeta
+        obs_lambdas    = [6562.819,  6583,  3726.032,  4861.333]
+        obs_fluxes     = [BD1,       4.1,   1.35,      1.0     ]
+        obs_flux_errs  = [BD1/3.,    0.1,   0.001,     123.456 ]
+        obs_rel_errs = np.array(obs_flux_errs) / np.array(obs_fluxes)
+
+        # Test that "_apply_BD" is its own inverse function
+        dered_fluxes_1, dered_errs_1 = _apply_BD(obs_lambdas, obs_fluxes,
+            obs_flux_errs, BD=BD_intrinsic, normalise=True, propagate_errors=False)
+        rered_fluxes_1, rered_errs_1 = _apply_BD(obs_lambdas, dered_fluxes_1,
+            dered_errs_1, BD=BD1, normalise=True, propagate_errors=False)
+        self.assertTrue(np.allclose(rered_fluxes_1, obs_fluxes, atol=atol))
+        dered_rel_errs = dered_errs_1 / dered_fluxes_1
+        self.assertTrue(np.allclose(dered_rel_errs, obs_rel_errs, atol=atol))
+        self.assertTrue(np.allclose(rered_errs_1, obs_flux_errs, atol=atol))
+        # Same but without normalising fluxes
+        dered_fluxes_1a, dered_errs_1a = _apply_BD(obs_lambdas, obs_fluxes,
+                               obs_flux_errs, BD=BD_intrinsic, normalise=False,
+                               propagate_errors=False)
+        rered_fluxes_1a, rered_errs_1a = _apply_BD(obs_lambdas, dered_fluxes_1a,
+                               dered_errs_1a, BD=BD1, normalise=False,
+                               propagate_errors=False)
+        # Need bigger tolerances here...
+        # It would be nice to increase the precision of _apply_BD
+        big_tols = {"atol": 0.002, "rtol": 0.0005}
+        self.assertTrue(np.allclose(rered_fluxes_1a, obs_fluxes, **big_tols))
+        self.assertTrue(np.allclose(rered_errs_1a, obs_flux_errs, **big_tols))
+
+        # Test that "deredden" and "redden" are inverse functions, using A_v
+        # Also tests that the default for "propagate_errors" is False
+        Av1 = Av_from_BD(BD_low=BD_intrinsic, BD_high=BD1)
+        dered_fluxes_2, dered_errs_2 = deredden(obs_lambdas, obs_fluxes,
+                                  obs_flux_errs, A_v=Av1, normalise=True)
+        self.assertTrue(np.allclose(dered_fluxes_2, dered_fluxes_1, atol=atol))
+        self.assertTrue(np.allclose(dered_errs_2, dered_errs_1, atol=atol))
+        rered_fluxes_2, rered_errs_2 = redden(obs_lambdas, dered_fluxes_2,
+                            dered_errs_2, A_v=Av1, normalise=True)
+        self.assertTrue(np.allclose(rered_fluxes_2, rered_fluxes_1, atol=atol))
+        self.assertTrue(np.allclose(rered_fluxes_2, obs_fluxes, atol=atol))
+        self.assertTrue(np.allclose(rered_errs_2, rered_errs_1, atol=atol))
+        self.assertTrue(np.allclose(rered_errs_2, obs_flux_errs, atol=atol))
+
+        # Test that an extinction of 0 results in negligible error change
+        same_fluxes, same_errs = redden(obs_lambdas, obs_fluxes, obs_flux_errs,
+                                        A_v=0, normalise=True)
+        self.assertTrue(np.allclose(same_errs, obs_flux_errs, atol=atol))
+
+
+    def test_propagating_uncertainties_1D(self):
+        # Test uncertainty handling in this module, for cases with 1D outputs,
+        # and where uncertainties in Balmer decrements are propagated
 
         # We can rewrite the formula for the uncertainty (in _apply_BD) as follows:
         # df2 = f2 / SN1 * (p+1) where SN1 = f_Ha / dF_Ha
@@ -445,7 +542,8 @@ class _Tests(unittest.TestCase):
         for BD2 in [2.9, 5.3]:  # De-reddening and reddening
             l1, f1, err1 = [4861, 6563], [1.0, 3.5], [0, 0.81]  # Hbeta, Halpha
             # Set zero error in Hbeta for convenience
-            f2_l, err2_l = _apply_BD(l1, f1, err1, BD=BD2, normalise=True)
+            f2_l, err2_l = _apply_BD(l1, f1, err1, BD=BD2, normalise=True,
+                                     propagate_errors=True)
             f2, err2 = f2_l[1], err2_l[1]
             # Check that errors are in expected range
             self.assertTrue(err2 > (f2 / f1[1]) * err1[1]) # Check lower bound (no error propagation)
@@ -453,18 +551,64 @@ class _Tests(unittest.TestCase):
             self.assertTrue(err2 < 7.36 * f2 / SN1) # Check upper bound on error
             p_Ha = 0.76 * (_calc_relative_colour_excess(l1[1]) + 4.5) # Exponent
             # Check actual value using alternative equation:
-            # Note that f2 has already been scaled by Hbeta, so now the equation 
+            # Note that f2 has already been scaled by Hbeta, so now the equation
             # df2 = f2 / SN1 * (p+1) will give the error normalised to Hbeta == 1.
             self.assertTrue(np.isclose(err2, (f2 / SN1 * (p_Ha+1)), atol=atol))
 
 
+    def test_simple_uncertainty_handling_nD(self):
+        # Some simple tests of the functionality of this module for nD outputs
+        # (i.e. reddening or dereddening for all of an array of BD or A_v),
+        # and without propagating uncertainties in (de)reddening
+        # The default is "propagate_errors=False" in "redden" and deredden".
+
+        # Test data
+        BD1, BD_intrinsic = 3.41, np.array([[2.85, 2.9, 2.95],[3, 3.05, 3.1]])
+        #                 Halpha,  [NII],  [OII],     Hbeta
+        obs_lambdas    = [6563,    6583,   3726.032,  4861.33]
+        obs_fluxes     = [BD1,     4.1,    1.35,      1.0    ]
+        obs_flux_errs  = [BD1/3.,  0.1,    0.001,     123.456]
+
+        # Test that "_apply_BD" and "_apply_BD" are inverse functions
+        dered_fluxes_1, dered_errs_1 = _apply_BD(obs_lambdas, obs_fluxes,
+            obs_flux_errs, BD=BD_intrinsic, normalise=True, propagate_errors=False)
+        # As a list of 1D tuples of dereddened [Halpha, [NII], [OII], Hbeta]:
+        dered_fluxes_1a = list(zip(*[a.ravel() for a in dered_fluxes_1]))
+        dered_errs_1a   = list(zip(*[a.ravel() for a in dered_errs_1]))
+        rered_fluxes_errs_1a = [_apply_BD(obs_lambdas, f, e, BD=BD1, normalise=True,
+            propagate_errors=False) for f,e in zip(dered_fluxes_1a, dered_errs_1a)]
+        for rered_fluxes_1_i, rered_errs_1_i in rered_fluxes_errs_1a:
+            self.assertTrue(np.allclose(rered_fluxes_1_i, obs_fluxes, atol=atol))
+            self.assertTrue(np.allclose(rered_errs_1_i, obs_flux_errs, atol=atol))
+
+        # Test that "deredden" and "redden" are inverse functions, using A_v
+        Av1 = Av_from_BD(BD_low=BD_intrinsic, BD_high=BD1) # Array of A_v
+        dered_fluxes_2, dered_errs_2 = deredden(obs_lambdas, obs_fluxes,
+                                        obs_flux_errs, A_v=Av1, normalise=True)
+        # Each entry in dered_fluxes_2 is an array over Av1.
+        dered_fluxes_2a = list(zip(*[a.ravel() for a in dered_fluxes_2]))
+        dered_errs_2a   = list(zip(*[a.ravel() for a in dered_errs_2]))
+        for i in range(len(dered_fluxes_1a)):
+            self.assertTrue(np.allclose(dered_fluxes_2a[i], dered_fluxes_1a[i], atol=atol))
+            self.assertTrue(np.allclose(dered_errs_2a[i], dered_errs_1a[i], atol=atol))
+            rered_fluxes_2_i, rered_errs_2_i = redden(obs_lambdas, dered_fluxes_2a[i],
+                             dered_errs_2a[i], A_v=Av1.flat[i], normalise=True)
+            rered_fluxes_1a_i, rered_errs_1a_i = rered_fluxes_errs_1a[i]
+            self.assertTrue(np.allclose(rered_fluxes_2_i, rered_fluxes_1a_i, atol=atol))
+            self.assertTrue(np.allclose(rered_fluxes_2_i, obs_fluxes, atol=atol))
+            self.assertTrue(np.allclose(rered_errs_2_i, rered_errs_1a_i, atol=atol))
+            self.assertTrue(np.allclose(rered_errs_2_i, obs_flux_errs, atol=atol))
+
+
     def test_uncertainty_handling_nD(self):
-        # Test uncertainty handling in this module, for cases with nD outputs
+        # Test uncertainty handling in this module, for cases with nD outputs,
+        # and where uncertainties in Balmer decrements are propagated
         BDa = np.array([[2.9, 3.0], [2.8, 2.7], [2.6,2.85]])
         for BD2 in [BDa, BDa + 2.5]:  # De-reddening and reddening
             l1, f1, err1 = [4861, 6563], [1.0, 3.5], [0, 0.81]  # Hbeta, Halpha
             # Make lists of arrays:
-            f2, err2 = _apply_BD(l1, f1, err1, BD=BD2, normalise=True)
+            f2, err2 = _apply_BD(l1, f1, err1, BD=BD2, normalise=True,
+                                 propagate_errors=True)
             # Check that errors are in expected range
             # Check lower bound (no error propagation):
             self.assertTrue(np.all(err2[1] > (f2[1] / f1[1]) * err1[1]))

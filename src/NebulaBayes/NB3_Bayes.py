@@ -470,7 +470,7 @@ class NB_Result(object):
     run.
     """
     def __init__(self, Interpd_grids, DF_obs, ND_PDF_Plotter, Plot_Config,
-                                          deredden, input_prior, line_plot_dir):
+                 deredden, propagate_dered_errors, input_prior, line_plot_dir):
         """
         Initialise an instance of the class and perform Bayesian parameter
         estimation.
@@ -479,6 +479,7 @@ class NB_Result(object):
         self.Plotter = ND_PDF_Plotter  # To plot ND PDFs
         self.Plot_Config = Plot_Config
         self.deredden = deredden  # T/F: dereddeden obs fluxes over whole grid?
+        self.propagate_dered_errors = propagate_dered_errors  # T/F
         self._line_plot_dir = line_plot_dir
         Grid_spec = Grid_description(Interpd_grids.param_names,
                            list(Interpd_grids.paramName2paramValueArr.values()))
@@ -531,6 +532,10 @@ class NB_Result(object):
         is smaller than the predicted Balmer decrement.
         If "deredden" is False, the observed flux value for a line is uniform
         over the n-D grid.
+        If "deredden" is True and "propagate_dered_errors" is True, then the
+        error in the Balmer decrement will be propagated into the dereddened
+        line flux errors; otherwise, each flux error will simply be scaled by
+        the same factor as the flux.
         The observed fluxes have already been normalised to norm_line.
 
         Creates the obs_flux_arrs and obs_flux_err_arrs attributes, which hold
@@ -571,7 +576,8 @@ class NB_Result(object):
 
         obs_flux_arr_list, obs_flux_err_arr_list = do_dereddening(
                     DF_obs["Wavelength"].values, DF_obs["Flux"].values,
-                    DF_obs["Flux_err"].values, BD=grid_BD_arr, normalise=True)
+                    DF_obs["Flux_err"].values, BD=grid_BD_arr, normalise=True,
+                                  propagate_errors=self.propagate_dered_errors)
         # The output fluxes and errors are normalised to Hbeta == 1.
         # Now obs_flux_arr_list is a list of arrays corresponding to the list
         # of observed fluxes, where each array has the same shape as the
@@ -586,11 +592,14 @@ class NB_Result(object):
         obs_BD = DF_obs.loc["Halpha", "Flux"] / DF_obs.loc["Hbeta", "Flux"]
         where_bad_BD = (grid_BD_arr >= obs_BD)
         n_bad = np.sum(where_bad_BD)
+        n_tot = where_bad_BD.size
         if n_bad > 0:
-            NB_logger.warning("WARNING: Observed Balmer decrement is below "
-                           "the predicted decrement at {0} ".format(n_bad) +
-                           "interpolated gridpoints.  Dereddening will not be "
-                           "applied at these points")
+            NB_logger.warning(
+                "WARNING: Observed Balmer decrement is below the predicted "
+                "decrement at {0:.2g}\% of the ".format(n_bad / n_tot * 100) +
+                "interpolated gridpoints.  Dereddening will not be applied "
+                "at these points"
+            )
         for line, flux_arr in obs_flux_arrs.items():
             obs_flux = DF_obs.loc[line, "Flux"]
             flux_arr[where_bad_BD] = obs_flux

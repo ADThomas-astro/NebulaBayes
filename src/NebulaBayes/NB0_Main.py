@@ -186,13 +186,16 @@ class NB_Model(object):
             A subset of obs_line_names that specifies the lines to include in
             the likelihood calculation.  By default, all the obs_line_names are
             used.  Lines that appear in obs_line_names but aren't used in the
-            likelihood are included in the best_model_table (see below), and
-            may be used in line ratio priors (see below).
+            likelihood are still included in the best_model_table (see below),
+            and may be used in line ratio priors (see below).
         deredden : bool
-            De-redden observed fluxes to match the Balmer decrement at each
-            interpolated grid point?  Only supported if norm_line == "Hbeta",
-            "Halpha" is also supplied, and there are no upper bounds in the
-            measurements.  Default: False
+            De-redden observed fluxes to match the Balmer decrement F_Ha/F_Hb
+            at each interpolated grid point?  Dereddening is only supported if
+            norm_line == "Hbeta", "Halpha" is also supplied, and there are no
+            upper bounds in the measurements.  Default: False
+        propagate_dered_errors : bool
+            Propagate the error in the Balmer decrement through to the errors
+            in the dereddened line fluxes?  Default: False
         obs_wavelengths : list of floats
             A list of wavelengths (Angstroems) corresponding to obs_line_names,
             which must be supplied if deredden == True.  Default: None
@@ -329,6 +332,9 @@ class NB_Model(object):
             deredden : bool
                 Value of the "deredden" keyword.  Were observed fluxes
                 dereddened all over the parameter space?
+            propagate_dered_errors : bool
+                Value of the "propagate_dered_errors" keyword.  Was the Balmer
+                decrement error propagated into dereddened flux errors?
             DF_obs : pandas DataFrame
                 Table of the observed emission line fluxes, errors, and
                 wavelengths (if provided), with a row for each line.  Fluxes
@@ -371,13 +377,19 @@ class NB_Model(object):
         likelihood_lines = kwargs.pop("likelihood_lines", None)  # Default None
         deredden = kwargs.pop("deredden", False)  # Default False
         assert isinstance(deredden, bool)
-        if deredden and not all((l in obs_line_names) for l in ["Halpha","Hbeta"]):
-            raise ValueError("'Halpha' and 'Hbeta' must be provided for deredden==True")
+        if deredden and not all(l in obs_line_names for l in ("Halpha", "Hbeta")):
+            raise ValueError("'Halpha' and 'Hbeta' required for deredden==True")
         obs_wavelengths = kwargs.pop("obs_wavelengths", None)  # Default None
         if deredden and (obs_wavelengths is None):
             raise ValueError("Must supply obs_wavelengths for deredden==True")
         if deredden is False and (obs_wavelengths is not None):
             pass # obs_wavelengths is unnecessary but will be checked anyway.
+        # Propagate errors in dereddening?  Default False
+        propagate_dered_errors = kwargs.pop("propagate_dered_errors", False)
+        assert isinstance(propagate_dered_errors, bool)
+        if propagate_dered_errors and not deredden:
+            raise ValueError("Can't propagate dereddening errors - dereddening"
+                             + " is not turned on")
         # Process the input observed data; DF_obs is a pandas DataFrame table
         # where the emission line names index the rows:
         DF_obs = _process_observed_data(obs_fluxes, obs_flux_errors,
@@ -433,6 +445,7 @@ class NB_Model(object):
         Result = NB3_Bayes.NB_Result(self.Interpd_grids, DF_obs, self._Plotter,
                                      Plot_Config=Plot_Config_1,
                                      input_prior=input_prior, deredden=deredden,
+                                 propagate_dered_errors=propagate_dered_errors,
                                 line_plot_dir=output_locations["line_plot_dir"])
 
         #----------------------------------------------------------------------

@@ -38,4 +38,9 @@ v0.9.9  June 2018 - July 2020:  The default grid_error is now 0.1 instead of
         0.35, which will affect parameter estimates.  The interaction of the
         "verbosity" keyword with the logging level was improved, and "ERROR" is
         now an allowed level.  Stop using deprecated pandas method "set_value".
+v1.0.0  July 2020:  Propagating the error in the Balmer decrement when
+        dereddening is now optional.  Added new option propagate_dered_errors,
+        which is False by default.  This will affect parameter estimates when
+        NebulaBayes dereddening is used; constraints will be tighter.  Set
+        propagate_dered_errors=True for the old behaviour.
 
