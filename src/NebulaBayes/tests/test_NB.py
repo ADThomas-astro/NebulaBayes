@@ -395,9 +395,10 @@ class Test_1D_grid_and_public_attributes(unittest.TestCase):
         """ Check that the list of public attributes is what is documented """
         public_attrs = sorted([a for a in dir(self.Result)
                                                     if not a.startswith("_")])
-        expected_attrs = ["DF_obs", "Grid_spec", "Likelihood", "Plot_Config",
-                          "Plotter", "Posterior", "Prior", "deredden",
-                          "obs_flux_arrs", "obs_flux_err_arrs"]
+        expected_attrs = [
+            "DF_obs", "Grid_spec", "Likelihood", "Plot_Config", "Plotter",
+            "Posterior", "Prior", "deredden", "obs_flux_arrs",
+            "obs_flux_err_arrs", "propagate_dered_errors"]
         self.assertTrue(public_attrs == expected_attrs, msg=str(public_attrs))
 
     def test_NB_nd_pdf_attributes(self):
@@ -472,13 +473,15 @@ class Test_real_data_with_dereddening(unittest.TestCase):
                                     cls.__name__ + "_parameter_estimates.csv")
         # Test different values along each dimension in interpd_grid_shape
         cls.NB_Model_1 = NB_Model("HII", grid_params=None, line_list=cls.lines,
-                                  interpd_grid_shape=[100, 130, 80])
+                                  interpd_grid_shape=[100, 130, 80],
+                                  grid_error=0.35)
 
         kwargs = {"prior_plot": cls.prior_plot,
                   "likelihood_plot": cls.likelihood_plot,
                   "posterior_plot": cls.posterior_plot,
                   "estimate_table": cls.estimate_table,
-                  "deredden": True, "obs_wavelengths": cls.obs_wavelengths,
+                  "deredden": True, "propagate_dered_errors": True,
+                  "obs_wavelengths": cls.obs_wavelengths,
                   "prior":[("SII6716","SII6731")],
                   "plot_configs": [{"table_on_plot": True,
                                     "legend_fontsize": 5}]*4,
@@ -576,7 +579,8 @@ class Test_real_data_with_cubic_interpolation(unittest.TestCase):
                                     cls.__name__ + "_parameter_estimates.csv")
         # Test different values along each dimension in interpd_grid_shape
         cls.NB_Model_1 = NB_Model("HII", line_list=cls.lines, interp_order=3,
-                                  interpd_grid_shape=[100, 130, 80])
+                                  interpd_grid_shape=[100, 130, 80],
+                                  grid_error=0.35)
 
         cls.old_log_level = NebulaBayes.NB_logger.level
         cls.test_log_level = 0  # A low number different to default
@@ -587,7 +591,8 @@ class Test_real_data_with_cubic_interpolation(unittest.TestCase):
                   "likelihood_plot": cls.likelihood_plot,
                   "posterior_plot": cls.posterior_plot,
                   "estimate_table": cls.estimate_table,
-                  "deredden": True, "obs_wavelengths": cls.obs_wavelengths,
+                  "deredden": True, "propagate_dered_errors": True,
+                  "obs_wavelengths": cls.obs_wavelengths,
                   "prior":[("SII6716","SII6731")],
                   "plot_configs": [{"table_on_plot": True,
                                     "legend_fontsize": 5}]*4,
@@ -628,6 +633,11 @@ class Test_real_data_with_cubic_interpolation(unittest.TestCase):
         level is unchanged (i.e. was reset to its previous value)
         """
         self.assertEqual(NebulaBayes.NB_logger.level, self.test_log_level)
+
+    def test_dereddening_result_attributes(self):
+        """Ensure dereddening attributes added to Result object."""
+        self.assertTrue(self.Result.deredden)
+        self.assertTrue(self.Result.propagate_dered_errors)
 
 
     @classmethod
@@ -885,6 +895,8 @@ class Test_dereddening_changes_results(unittest.TestCase):
     Test that using dereddening changes all three PDFs (when obs data are used
     in the prior).  There previously was a bug where the obs data in the line
     ratio priors weren't dereddened.
+    Also test that PDFs change when errors from the Balmer decrement are
+    propagated into the dereddened line fluxes.
     """
 
     @classmethod
@@ -892,32 +904,53 @@ class Test_dereddening_changes_results(unittest.TestCase):
         # Run NB in 2D to obtain an NB_Result object
         lines   = ["Hbeta", "OIII5007", "Halpha"]
         waves   = [4861.,        5007.,    6563.]
-        fluxes  = [1.0,            1.3,      2.9]
+        fluxes  = [1.0,            1.3,      5.1]
         errors  = [0.2,            0.2,      0.2]
-        NB_Model_1 = NB_Model("HII", line_list=lines,
+        NB_Model_1 = NB_Model("HII", line_list=lines, grid_error=0.35,
                               interpd_grid_shape=(15, 15, 15))
         prior = [("OIII5007", "Hbeta")]  # Need obs data in prior
-        cls.Result_dered = NB_Model_1(fluxes, errors, lines, prior=prior,
+        cls.Result_dered1 = NB_Model_1(fluxes, errors, lines, prior=prior,
                                          obs_wavelengths=waves, deredden=True)
+        cls.Result_dered2 = NB_Model_1(fluxes, errors, lines, prior=prior,
+            obs_wavelengths=waves, deredden=True, propagate_dered_errors=True)
         cls.Result_nodered = NB_Model_1(fluxes, errors, lines, prior=prior,
                                                                 deredden=False)
 
     def test_priors_differ(self):
         """ Check that dereddened data was used in line ratio prior, when
         requested.  This test fails on NebulaBayes 0.9.7 """
-        pdf_dered   = self.Result_dered.Prior.nd_pdf
+        pdf_dered1  = self.Result_dered1.Prior.nd_pdf
         pdf_nodered = self.Result_nodered.Prior.nd_pdf
-        self.assertTrue(np.any(np.abs(pdf_dered - pdf_nodered) > 0.01))
+        max_diff1 = np.max(np.abs(pdf_dered1 - pdf_nodered))
+        self.assertTrue(max_diff1 > 0.01, str(max_diff1))
+        # Test uncertainty propagation has an effect
+        pdf_dered2 = self.Result_dered2.Prior.nd_pdf
+        max_diff_u = np.max(np.abs(pdf_dered1 - pdf_dered2))
+        self.assertTrue(max_diff_u > 0.01, str(max_diff_u))
 
     def test_likelihoods_differ(self):
-        pdf_dered   = self.Result_dered.Likelihood.nd_pdf
+        pdf_dered1  = self.Result_dered1.Likelihood.nd_pdf
         pdf_nodered = self.Result_nodered.Likelihood.nd_pdf
-        self.assertTrue(np.any(np.abs(pdf_dered - pdf_nodered) > 0.01))
+        max_diff1 = np.max(np.abs(pdf_dered1 - pdf_nodered))
+        self.assertTrue(max_diff1 > 0.01, str(max_diff1))
+        pdf_dered2 = self.Result_dered2.Likelihood.nd_pdf
+        max_diff_u = np.max(np.abs(pdf_dered1 - pdf_dered2))
+        self.assertTrue(max_diff_u > 0.01, str(max_diff_u))
 
     def test_posteriors_differ(self):
-        pdf_dered   = self.Result_dered.Posterior.nd_pdf
+        pdf_dered1  = self.Result_dered1.Posterior.nd_pdf
         pdf_nodered = self.Result_nodered.Posterior.nd_pdf
-        self.assertTrue(np.any(np.abs(pdf_dered - pdf_nodered) > 0.01))
+        max_diff1 = np.max(np.abs(pdf_dered1 - pdf_nodered))
+        self.assertTrue(max_diff1 > 0.01, str(max_diff1))
+        pdf_dered2 = self.Result_dered2.Posterior.nd_pdf
+        max_diff_u = np.max(np.abs(pdf_dered1 - pdf_dered2))
+        self.assertTrue(max_diff_u > 0.01, str(max_diff_u))
+
+    def test_propagate_dered_errors(self):
+        """Check propagate_dered_errors values on Result object"""
+        # Checks default value of False
+        self.assertFalse(self.Result_dered1.propagate_dered_errors)
+        self.assertTrue(self.Result_dered2.propagate_dered_errors)
 
 
 
