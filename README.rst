@@ -32,4 +32,4 @@ NebulaBayes is heavily based on IZI (Blanc+ 2015).
 If you use NebulaBayes, please cite
 `<http://adsabs.harvard.edu/abs/2018ApJ...856...89T>`_.
 
-The package has been tested on Python 2.7 and Python 3.5.
+The package has been tested on Python 2.7 and Python 3.7.

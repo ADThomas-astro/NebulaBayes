@@ -596,7 +596,7 @@ class NB_Result(object):
         if n_bad > 0:
             NB_logger.warning(
                 "WARNING: Observed Balmer decrement is below the predicted "
-                "decrement at {0:.2g}\% of the ".format(n_bad / n_tot * 100) +
+                "decrement at {0:.3g}% of the ".format(n_bad / n_tot * 100) +
                 "interpolated gridpoints.  Dereddening will not be applied "
                 "at these points"
             )

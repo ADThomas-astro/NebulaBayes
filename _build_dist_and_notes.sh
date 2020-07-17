@@ -20,6 +20,8 @@ version="$(grep __version__ src/NebulaBayes/_version.py | cut -d \" -f2)"
 # pip uninstall NebulaBayes
 # /Applications/anaconda/bin/pip install dist/NebulaBayes-${version}-py2.py3-none-any.whl  # python 3
 # /Applications/anaconda/bin/pip uninstall NebulaBayes
+# Install from Github:
+# python3 -m pip install git+https://github.com/ADThomas-astro/NebulaBayes.git@f81ccfb6907d81551d2a6f53407231ca817bc0f5
 
 # Upload to PyPI testing site (https://testpypi.python.org/)
 # (note that I've added a ~/.pypirc file)
