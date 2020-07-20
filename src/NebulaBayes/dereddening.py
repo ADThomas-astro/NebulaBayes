@@ -16,16 +16,15 @@ The method used here is valid for wavelengths in [2480, 12390] Angstroem.
 This module may be imported to be used in python code, or run as a script to
 run some basic tests.  The code works with both Python 2 and Python 3.
 
-Adam D. Thomas 2017
+Adam D. Thomas 2017 - 2020
 Research School of Astronomy and Astrophysics
 Australian National University
-February - March 2017
 
 Keywords - extinction, extragalactic reddening, Fischera & Dopita 2005, 2011,
            attenuation curve, relative color excess, Calzetti 2001, dust
 """
 __version__ = 0.8
-# version 0.8   Made propagating errors in Balmer decrements optional
+# version 0.8  2020 July: Made propagating errors in Balmer decrements optional
 
 
 

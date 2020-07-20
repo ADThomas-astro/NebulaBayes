@@ -8,7 +8,7 @@ from ._compat import _str_type  # Compatibility
 Code to calculate the prior over an n-dimensional grid, as part of Bayesian
 parameter estimation.
 
-Adam D. Thomas 2018
+Adam D. Thomas 2018 - 2020
 """
 
 

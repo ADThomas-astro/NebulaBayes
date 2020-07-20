@@ -17,7 +17,7 @@ from ._compat import _str_type  # Compatibility
 """
 Code for plotting "corner plots" showing marginalised n-dimensional PDFs.
 
-Adam D. Thomas 2015 - 2018
+Adam D. Thomas 2015 - 2020
 """
 
 
@@ -159,17 +159,17 @@ class ND_PDF_Plotter(object):
         fig_width_ht = (6.0,) * 2  # Figure width and height in inches (equal)
         # We keep the figure size and bounds of the axes grid the same, and
         # change only n_rows(==n_cols) for different grid dimensions.
-        gridspec = {"left": 0.13, "bottom": 0.13, "right": 0.98, "top": 0.98,
-                    "hspace": 0.02, "wspace": 0.02}
+        layout_spec = {"left": 0.13, "bottom": 0.13, "right": 0.98,
+                       "top": 0.98, "hspace": 0.02, "wspace": 0.02}
         fig, axes = plt.subplots(n, n, figsize=fig_width_ht,
-                                                          gridspec_kw=gridspec)
+                                                       gridspec_kw=layout_spec)
 
-        # Add some more information to the gridspec dict
-        gridspec["axes_width"] = (gridspec["right"] - gridspec["left"] -
-                           (n - 1) * gridspec["wspace"]) / n  # Figure fraction
-        gridspec["axes_height"] = (gridspec["top"] - gridspec["bottom"] -
-                           (n - 1) * gridspec["hspace"]) / n  # Figure fraction
-        gridspec["n"] = n
+        # Add some more information to the layout_spec dict
+        layout_spec["axes_width"] = (layout_spec["right"] - layout_spec["left"]
+                         - (n - 1) * layout_spec["wspace"]) / n  # Fig fraction
+        layout_spec["axes_height"] = (layout_spec["top"] - layout_spec["bottom"]
+                         - (n - 1) * layout_spec["hspace"]) / n  # Fig fraction
+        layout_spec["n"] = n
 
         # Set up the axes grid
         axes = np.atleast_2d(axes)  # For the n == 1 case
@@ -179,10 +179,10 @@ class ND_PDF_Plotter(object):
         for ax in axes.ravel():    # Turn all axes off for now.
             ax.set_visible(False)  # Needed axes will be turned on later.
 
-        # Save the figure, axes grid and gridspec dictionary as attributes
+        # Save the figure, axes grid and layout_spec dictionary as attributes
         self._axes = axes
         self._fig = fig
-        self._gridspec = gridspec
+        self._layout_spec = layout_spec
 
 
 
@@ -225,20 +225,19 @@ class ND_PDF_Plotter(object):
 
 
 
-    def _add_legend(self, ax_1D, ax_2D, gridspec, fontsize):
+    def _add_legend(self, ax_1D, ax_2D, layout_spec, fontsize):
         """
         Add a legend to the figure.  The inputs ax_1D and ax_2D are axes which
         have 1- and 2-dimensional PDFs plotted on them, respectively.
         """
-        n = gridspec["n"]
+        spec = layout_spec
+        n = spec["n"]
         legend_anchor = (  # (x,y) in figure fraction coords
-            (gridspec["left"] +
-                ((n+1)//2) * (gridspec["axes_width"] + gridspec["wspace"])
-                                                                      + 0.005),
-            (gridspec["bottom"] +
-                (n//2) * (gridspec["axes_height"] + gridspec["hspace"])
-                                                                      + 0.00)
-                        )
+            (spec["left"] +
+                ((n+1)//2) * (spec["axes_width"] + spec["wspace"]) + 0.005),
+            (spec["bottom"] +
+                (n//2) * (spec["axes_height"] + spec["hspace"]) + 0.00)
+        )
         lh1, ll1 = ax_1D.get_legend_handles_labels()
         lh2, ll2 = ax_2D.get_legend_handles_labels()
         lgd = ax_1D.legend(lh1+lh2, ll1+ll2, loc="lower left", borderpad=1,
@@ -255,27 +254,106 @@ class ND_PDF_Plotter(object):
     def __call__(self, NB_nd_pdf, out_filename, config=Plot_Config_Default):
         """
         Generate a "corner plot" of all the 2D and 1D marginalised pdfs for an
-        n-dimensional pdf.  This method may be used for the prior, lkelihood or
-        posterior, or for the individual line PDFs contributing to the likelihood.
+        n-dimensional pdf.  This method may be used for the prior, likelihood
+        or posterior, or for the individual line PDFs contributing to the
+        likelihood.  Saves the image to out_filename.
         The resulting "corner plot" is a triangular grid of 2-D images for each
         2D marginalised pdf, with appropriate 1D plots of 1D marginalised
         pdfs included along the diagonal.  This method is designed to produce
         attractive plots independent of the dimensionality (axes grid size).
+
         NB_nd_pdf: An object which contains the 1D and 2D marginalised pdfs and
                    interpolated grid information
         out_filename: The filename for the output corner plot image file
         config: An instance of the Plot_Config class defined above
+        """
+        plot_type = NB_nd_pdf.name
+        assert plot_type in plot_types
+        config1 = config[plot_type]
+
+        self._plot(NB_nd_pdf, config)
+
+        if out_filename.endswith(".pdf"):  # Add metadata if output is a .pdf
+            Pdf_fig_1 = PdfPages(out_filename)  # Pdf_fig_1 will be closed later
+            metadata_dict = Pdf_fig_1.infodict()
+            metadata_dict["Creator"] = (metadata_dict["Creator"] + " ; " +
+                            "NebulaBayes {0} ; matplotlib {1} ; numpy {2} ; "
+                            "python {3}".format(__NB_version__, __mpl_version__,
+                            np.__version__, sys.version))
+
+        # Call the user's "callback" function, if it was supplied, otherwise
+        # we save the figure
+        callback = config1["callback"]
+        if callback is not None:
+            callback(out_filename, self._fig, self._axes, self, config1)
+            # To be safe, delete the figure and axes and regenerate next time
+            # The callback may have modified them in undesirable ways
+            plt.close(self._fig)
+            del self._fig
+            del self._axes
+        else:  # Save the figure
+            if out_filename.endswith(".pdf"):
+                plt.savefig(Pdf_fig_1, format="pdf", dpi=self.dpi)
+                Pdf_fig_1.close()
+            else:
+                self._fig.savefig(out_filename, dpi=self.dpi)
+
+
+
+    def interactive(self, NB_nd_pdf, config=Plot_Config_Default):
+        """
+        Generate an interactive "corner plot" of all the 2D and 1D marginalised
+        pdfs for an n-dimensional pdf.  This method may be used for the prior,
+        likelihood or posterior, or for the individual line PDFs contributing
+        to the likelihood.  Does not call any user-supplied callback.
+        The resulting "corner plot" is a triangular grid of 2-D images for
+        each 2D marginalised pdf, with appropriate 1D plots of 1D marginalised
+        pdfs included along the diagonal.  This method is designed to produce
+        attractive plots independent of the dimensionality (axes grid size).
+        NB_nd_pdf: A NebulaBayes.NB3_Bayes.NB_nd_pdf object, holding the 1D
+                   and 2D marginalised pdfs and interpolated grid information.
+        config: An instance of the Plot_Config class (above)
+
+        An example, to show an interactive plot of the posterior:
+            NB_Model_1 = NebulaBayes.NB_Model(...)
+            Result1 = NB_Model_1(...)
+            Result1.Plotter.interactive(Result1.Posterior)
+        """
+        was_interactive = plt.isinteractive()
+        plt.interactive(False)  # Interactive plotting mode off
+        self._plot(NB_nd_pdf, config)  # Make plot
+        # self._axes[0,0].annotate(NB_nd_pdf.name, xy=(0.99, 0.97), size=9,
+        #     xycoords="figure fraction", horizontalalignment="right")
+        plt.interactive(True)   # Interactive plotting mode on
+        self._fig.show()
+        plt.interactive(was_interactive)   # Reset to previous value
+
+        # Make sure the figure is deleted (I don't know if it could survive):
+        if hasattr(self, "_fig"):
+            del self._fig
+
+
+
+    def _plot(self, NB_nd_pdf, config):
+        """
+        Do the actual plotting.
+        NB_nd_pdf: An object which contains the 1D and 2D marginalised pdfs
+                   and interpolated grid information
+        config: An instance of the Plot_Config class
         """
         # Handle inputs
         plot_type = NB_nd_pdf.name
         assert plot_type in plot_types
         config1 = config[plot_type]
         n = NB_nd_pdf.Grid_spec.ndim
+        # Ensure we have a figure, axes and layout_spec to use:
         self._prepare_fig_and_axes(n)
-        gridspec = self._gridspec
+        layout_spec = self._layout_spec
+        self._fig.canvas.set_window_title(NB_nd_pdf.name)
 
         # Some quantities for working with the parameters:
-        G = NB_nd_pdf.Grid_spec # Interpolated grid description
+        G = NB_nd_pdf.Grid_spec  # Interpolated grid description
+            # (This Grid_spec includes the user-inputted param_display_names)
         par_arr_map = G.paramName2paramValueArr
         interp_spacing = {p : (arr[1] - arr[0]) for p,arr in par_arr_map.items()}
         p_estimates = NB_nd_pdf.DF_estimates["Estimate"]
@@ -356,9 +434,9 @@ class ND_PDF_Plotter(object):
 
             if ind_y == 0: # If we're in the first row of plots
                 # Generate x-axis label
-                label_x = (gridspec["right"] - ind_x * gridspec["wspace"] -
-                                        (ind_x + 0.5) * gridspec["axes_width"])
-                label_y = gridspec["bottom"] * 0.25
+                label_x = (layout_spec["right"] - ind_x * layout_spec["wspace"]
+                                   - (ind_x + 0.5) * layout_spec["axes_width"])
+                label_y = layout_spec["bottom"] * 0.25
                 ax_i.annotate(G.param_display_names[ind_x], (label_x, label_y),
                               xycoords="figure fraction", **self.label_kwargs)
                 for tick in ax_i.get_xticklabels():  # Rotate x tick labels
@@ -368,9 +446,9 @@ class ND_PDF_Plotter(object):
                 ax_i.set_xticklabels([]) # No x_labels
             if ind_x == n - 1: # If we're in the first column of plots
                 # Generate y-axis label
-                label_x = gridspec["left"] * 0.25
-                label_y = (gridspec["bottom"] + ind_y * gridspec["hspace"] +
-                                       (ind_y + 0.5) * gridspec["axes_height"])
+                label_x = layout_spec["left"] * 0.25
+                label_y = (layout_spec["bottom"] + ind_y * layout_spec["hspace"]
+                                  + (ind_y + 0.5) * layout_spec["axes_height"])
                 ax_i.annotate(G.param_display_names[ind_y], (label_x, label_y),
                               xycoords="figure fraction", rotation="vertical",
                               **self.label_kwargs)
@@ -410,8 +488,8 @@ class ND_PDF_Plotter(object):
                           np.max(par_arr_map[param]) + interp_spacing[param]/2. )
             ax_k.set_ylim(y_lim[0], y_lim[1])
             if ind == 0: # Last column
-                label_x = gridspec["right"] - 0.5 * gridspec["axes_width"]
-                label_y = gridspec["bottom"] * 0.25
+                label_x = layout_spec["right"] - 0.5 * layout_spec["axes_width"]
+                label_y = layout_spec["bottom"] * 0.25
                 ax_k.annotate(G.param_display_names[ind], (label_x, label_y),
                                 xycoords="figure fraction", **self.label_kwargs)
                 for tick in ax_k.get_xticklabels():
@@ -426,13 +504,16 @@ class ND_PDF_Plotter(object):
 
         if config1["show_legend"] is True and n > 1:
             # Add legend to current axes.  Legend not required for n = 1.
-            self._add_legend(ax_k, ax_i, gridspec,
+            self._add_legend(ax_k, ax_i, layout_spec,
                              fontsize=config1["legend_fontsize"])
 
         # Add fluxes table and chisquared as text annotation if requested
         if config1["table_on_plot"] is True:
-            anno_location = [gridspec["left"] + (n//2 * (gridspec["axes_width"]
-                                + gridspec["wspace"]) + 0.01), gridspec["top"]]
+            anno_location = (
+                layout_spec["left"] + (n//2 * (layout_spec["axes_width"]
+                                              + layout_spec["wspace"]) + 0.01),
+                layout_spec["top"]
+            )
             if n == 1:
                 anno_location[1] -= 0.02  # Slightly lower
             if plot_type != "Individual_line":  # If table available
@@ -442,29 +523,4 @@ class ND_PDF_Plotter(object):
                             horizontalalignment="left", verticalalignment="top",
                             family="monospace", fontsize=self.fs1)
 
-        if out_filename.endswith(".pdf"):  # Add metadata if output is a .pdf
-            Pdf_fig_1 = PdfPages(out_filename)  # Pdf_fig_1 will be closed later
-            metadata_dict = Pdf_fig_1.infodict()
-            metadata_dict["Creator"] = (metadata_dict["Creator"] + " ; " +
-                            "NebulaBayes {0} ; matplotlib {1} ; numpy {2} ; "
-                            "python {3}".format(__NB_version__, __mpl_version__,
-                            np.__version__, sys.version))
-
-        # Call the user's "callback" function, if it was supplied, otherwise
-        # we save the figure
-        callback = config1["callback"]
-        if callback is not None:
-            callback(out_filename, self._fig, self._axes, self, config1)
-            # To be safe, delete the figure and axes and regenerate next time
-            # The callback may have modified them in undesirable ways
-            plt.close(self._fig)
-            del self._fig
-            del self._axes
-        else:  # Save the figure
-            if out_filename.endswith(".pdf"):
-                plt.savefig(Pdf_fig_1, format="pdf", dpi=self.dpi)
-                Pdf_fig_1.close()
-            else:
-                self._fig.savefig(out_filename, dpi=self.dpi)
-
-
+        # We've now finished making the plot

@@ -19,7 +19,7 @@ GRIDS_LOCATION = os.path.join(os.path.dirname(__file__), "grids")
 This module contains code to load the model grid database table, constuct
 model flux arrays, and interpolate those arrays to higher resolution.
 
-Adam D. Thomas 2015 - 2018
+Adam D. Thomas 2015 - 2020
 """
 
 
@@ -33,13 +33,16 @@ class Grid_description(object):
     parameters corresponding to each dimension, the values of the parameters
     along each dimension, etc.
     """
-    def __init__(self, param_names, param_value_arrs):
+    def __init__(self, param_names, param_value_arrs, param_display_names=None):
         """
         Initialise an instance with useful attributes, including mappings
         between important quantities that define the grid.
         param_names: List of parameter names as strings
         param_value_arrs: List of 1D arrays of parameter values over the grid.
                           The list ordering corresponds to param_names.
+        param_display_names: List of parameter names with markup for plotting.
+                             Must be in the same order as param_names.  If not
+                             supplied, param_names will be used as a default.
         Note that NebulaBayes code relies on the dictionaries below being
         ordered.
         """
@@ -48,8 +51,13 @@ class Grid_description(object):
         self.param_names = param_names
         self.param_values_arrs = param_value_arrs
         self.ndim = len(param_names)
-        self.shape = tuple([len(arr) for arr in param_value_arrs ])
-        self.n_gridpoints = np.product( self.shape )
+        self.shape = tuple([len(arr) for arr in param_value_arrs])
+        self.n_gridpoints = np.product(self.shape)
+        if param_display_names is not None:
+            assert len(param_display_names) == self.ndim
+            self.param_display_names = param_display_names
+        else:
+            param_display_names = param_names
 
         # Define mappings for easily extracting data about the grid
         self.paramName2ind = OD(zip(param_names, range(self.ndim)))
@@ -79,6 +87,8 @@ class NB_Grid(Grid_description):
         stored as attributes both on the instance and in the attribute
         "_Grid_spec".
         """
+        # We don't know the "param_display_names" yet, and they can change on
+        # every call of the NB_Model object after the grids are created.
         super(NB_Grid, self).__init__(param_names, param_value_arrs)
         self._Grid_spec = Grid_description(param_names, param_value_arrs)
         self.grids = OD()  # We rely on this being ordered

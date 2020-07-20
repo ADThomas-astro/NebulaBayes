@@ -406,7 +406,7 @@ class Test_1D_grid_and_public_attributes(unittest.TestCase):
         public_attrs = sorted([a for a in dir(self.Result.Posterior)
                                                     if not a.startswith("_")])
         expected_attrs = sorted(["DF_estimates", "Grid_spec", "best_model",
-                        "marginalised_1D", "marginalised_2D", "name", "nd_pdf"])
+            "marginalised_1D", "marginalised_2D", "name", "nd_pdf", "show"])
         self.assertTrue(public_attrs == expected_attrs, msg=str(public_attrs))
 
     def test_best_model_dict_keys(self):
@@ -1058,6 +1058,37 @@ class Test_raising_errors(unittest.TestCase):
 
 
 ###############################################################################
+
+def interactive_plot_tests():
+    """
+    This function needs to be called manually to test the interactive plotting.
+        from test_NB import interactive_plot_tests
+        interactive_plot_tests()
+    """
+    lines = ["OII3726_29", "Hgamma", "OIII4363", "Hbeta", "OIII5007",
+                 "NI5200", "OI6300", "Halpha", "NII6583", "SII6716", "SII6731"]
+    obs_fluxes = [1.22496, 0.3991, 0.00298, 1.0, 0.44942,
+                  0.00766, 0.02923, 4.25103, 1.65312, 0.45598, 0.41482]
+    obs_errs = [0.00303, 0.00142, 0.00078, 0.0017, 0.0012,
+                0.00059, 0.00052, 0.00268, 0.00173, 0.00102, 0.00099]
+    obs_wavelengths = [3727.3, 4340.5, 4363.2, 4861.3, 5006.8,
+                       5200.3, 6300.3, 6562.8, 6583.2, 6716.4, 6730.8]
+    NB_Model_1 = NB_Model("HII", grid_params=None, line_list=lines,
+                          interpd_grid_shape=[50, 70, 50], grid_error=0.35)
+    kwargs = {"deredden": True, "propagate_dered_errors": True,
+              "obs_wavelengths": obs_wavelengths,
+              "prior":[("SII6716","SII6731")],
+              "plot_configs": [{"table_on_plot": True,
+                                "legend_fontsize": 5}]*4,
+              }
+    Result = NB_Model_1(obs_fluxes, obs_errs, lines, **kwargs)
+
+    # Test both ways to make an interactive plot
+    Result.Plotter.interactive(Result.Posterior)
+    Result.Prior.show(Result.Plotter)
+
+###############################################################################
+
 
 # Ideas for more tests:
 

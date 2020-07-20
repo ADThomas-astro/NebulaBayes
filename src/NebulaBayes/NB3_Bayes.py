@@ -22,7 +22,7 @@ estimation.
 This module defines three custom NebulaBayes classes: NB_nd_pdf, NB_Result and
 a CachedIntegrator.
 
-Adam D. Thomas 2015 - 2018
+Adam D. Thomas 2015 - 2020
 """
 
 
@@ -350,6 +350,28 @@ class NB_nd_pdf(object):
 
 
 
+    def show(self, Plotter):
+        """
+        Generate an interactive "corner plot" of all the 2D and 1D
+        marginalised pdfs for this NB_nd_pdf.  Uses default plot settings.
+        The resulting "corner plot" is a triangular grid of 2-D images for
+        each 2D marginalised pdf, with appropriate 1D plots of 1D marginalised
+        pdfs included along the diagonal.
+        Plotter: A NebulaBayes.NB4_Plotting.ND_PDF_Plotter instance.
+        config: An instance of the NebulaBayes.NB4_Plotting.Plot_Config class
+
+        An example, to show an interactive plot of the posterior:
+            NB_Model_1 = NebulaBayes.NB_Model(...)
+            Result1 = NB_Model_1(...)
+            Result1.Posterior.show(Result1.Plotter)
+
+        To save out an image file programmatically, call the "Plotter" object
+        separately with an NB_nd_pdf as an argument.
+        """
+        Plotter.interactive(self)
+
+
+
 def make_single_parameter_estimate(param_name, val_arr, pdf_1D):
     """
     Bayesian parameter estimate for a single parameter, including the credible
@@ -481,8 +503,9 @@ class NB_Result(object):
         self.deredden = deredden  # T/F: dereddeden obs fluxes over whole grid?
         self.propagate_dered_errors = propagate_dered_errors  # T/F
         self._line_plot_dir = line_plot_dir
-        Grid_spec = Grid_description(Interpd_grids.param_names,
-                           list(Interpd_grids.paramName2paramValueArr.values()))
+        param_val_arrs = list(Interpd_grids.paramName2paramValueArr.values())
+        Grid_spec = Grid_description(Interpd_grids.param_names, param_val_arrs,
+                                     Interpd_grids.param_display_names)
         self.Grid_spec = Grid_spec
 
         # Make arrays of observed fluxes over the grid (possibly dereddening)

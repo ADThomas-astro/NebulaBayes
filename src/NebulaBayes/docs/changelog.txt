@@ -41,6 +41,12 @@ v0.9.9  June 2018 - July 2020:  The default grid_error is now 0.1 instead of
 v1.0.0  July 2020:  Propagating the error in the Balmer decrement when
         dereddening is now optional.  Added new option propagate_dered_errors,
         which is False by default.  This will affect parameter estimates when
-        NebulaBayes dereddening is used; constraints will be tighter.  Set
-        propagate_dered_errors=True for the old behaviour.
+        NebulaBayes dereddening is used; constraints will change and generally
+        be tighter.  Set propagate_dered_errors=True for the old behaviour.
+        Also, add ability to plot nD PDFs interactively, e.g.:
+            NB_Model_1 = NebulaBayes.NB_Model(...)
+            Result_1 = NB_Model_1(...)
+            Result_1.Plotter.interactive(Result_1.Posterior)
+            # Or alternatively:
+            Result_1.Posterior.show(Result_1.Plotter)
 
