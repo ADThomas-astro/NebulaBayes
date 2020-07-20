@@ -2,6 +2,7 @@ from __future__ import print_function, division
 import itertools  # For Cartesian product
 import sys  # For python version
 
+import matplotlib as mpl
 from matplotlib import __version__ as __mpl_version__
 import matplotlib.pyplot as plt  # Plotting
 from matplotlib.backends.backend_pdf import PdfPages  # For pdf metadata
@@ -318,19 +319,37 @@ class ND_PDF_Plotter(object):
             NB_Model_1 = NebulaBayes.NB_Model(...)
             Result1 = NB_Model_1(...)
             Result1.Plotter.interactive(Result1.Posterior)
+
+        Returns the matplotlib figure instance.
         """
-        was_interactive = plt.isinteractive()
-        plt.interactive(False)  # Interactive plotting mode off
+        # Note: we don't want to cache the figure and axes, because we want
+        # to return the figure to the user, and enable the user to have
+        # multiple interactive figures live simultaneously.  Also, speed for
+        # plotting multiple PDFs isn't important here, so delete cached figure.
+        if hasattr(self, "_fig"):
+            del self._fig, self._axes
+
+        # We ignore whether matplotlib interactive mode is on or off.  We
+        # leave it to the user to decide this, and to run "%matplotlib" in
+        # ipython if necessary.
+
         self._plot(NB_nd_pdf, config)  # Make plot
         # self._axes[0,0].annotate(NB_nd_pdf.name, xy=(0.99, 0.97), size=9,
         #     xycoords="figure fraction", horizontalalignment="right")
-        plt.interactive(True)   # Interactive plotting mode on
-        self._fig.show()
-        plt.interactive(was_interactive)   # Reset to previous value
 
-        # Make sure the figure is deleted (I don't know if it could survive):
+        # Ensure figure not cached; each call of this method returns a new fig
+        fig = self._fig
         if hasattr(self, "_fig"):
-            del self._fig
+            del self._fig, self._axes
+
+        # Show the plot
+        if hasattr(fig, "show") and "inline" not in mpl.get_backend():
+            fig.show()
+        else:
+            print("Note: NebulaBayes didn't call 'show' on the current figure "
+                  "because a non-interactive matplotlib backend is in use.")
+
+        return fig
 
 
 
